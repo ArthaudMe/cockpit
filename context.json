@@ -1,0 +1,148 @@
+{
+  "user": "Arthaud",
+  "projects": [
+    {
+      "name": "Harness Exploration",
+      "category": "Product",
+      "status": "Active",
+      "recent_activity": [
+        {"date": "Feb 24", "event": "Completed competitive landscape analysis", "source": "Notion"},
+        {"date": "Feb 24", "event": "Identified subprocess architecture as primary path", "source": "Notion"},
+        {"date": "Feb 23", "event": "Researched Emdash, Codex, Cofounder positioning", "source": "Notion"}
+      ],
+      "key_decisions": [
+        "Wrapper architecture (subprocess model) over standalone harness",
+        "Target persona: PMs/founders, not developers",
+        "Three-layer value stack: See → Decide → Act"
+      ],
+      "tools": ["Notion", "Slack", "Linear"],
+      "github": {
+        "repo": "mio-xyz/mio",
+        "open_prs": 3,
+        "merged_this_week": 7,
+        "commits_this_week": 23,
+        "top_contributors": ["arthaud", "thomas", "ben"],
+        "recent_prs": [
+          {"title": "feat: add harness subprocess spawning", "author": "arthaud", "status": "open", "time": "2h ago"},
+          {"title": "refactor: move embedding logic into shared package", "author": "ben", "status": "merged", "time": "4h ago"},
+          {"title": "feat: configurable fact loading strategies", "author": "thomas", "status": "merged", "time": "1d ago"}
+        ],
+        "activity_sparkline": [3, 5, 2, 8, 4, 6, 7]
+      },
+      "linear": {
+        "project": "Harness v0",
+        "total_issues": 18,
+        "completed": 7,
+        "in_progress": 4,
+        "backlog": 7,
+        "current_cycle": "Sprint 3",
+        "cycle_progress": 0.55,
+        "recent_issues": [
+          {"id": "MIO-142", "title": "Build subprocess PoC", "assignee": "arthaud", "state": "In Progress", "priority": "Urgent"},
+          {"id": "MIO-138", "title": "Context injection via system prompt", "assignee": "arthaud", "state": "In Progress", "priority": "High"},
+          {"id": "MIO-135", "title": "Design project detail view", "assignee": "thomas", "state": "Todo", "priority": "High"},
+          {"id": "MIO-131", "title": "Competitive analysis document", "assignee": "arthaud", "state": "Done", "priority": "Normal"}
+        ]
+      },
+      "slack": {
+        "channel": "#harness-exploration",
+        "messages_today": 12,
+        "recent": [
+          {"author": "arthaud", "message": "Subprocess model confirmed — Claude CLI -p flag works great for stateless queries", "time": "1h ago"},
+          {"author": "thomas", "message": "Design partner call with Granola confirmed for 3pm", "time": "3h ago"},
+          {"author": "ben", "message": "MCP server v0.4 pushed — calendar integration working", "time": "4h ago"}
+        ]
+      },
+      "meetings": [
+        {"title": "Design partner call - Granola", "time": "3:00 PM", "duration": "45m", "source": "Granola", "attendees": ["External"], "notes": "Demo harness prototype, get feedback on three-layer value stack"},
+        {"title": "Team standup", "time": "10:00 AM", "duration": "30m", "source": "Google Calendar", "attendees": ["Thomas", "Ben"], "notes": null}
+      ],
+      "people": [
+        {"name": "Arthaud", "role": "Lead", "active_issues": 3, "commits_this_week": 12},
+        {"name": "Thomas", "role": "Design", "active_issues": 2, "commits_this_week": 5},
+        {"name": "Ben", "role": "Engineering", "active_issues": 2, "commits_this_week": 6}
+      ]
+    },
+    {
+      "name": "MCP B2B Account",
+      "category": "Sales",
+      "status": "Active",
+      "recent_activity": [
+        {"date": "Feb 22", "event": "Discovery calls with 3 prospects", "source": "Attio"},
+        {"date": "Feb 21", "event": "Updated ICP definition", "source": "Notion"}
+      ],
+      "key_decisions": [],
+      "tools": ["Slack", "Notion", "Attio"],
+      "github": null,
+      "linear": {
+        "project": "MCP B2B Pipeline",
+        "total_issues": 8,
+        "completed": 3,
+        "in_progress": 2,
+        "backlog": 3,
+        "current_cycle": null,
+        "cycle_progress": null,
+        "recent_issues": [
+          {"id": "MIO-156", "title": "Follow up with Prospect A", "assignee": "arthaud", "state": "In Progress", "priority": "High"},
+          {"id": "MIO-153", "title": "Update pitch deck with new positioning", "assignee": "arthaud", "state": "In Progress", "priority": "Normal"}
+        ]
+      },
+      "slack": {
+        "channel": "#gtm",
+        "messages_today": 5,
+        "recent": [
+          {"author": "arthaud", "message": "Shared harness exploration competitive analysis", "time": "6h ago"},
+          {"author": "thomas", "message": "Prospect B wants a follow-up next week", "time": "1d ago"}
+        ]
+      },
+      "meetings": [
+        {"title": "Pipeline review", "time": "Tomorrow 11:00 AM", "duration": "30m", "source": "Google Calendar", "attendees": ["Thomas"], "notes": null}
+      ],
+      "people": [
+        {"name": "Arthaud", "role": "Lead", "active_issues": 2, "commits_this_week": 0},
+        {"name": "Thomas", "role": "GTM", "active_issues": 1, "commits_this_week": 0}
+      ]
+    }
+  ],
+  "calendar": [
+    {"title": "Team standup", "time": "10:00 AM", "duration": "30m", "attendees": ["Thomas", "Ben"]},
+    {"title": "Design partner call - Granola", "time": "3:00 PM", "duration": "45m", "attendees": ["External"]}
+  ],
+  "usage_analytics": {
+    "dau": {"value": 142, "change": "+12%", "period": "7d"},
+    "mau": {"value": 890, "change": "+8%", "period": "30d"},
+    "mrr": {"value": 4200, "change": "+15%", "period": "30d"},
+    "churn": {"value": 3.2, "unit": "%", "change": "-0.5%", "period": "30d"}
+  },
+  "slack_highlights": [
+    {"channel": "#general", "message": "Thomas shared Cofounder.co update — they're building CTO persona", "time": "2h ago"},
+    {"channel": "#engineering", "message": "Ben pushed MCP server v0.4 with calendar integration", "time": "4h ago"},
+    {"channel": "#gtm", "message": "Arthaud shared harness exploration competitive analysis", "time": "6h ago"}
+  ],
+  "competitor_updates": [
+    {"competitor": "Cofounder", "event": "Pivoting to CTO persona — shifting from PM focus", "source": "Slack", "time": "2h ago"},
+    {"competitor": "Codex", "event": "Automations feature launched — scheduled background agents", "source": "Web", "time": "1d ago"},
+    {"competitor": "Dust", "event": "New enterprise pricing tier at $29/seat/month", "source": "Web", "time": "3d ago"}
+  ],
+  "todos": [
+    {"text": "Finalize harness prototype spec", "done": true},
+    {"text": "Share exploration doc with team", "done": true},
+    {"text": "Build subprocess PoC", "done": false},
+    {"text": "Schedule design partner call with Granola", "done": false},
+    {"text": "Review MCP B2B pipeline in Attio", "done": false}
+  ],
+  "company_feed": [
+    {"type": "agent", "actor": "Mio Agent", "event": "Synced 23 new calendar events for 4 users", "project": null, "time": "5m ago", "icon": "🤖"},
+    {"type": "code", "actor": "Arthaud", "event": "Opened PR: feat: add harness subprocess spawning", "project": "Harness Exploration", "time": "2h ago", "icon": "🔀"},
+    {"type": "message", "actor": "Thomas", "event": "Shared Cofounder.co competitive update in #general", "project": "Harness Exploration", "time": "2h ago", "icon": "💬"},
+    {"type": "meeting", "actor": "Arthaud", "event": "Design partner call with Granola scheduled for 3pm", "project": "Harness Exploration", "time": "3h ago", "icon": "📅"},
+    {"type": "code", "actor": "Ben", "event": "Merged PR: refactor embedding logic into shared package", "project": "Harness Exploration", "time": "4h ago", "icon": "✅"},
+    {"type": "agent", "actor": "Mio Agent", "event": "Generated updated summary for 12 users", "project": null, "time": "4h ago", "icon": "🤖"},
+    {"type": "code", "actor": "Ben", "event": "Pushed MCP server v0.4 — calendar integration working", "project": "Harness Exploration", "time": "4h ago", "icon": "🚀"},
+    {"type": "sales", "actor": "Arthaud", "event": "Shared competitive analysis with GTM team", "project": "MCP B2B Account", "time": "6h ago", "icon": "📊"},
+    {"type": "sales", "actor": "Thomas", "event": "Prospect B confirmed follow-up meeting next week", "project": "MCP B2B Account", "time": "1d ago", "icon": "🤝"},
+    {"type": "code", "actor": "Thomas", "event": "Merged PR: configurable fact loading strategies", "project": "Harness Exploration", "time": "1d ago", "icon": "✅"},
+    {"type": "agent", "actor": "Mio Agent", "event": "Processed 47 Gmail threads, extracted 15 action items", "project": null, "time": "1d ago", "icon": "🤖"},
+    {"type": "milestone", "actor": "Team", "event": "Sprint 3 at 55% — 7/18 issues completed", "project": "Harness Exploration", "time": "1d ago", "icon": "🏁"}
+  ]
+}

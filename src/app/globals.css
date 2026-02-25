@@ -1,0 +1,466 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #0a0a0a;
+  --surface: #141414;
+  --surface-hover: #1a1a1a;
+  --border: #2a2a2a;
+  --border-light: #3a3a3a;
+  --text: #e8e8e8;
+  --text-dim: #888;
+  --text-muted: #666;
+  --accent: #fff;
+  --red: #ff4444;
+  --green: #44ff88;
+  --yellow: #ffaa00;
+  --blue: #4488ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: "SF Mono", Monaco, Inconsolata, "Fira Code", monospace;
+  background-color: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+}
+
+body {
+  margin: 0;
+  height: 100vh;
+  overflow: hidden;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--surface); }
+::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* Panel system */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0.5rem;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  min-height: 2rem;
+  cursor: pointer;
+  user-select: none;
+}
+.panel-header:hover {
+  background: var(--surface-hover);
+}
+
+.panel-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.panel-title {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+.panel-count {
+  font-size: 0.6rem;
+  font-weight: 500;
+  color: var(--accent);
+  background: rgba(255,255,255,0.06);
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+}
+
+.panel-toggle {
+  font-size: 0.5rem;
+  color: var(--text-muted);
+  transition: transform 0.15s;
+}
+.panel-toggle.open { transform: rotate(90deg); }
+
+.panel-content {
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+
+/* Feed items */
+.feed-item {
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.feed-item:last-child { border-bottom: none; }
+.feed-item:hover {
+  background: var(--surface-hover);
+  margin: 0 -0.5rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 4px;
+}
+
+.feed-source {
+  font-size: 0.55rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 0.1rem;
+}
+
+.feed-title {
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: var(--text);
+}
+
+.feed-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.15rem;
+}
+
+.feed-time {
+  font-size: 0.55rem;
+  color: var(--text-muted);
+}
+
+/* Tags */
+.tag {
+  font-size: 0.5rem;
+  font-weight: 600;
+  padding: 0.1rem 0.3rem;
+  border-radius: 2px;
+  text-transform: uppercase;
+}
+.tag-green { color: var(--green); background: rgba(68,255,136,0.1); }
+.tag-yellow { color: var(--yellow); background: rgba(255,170,0,0.1); }
+.tag-red { color: var(--red); background: rgba(255,68,68,0.1); }
+.tag-blue { color: var(--blue); background: rgba(68,136,255,0.1); }
+.tag-dim { color: var(--text-dim); background: rgba(255,255,255,0.05); }
+
+/* Metrics */
+.metric-value { font-size: 1.1rem; font-weight: 600; color: var(--text); letter-spacing: -0.02em; }
+.metric-change { font-size: 0.6rem; font-weight: 500; }
+.metric-change.positive { color: var(--green); }
+.metric-change.negative { color: var(--red); }
+.metric-label { font-size: 0.55rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+/* Status dot */
+.dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; }
+.dot-green { background: var(--green); }
+.dot-red { background: var(--red); }
+.dot-yellow { background: var(--yellow); }
+
+/* Animations */
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, var(--surface) 25%, var(--border) 50%, var(--surface) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Chat markdown */
+.prose-mio p { margin: 0.3em 0; line-height: 1.5; font-size: 0.75rem; }
+.prose-mio h1, .prose-mio h2, .prose-mio h3 { color: var(--text); margin-top: 0.6em; margin-bottom: 0.3em; font-weight: 600; }
+.prose-mio h1 { font-size: 0.85rem; }
+.prose-mio h2 { font-size: 0.8rem; }
+.prose-mio h3 { font-size: 0.75rem; }
+.prose-mio ul, .prose-mio ol { margin: 0.3em 0; padding-left: 1.2em; font-size: 0.75rem; }
+.prose-mio li { margin: 0.15em 0; }
+.prose-mio code { background: var(--border); padding: 0.1em 0.3em; border-radius: 3px; font-size: 0.7rem; }
+.prose-mio pre { background: var(--surface); border: 1px solid var(--border); padding: 0.6em; border-radius: 4px; overflow-x: auto; margin: 0.4em 0; font-size: 0.65rem; }
+.prose-mio pre code { background: none; padding: 0; }
+.prose-mio strong { color: var(--text); font-weight: 600; }
+.prose-mio blockquote { border-left: 2px solid var(--border-light); margin: 0.4em 0; padding-left: 0.6em; color: var(--text-dim); font-size: 0.7rem; }
+
+/* Checkbox */
+.checkbox {
+  width: 14px; height: 14px;
+  border: 1px solid var(--border-light);
+  border-radius: 3px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.5rem;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.checkbox.checked {
+  border-color: var(--green);
+  background: rgba(68,255,136,0.1);
+  color: var(--green);
+}
+.checkbox:not(.checked) { color: transparent; }
+
+/* Clickable rows in project view */
+.clickable-row {
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.1s, outline 0.1s;
+}
+.clickable-row:hover {
+  background: var(--surface-hover);
+  outline: 1px solid var(--border);
+  outline-offset: -1px;
+}
+
+/* ============================
+   Claude Code Agent Interface
+   ============================ */
+
+.agent-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.agent-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.45rem 0.6rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  min-height: 2rem;
+}
+
+.agent-back-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-muted);
+  font-size: 0.5rem;
+  font-weight: 600;
+  font-family: inherit;
+  padding: 0.15rem 0.4rem;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  transition: all 0.1s;
+}
+.agent-back-btn:hover {
+  border-color: var(--border-light);
+  color: var(--text-dim);
+  background: var(--surface-hover);
+}
+
+.agent-breadcrumb {
+  font-size: 0.6rem;
+  font-family: inherit;
+}
+
+.agent-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.75rem;
+}
+
+/* Tool result block — looks like Claude Code tool output */
+.agent-tool-result {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-bottom: 0.6rem;
+  overflow: hidden;
+}
+
+.agent-tool-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.3rem 0.5rem;
+  background: rgba(68, 136, 255, 0.04);
+  border-bottom: 1px solid var(--border);
+}
+
+.agent-tool-body {
+  padding: 0.4rem 0.5rem;
+  font-size: 0.55rem;
+  line-height: 1.6;
+  font-family: inherit;
+}
+
+.agent-tool-row {
+  padding: 0.1rem 0;
+}
+
+/* Suggested actions */
+.agent-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-bottom: 0.75rem;
+}
+
+.agent-suggestion-btn {
+  display: flex;
+  align-items: center;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: all 0.1s;
+}
+.agent-suggestion-btn:hover:not(:disabled) {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+.agent-suggestion-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Messages */
+.agent-message-wrapper {
+  margin-bottom: 0.4rem;
+}
+
+.agent-user-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  font-size: 0.7rem;
+  color: var(--text);
+  padding: 0.3rem 0;
+}
+
+.agent-prompt-indicator {
+  color: var(--blue);
+  font-weight: 700;
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+.agent-assistant-msg {
+  padding: 0.2rem 0;
+  padding-left: 1.05rem;
+  border-left: 2px solid var(--border);
+  margin-left: 0.25rem;
+}
+
+/* Thinking indicator */
+.agent-thinking {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0;
+}
+
+.agent-thinking-dots {
+  display: flex;
+  gap: 3px;
+}
+
+.agent-thinking-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--blue);
+  animation: agent-dot-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes agent-dot-pulse {
+  0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1); }
+}
+
+/* Cursor blink */
+.agent-cursor-blink {
+  animation: agent-blink 1s step-end infinite;
+}
+
+@keyframes agent-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Input area */
+.agent-input-area {
+  border-top: 1px solid var(--border);
+  padding: 0.5rem 0.6rem;
+  background: var(--surface);
+}
+
+.agent-input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.35rem;
+}
+
+.agent-input {
+  flex: 1;
+  resize: none;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 0.7rem;
+  font-family: inherit;
+  max-height: 120px;
+  line-height: 1.4;
+}
+.agent-input::placeholder {
+  color: var(--text-muted);
+}
+
+.agent-send-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 0.65rem;
+  font-family: inherit;
+  flex-shrink: 0;
+  transition: all 0.1s;
+}
+.agent-send-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--border-light);
+}
+.agent-send-btn:disabled {
+  cursor: default;
+}
+
+.agent-input-hints {
+  display: flex;
+  gap: 0.8rem;
+  padding-top: 0.3rem;
+  font-size: 0.45rem;
+  color: var(--text-muted);
+}
