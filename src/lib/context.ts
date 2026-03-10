@@ -1,9 +1,158 @@
-import contextData from "../../context.json";
+import staticContextData from "../../context.json";
+import type { ConnectorData, ProjectData } from "./connectors/types";
+import { LinearConnector } from "./connectors/linear";
+import { GitHubConnector } from "./connectors/github";
+import { GoogleCalendarConnector } from "./connectors/google-calendar";
+import { SlackConnector } from "./connectors/slack";
+import type { Connector } from "./connectors/types";
 
-export type Context = typeof contextData;
+export type Context = typeof staticContextData;
 
+// All available connectors
+const connectors: Connector[] = [
+  new LinearConnector(),
+  new GitHubConnector(),
+  new GoogleCalendarConnector(),
+  new SlackConnector(),
+];
+
+export function getConnectorStatuses(): {
+  id: string;
+  name: string;
+  configured: boolean;
+}[] {
+  return connectors.map((c) => ({
+    id: c.id,
+    name: c.name,
+    configured: c.isConfigured(),
+  }));
+}
+
+// Cached live context with TTL
+let cachedLiveContext: Context | null = null;
+let cacheTimestamp = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+export function invalidateContextCache(): void {
+  cachedLiveContext = null;
+  cacheTimestamp = 0;
+}
+
+/**
+ * Returns true if any connector is configured (live mode).
+ * Returns false if we're in demo mode (static JSON).
+ */
+export function isLiveMode(): boolean {
+  return connectors.some((c) => c.isConfigured());
+}
+
+/**
+ * Get context — live from connectors if configured, static JSON otherwise.
+ * Uses a 5-minute cache for live data to avoid hammering APIs.
+ */
+export async function getContextAsync(): Promise<Context> {
+  if (!isLiveMode()) {
+    return staticContextData;
+  }
+
+  // Return cached if fresh
+  if (cachedLiveContext && Date.now() - cacheTimestamp < CACHE_TTL) {
+    return cachedLiveContext;
+  }
+
+  // Fetch from all configured connectors in parallel
+  const configuredConnectors = connectors.filter((c) => c.isConfigured());
+  const results = await Promise.allSettled(
+    configuredConnectors.map((c) => c.fetchContext()),
+  );
+
+  // Merge results
+  const merged = mergeConnectorData(
+    results
+      .filter(
+        (r): r is PromiseFulfilledResult<ConnectorData> =>
+          r.status === "fulfilled",
+      )
+      .map((r) => r.value),
+  );
+
+  // Build context in the same shape as static JSON, filling gaps with static data
+  const liveContext: Context = {
+    user: staticContextData.user,
+    projects:
+      merged.projects.length > 0
+        ? (merged.projects as unknown as Context["projects"])
+        : staticContextData.projects,
+    calendar:
+      merged.calendar.length > 0
+        ? merged.calendar
+        : staticContextData.calendar,
+    usage_analytics:
+      Object.keys(merged.metrics).length > 0
+        ? (merged.metrics as unknown as Context["usage_analytics"])
+        : staticContextData.usage_analytics,
+    slack_highlights:
+      merged.slackHighlights.length > 0
+        ? merged.slackHighlights
+        : staticContextData.slack_highlights,
+    competitor_updates: staticContextData.competitor_updates, // No connector for this yet
+    todos: staticContextData.todos, // No connector for this yet
+    company_feed:
+      merged.feed.length > 0
+        ? (merged.feed as unknown as Context["company_feed"])
+        : staticContextData.company_feed,
+  };
+
+  cachedLiveContext = liveContext;
+  cacheTimestamp = Date.now();
+
+  return liveContext;
+}
+
+/**
+ * Synchronous fallback — returns cached live context or static data.
+ * Used by components that can't await.
+ */
 export function getContext(): Context {
-  return contextData;
+  if (cachedLiveContext) return cachedLiveContext;
+  return staticContextData;
+}
+
+function mergeConnectorData(results: ConnectorData[]): {
+  projects: ProjectData[];
+  calendar: Context["calendar"];
+  metrics: Record<string, unknown>;
+  slackHighlights: Context["slack_highlights"];
+  feed: Context["company_feed"];
+} {
+  const projects: ProjectData[] = [];
+  const calendar: Context["calendar"] = [];
+  const metrics: Record<string, unknown> = {};
+  const slackHighlights: Context["slack_highlights"] = [];
+  const feed: Context["company_feed"] = [];
+
+  for (const data of results) {
+    if (data.projects) projects.push(...data.projects);
+    if (data.calendar) calendar.push(...data.calendar);
+    if (data.metrics) Object.assign(metrics, data.metrics);
+    if (data.slackHighlights) slackHighlights.push(...data.slackHighlights);
+    if (data.feed) feed.push(...(data.feed as unknown as Context["company_feed"]));
+  }
+
+  // Sort feed by recency (parse "Xm ago", "Xh ago", etc.)
+  feed.sort((a, b) => {
+    const parseTime = (t: string) => {
+      const m = t.match(/(\d+)(m|h|d)/);
+      if (!m) return Infinity;
+      const val = parseInt(m[1]);
+      if (m[2] === "m") return val;
+      if (m[2] === "h") return val * 60;
+      return val * 1440;
+    };
+    return parseTime(a.time) - parseTime(b.time);
+  });
+
+  return { projects, calendar, metrics, slackHighlights, feed };
 }
 
 export function buildSystemPrompt(ctx: Context): string {
@@ -22,7 +171,7 @@ export function buildSystemPrompt(ctx: Context): string {
   const calendar = ctx.calendar
     .map(
       (m) =>
-        `- ${m.time} (${m.duration}) — ${m.title} [${m.attendees.join(", ")}]`
+        `- ${m.time} (${m.duration}) — ${m.title} [${m.attendees.join(", ")}]`,
     )
     .join("\n");
 

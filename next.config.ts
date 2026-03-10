@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   outputFileTracingRoot: __dirname,
+  serverExternalPackages: ["better-sqlite3"],
 };
 
 export default nextConfig;

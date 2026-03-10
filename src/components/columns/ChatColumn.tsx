@@ -9,6 +9,10 @@ type Message = {
   content: string;
 };
 
+function generateId(): string {
+  return `conv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export function ChatColumn({
   context,
   inputValue,
@@ -22,8 +26,32 @@ export function ChatColumn({
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [streaming, setStreaming] = useState(false);
+  const [conversationId] = useState(() => generateId());
+  const [restored, setRestored] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Restore messages from persistence on mount
+  useEffect(() => {
+    if (restored) return;
+    setRestored(true);
+
+    fetch(`/api/messages?conversationId=${conversationId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.messages?.length > 0) {
+          setMessages(
+            data.messages.map((m: { role: string; content: string }) => ({
+              role: m.role,
+              content: m.content,
+            })),
+          );
+        }
+      })
+      .catch(() => {
+        // Ignore — fresh session
+      });
+  }, [conversationId, restored]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -51,7 +79,7 @@ export function ChatColumn({
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: text, conversationId }),
       });
 
       if (!res.ok || !res.body) {
@@ -93,7 +121,7 @@ export function ChatColumn({
     }
 
     setStreaming(false);
-  }, [inputValue, streaming, onInputChange]);
+  }, [inputValue, streaming, onInputChange, conversationId]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {

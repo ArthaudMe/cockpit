@@ -18,6 +18,10 @@ export type ContextFocus = {
   systemContext: string;
 };
 
+function generateId(): string {
+  return `focus_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function ToolResult({ focus }: { focus: ContextFocus }) {
   return (
     <div className="agent-tool-result">
@@ -73,6 +77,7 @@ export function ContextualChatView({
   const [messages, setMessages] = useState<Message[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [inputValue, setInputValue] = useState("");
+  const [conversationId] = useState(() => generateId());
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -115,6 +120,7 @@ export function ContextualChatView({
           body: JSON.stringify({
             message: msg,
             focusContext: focus.systemContext,
+            conversationId,
           }),
         });
 
@@ -158,7 +164,7 @@ export function ContextualChatView({
 
       setStreaming(false);
     },
-    [inputValue, streaming, focus.systemContext]
+    [inputValue, streaming, focus.systemContext, conversationId],
   );
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

@@ -9,6 +9,8 @@ import { ContextColumn } from "@/components/columns/ContextColumn";
 import { ChatColumn } from "@/components/columns/ChatColumn";
 import { ProjectView } from "@/components/views/ProjectView";
 import { ContextualChatView, type ContextFocus } from "@/components/views/ContextualChatView";
+import { AlertsView } from "@/components/views/AlertsView";
+import { BriefingView } from "@/components/views/BriefingView";
 import {
   focusCalendarEvent,
   focusMetric,
@@ -16,27 +18,28 @@ import {
   focusCompetitor,
   focusTodo,
   focusProject,
-  focusProjectLinear,
-  focusProjectGitHub,
-  focusProjectSlack,
-  focusMeeting,
-  focusPerson,
 } from "@/lib/focus";
+
+type Context = typeof contextData;
 
 type CenterView =
   | { type: "chat" }
   | { type: "project"; index: number }
-  | { type: "focus"; focus: ContextFocus };
+  | { type: "focus"; focus: ContextFocus }
+  | { type: "alerts" }
+  | { type: "briefings" };
 
 export default function Home() {
   const [chatInput, setChatInput] = useState("");
   const [centerView, setCenterView] = useState<CenterView>({ type: "chat" });
+  const [liveContext, setLiveContext] = useState<Context>(contextData);
   const [claudeStatus, setClaudeStatus] = useState<{
     connected: boolean;
     version?: string;
     checking: boolean;
   }>({ connected: false, checking: true });
 
+  // Check Claude CLI status
   useEffect(() => {
     fetch("/api/status")
       .then((r) => r.json())
@@ -50,6 +53,34 @@ export default function Home() {
       .catch(() => {
         setClaudeStatus({ connected: false, checking: false });
       });
+  }, []);
+
+  // Fetch live context (from connectors or fallback to static)
+  useEffect(() => {
+    fetch("/api/context")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.context) {
+          setLiveContext(data.context);
+        }
+      })
+      .catch(() => {
+        // Keep static context
+      });
+
+    // Poll every 5 minutes for live data
+    const interval = setInterval(() => {
+      fetch("/api/context")
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.context) {
+            setLiveContext(data.context);
+          }
+        })
+        .catch(() => {});
+    }, 5 * 60 * 1000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const handlePrefill = useCallback((text: string) => {
@@ -85,27 +116,39 @@ export default function Home() {
     setCenterView({ type: "focus", focus });
   }, []);
 
+  const handleOpenAlerts = useCallback(() => {
+    setCenterView({ type: "alerts" });
+  }, []);
+
+  const handleOpenBriefings = useCallback(() => {
+    setCenterView({ type: "briefings" });
+  }, []);
+
+  const handleOpenSettings = useCallback(() => {
+    window.location.href = "/settings";
+  }, []);
+
   // Context column click handlers
   const handleCalendarClick = useCallback((index: number) => {
-    handleOpenFocus(focusCalendarEvent(contextData.calendar[index]));
-  }, [handleOpenFocus]);
+    handleOpenFocus(focusCalendarEvent(liveContext.calendar[index]));
+  }, [handleOpenFocus, liveContext.calendar]);
 
   const handleMetricClick = useCallback((key: string) => {
-    const metric = contextData.usage_analytics[key as keyof typeof contextData.usage_analytics];
+    const metric = liveContext.usage_analytics[key as keyof typeof liveContext.usage_analytics];
     handleOpenFocus(focusMetric(key, metric));
-  }, [handleOpenFocus]);
+  }, [handleOpenFocus, liveContext.usage_analytics]);
 
   const handleSlackClick = useCallback((index: number) => {
-    handleOpenFocus(focusSlackMessage(contextData.slack_highlights[index]));
-  }, [handleOpenFocus]);
+    handleOpenFocus(focusSlackMessage(liveContext.slack_highlights[index]));
+  }, [handleOpenFocus, liveContext.slack_highlights]);
 
   const handleCompetitorClick = useCallback((index: number) => {
-    handleOpenFocus(focusCompetitor(contextData.competitor_updates[index]));
-  }, [handleOpenFocus]);
+    handleOpenFocus(focusCompetitor(liveContext.competitor_updates[index]));
+  }, [handleOpenFocus, liveContext.competitor_updates]);
 
   const handleTodoClick = useCallback((index: number) => {
-    handleOpenFocus(focusTodo(contextData.todos[index]));
-  }, [handleOpenFocus]);
+    handleOpenFocus(focusTodo(liveContext.todos[index]));
+  }, [handleOpenFocus, liveContext.todos]);
 
   // Project view sub-item click handlers
   const handleProjectFocus = useCallback((focus: ContextFocus) => {
@@ -114,7 +157,7 @@ export default function Home() {
 
   const selectedProjectIndex = centerView.type === "project" ? centerView.index : null;
   const selectedProject = selectedProjectIndex !== null
-    ? contextData.projects[selectedProjectIndex]
+    ? liveContext.projects[selectedProjectIndex]
     : null;
 
   return (
@@ -122,22 +165,29 @@ export default function Home() {
       <Header
         claudeStatus={claudeStatus}
         onRetryConnection={handleRetryConnection}
+        onAlertsClick={handleOpenAlerts}
+        onBriefingsClick={handleOpenBriefings}
+        onSettingsClick={handleOpenSettings}
       />
       <div className="flex flex-1 overflow-hidden" style={{ padding: "0.5rem", gap: "0.5rem" }}>
         <div style={{ width: 280, minWidth: 240, flexShrink: 0 }} className="overflow-y-auto">
           <ProjectsColumn
-            projects={contextData.projects}
+            projects={liveContext.projects}
             onPrefill={handlePrefill}
             onProjectClick={handleProjectClick}
             selectedIndex={selectedProjectIndex}
           />
           <FeedColumn
-            feed={contextData.company_feed}
+            feed={liveContext.company_feed}
             onOpenFocus={handleOpenFocus}
           />
         </div>
         <div className="flex-1 min-w-0">
-          {centerView.type === "focus" ? (
+          {centerView.type === "alerts" ? (
+            <AlertsView onClose={handleBackToChat} />
+          ) : centerView.type === "briefings" ? (
+            <BriefingView onClose={handleBackToChat} />
+          ) : centerView.type === "focus" ? (
             <ContextualChatView
               focus={centerView.focus}
               onBack={handleBackToChat}
@@ -145,14 +195,14 @@ export default function Home() {
             />
           ) : selectedProject ? (
             <ProjectView
-              project={selectedProject as any}
+              project={selectedProject as Parameters<typeof ProjectView>[0]["project"]}
               onBack={handleBackToChat}
               onPrefill={handlePrefill}
               onOpenFocus={handleProjectFocus}
             />
           ) : (
             <ChatColumn
-              context={contextData}
+              context={liveContext}
               inputValue={chatInput}
               onInputChange={setChatInput}
               claudeConnected={claudeStatus.connected}
@@ -161,7 +211,7 @@ export default function Home() {
         </div>
         <div style={{ width: 300, minWidth: 260, flexShrink: 0 }} className="overflow-y-auto">
           <ContextColumn
-            context={contextData}
+            context={liveContext}
             onPrefill={handlePrefill}
             onCalendarClick={handleCalendarClick}
             onMetricClick={handleMetricClick}
