@@ -7,12 +7,14 @@ export function Header({
   onRetryConnection,
   onAlertsClick,
   onBriefingsClick,
+  onTerminalClick,
   onSettingsClick,
 }: {
   claudeStatus: { connected: boolean; version?: string; checking: boolean };
   onRetryConnection: () => void;
   onAlertsClick?: () => void;
   onBriefingsClick?: () => void;
+  onTerminalClick?: () => void;
   onSettingsClick?: () => void;
 }) {
   const [unreadCount, setUnreadCount] = useState(0);
@@ -150,6 +152,28 @@ export function Header({
           >
             <span style={{ fontSize: "0.6rem" }}>📋</span>
             BRIEFINGS
+          </button>
+        )}
+
+        {/* Terminal button */}
+        {onTerminalClick && (
+          <button
+            onClick={onTerminalClick}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.25rem",
+              background: "none",
+              border: "1px solid var(--green)",
+              borderRadius: 3,
+              padding: "0.2rem 0.5rem",
+              cursor: "pointer",
+              fontSize: "0.55rem",
+              color: "var(--green)",
+            }}
+          >
+            <span style={{ fontSize: "0.6rem" }}>▸</span>
+            TERMINAL
           </button>
         )}
 

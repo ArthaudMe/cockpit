@@ -11,6 +11,7 @@ import { ProjectView } from "@/components/views/ProjectView";
 import { ContextualChatView, type ContextFocus } from "@/components/views/ContextualChatView";
 import { AlertsView } from "@/components/views/AlertsView";
 import { BriefingView } from "@/components/views/BriefingView";
+import { TerminalView } from "@/components/terminal/TerminalView";
 import {
   focusCalendarEvent,
   focusMetric,
@@ -27,7 +28,8 @@ type CenterView =
   | { type: "project"; index: number }
   | { type: "focus"; focus: ContextFocus }
   | { type: "alerts" }
-  | { type: "briefings" };
+  | { type: "briefings" }
+  | { type: "terminal"; context?: string; label?: string };
 
 export default function Home() {
   const [chatInput, setChatInput] = useState("");
@@ -124,6 +126,10 @@ export default function Home() {
     setCenterView({ type: "briefings" });
   }, []);
 
+  const handleOpenTerminal = useCallback((context?: string, label?: string) => {
+    setCenterView({ type: "terminal", context, label });
+  }, []);
+
   const handleOpenSettings = useCallback(() => {
     window.location.href = "/settings";
   }, []);
@@ -167,6 +173,7 @@ export default function Home() {
         onRetryConnection={handleRetryConnection}
         onAlertsClick={handleOpenAlerts}
         onBriefingsClick={handleOpenBriefings}
+        onTerminalClick={() => handleOpenTerminal()}
         onSettingsClick={handleOpenSettings}
       />
       <div className="flex flex-1 overflow-hidden" style={{ padding: "0.5rem", gap: "0.5rem" }}>
@@ -183,7 +190,13 @@ export default function Home() {
           />
         </div>
         <div className="flex-1 min-w-0">
-          {centerView.type === "alerts" ? (
+          {centerView.type === "terminal" ? (
+            <TerminalView
+              onClose={handleBackToChat}
+              initialContext={centerView.context}
+              initialLabel={centerView.label}
+            />
+          ) : centerView.type === "alerts" ? (
             <AlertsView onClose={handleBackToChat} />
           ) : centerView.type === "briefings" ? (
             <BriefingView onClose={handleBackToChat} />
