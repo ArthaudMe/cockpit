@@ -9,6 +9,7 @@ import { ContextColumn } from "@/components/columns/ContextColumn";
 import { ChatColumn } from "@/components/columns/ChatColumn";
 import { ProjectView } from "@/components/views/ProjectView";
 import { ContextualChatView, type ContextFocus } from "@/components/views/ContextualChatView";
+import { OnboardingView } from "@/components/views/OnboardingView";
 import {
   focusCalendarEvent,
   focusMetric,
@@ -116,6 +117,41 @@ export default function Home() {
   const selectedProject = selectedProjectIndex !== null
     ? contextData.projects[selectedProjectIndex]
     : null;
+
+  // Show onboarding if Claude CLI is not connected (and we're done checking)
+  if (!claudeStatus.checking && !claudeStatus.connected) {
+    return (
+      <OnboardingView
+        onRetry={handleRetryConnection}
+        checking={claudeStatus.checking}
+        error="not_connected"
+      />
+    );
+  }
+
+  // Show loading while checking connection
+  if (claudeStatus.checking) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          height: "100vh",
+          background: "var(--bg)",
+          gap: "0.5rem",
+        }}
+      >
+        <span
+          className="dot"
+          style={{ background: "var(--accent)", animation: "pulse 1.5s ease-in-out infinite" }}
+        />
+        <span style={{ fontSize: "0.6rem", color: "var(--text-muted)" }}>
+          Connecting to Claude Code...
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen flex-col" style={{ background: "var(--bg)" }}>

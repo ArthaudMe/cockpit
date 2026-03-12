@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Context } from "@/lib/context";
+import { usePersistedState } from "@/lib/use-persisted-state";
 
 function Panel({
   title,
@@ -47,7 +48,7 @@ export function ContextColumn({
   onCompetitorClick?: (index: number) => void;
   onTodoClick?: (index: number) => void;
 }) {
-  const [todos, setTodos] = useState(context.todos);
+  const [todos, setTodos] = usePersistedState("cockpit-todos", context.todos);
 
   const toggleTodo = (e: React.MouseEvent, index: number) => {
     e.stopPropagation();

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { Context } from "@/lib/context";
 import { ChatMessage } from "../ui/ChatMessage";
+import { usePersistedState } from "@/lib/use-persisted-state";
 
 type Message = {
   role: "user" | "assistant";
@@ -20,7 +21,7 @@ export function ChatColumn({
   onInputChange: (v: string) => void;
   claudeConnected: boolean;
 }) {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = usePersistedState<Message[]>("cockpit-chat-main", []);
   const [streaming, setStreaming] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);

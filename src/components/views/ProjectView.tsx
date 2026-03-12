@@ -83,7 +83,7 @@ function Panel({
 }
 
 function Sparkline({ data }: { data: number[] }) {
-  const max = Math.max(...data);
+  const max = Math.max(...data) || 1;
   const h = 28;
   const w = 100;
   const step = w / (data.length - 1);

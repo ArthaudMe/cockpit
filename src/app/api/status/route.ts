@@ -5,10 +5,14 @@ import { promisify } from "util";
 const execFileAsync = promisify(execFile);
 
 export async function GET() {
+  // Remove CLAUDECODE to allow checking inside a Claude Code session
+  const env = { ...process.env };
+  delete env.CLAUDECODE;
+
   try {
     const { stdout } = await execFileAsync("claude", ["--version"], {
       timeout: 5000,
-      env: { ...process.env },
+      env,
     });
     return NextResponse.json({
       connected: true,

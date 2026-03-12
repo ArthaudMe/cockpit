@@ -134,6 +134,42 @@ export function ChatMessage({ message }: { message: Message }) {
     <div style={{ marginBottom: "0.5rem" }}>
       <div style={{ maxWidth: "90%" }}>
         {segments.map((seg, i) => {
+          if (seg.type === "loading") {
+            return (
+              <div
+                key={i}
+                style={{
+                  margin: "0.4rem 0",
+                  border: "1px solid var(--border)",
+                  borderRadius: 4,
+                  padding: "0.75rem",
+                  background: "var(--surface)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.5rem",
+                }}
+              >
+                <span
+                  className="dot"
+                  style={{
+                    background: "var(--accent)",
+                    animation: "pulse 1.5s ease-in-out infinite",
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: "0.55rem",
+                    color: "var(--text-muted)",
+                    fontFamily: "inherit",
+                    letterSpacing: "0.03em",
+                  }}
+                >
+                  Rendering visual...
+                </span>
+              </div>
+            );
+          }
+
           if (seg.type === "render") {
             const block = seg.block;
             switch (block.mio_render) {

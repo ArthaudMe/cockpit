@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { ChatMessage } from "../ui/ChatMessage";
+import { usePersistedState } from "@/lib/use-persisted-state";
 
 type Message = {
   role: "user" | "assistant";
@@ -70,7 +71,8 @@ export function ContextualChatView({
   onBack: () => void;
   claudeConnected: boolean;
 }) {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const focusKey = `cockpit-focus-${focus.source}-${focus.title}`.slice(0, 100);
+  const [messages, setMessages] = usePersistedState<Message[]>(focusKey, []);
   const [streaming, setStreaming] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
