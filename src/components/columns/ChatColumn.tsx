@@ -10,6 +10,20 @@ type Message = {
   content: string;
 };
 
+type AgentInfo = {
+  id: string;
+  name: string;
+  role: string;
+  busy: boolean;
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  general: "general",
+  research: "research",
+  writer: "writer",
+  ops: "ops",
+};
+
 export function ChatColumn({
   context,
   inputValue,
@@ -21,10 +35,33 @@ export function ChatColumn({
   onInputChange: (v: string) => void;
   claudeConnected: boolean;
 }) {
-  const [messages, setMessages] = usePersistedState<Message[]>("cockpit-chat-main", []);
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [activeAgentId, setActiveAgentId] = usePersistedState<string | null>(
+    "cockpit-active-agent",
+    null
+  );
+  const [messagesByAgent, setMessagesByAgent] = usePersistedState<
+    Record<string, Message[]>
+  >("cockpit-chat-agents", {});
   const [streaming, setStreaming] = useState(false);
+  const [showNewAgent, setShowNewAgent] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Fetch agents on mount
+  useEffect(() => {
+    fetch("/api/agents")
+      .then((r) => r.json())
+      .then((data: AgentInfo[]) => {
+        setAgents(data);
+        if (data.length > 0 && !activeAgentId) {
+          setActiveAgentId(data[0].id);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const messages = activeAgentId ? messagesByAgent[activeAgentId] || [] : [];
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -38,18 +75,28 @@ export function ChatColumn({
     }
   }, [inputValue]);
 
+  const setMessages = useCallback(
+    (updater: (prev: Message[]) => Message[]) => {
+      if (!activeAgentId) return;
+      setMessagesByAgent((prev) => ({
+        ...prev,
+        [activeAgentId]: updater(prev[activeAgentId] || []),
+      }));
+    },
+    [activeAgentId, setMessagesByAgent]
+  );
+
   const sendMessage = useCallback(async () => {
     const text = inputValue.trim();
-    if (!text || streaming) return;
+    if (!text || streaming || !activeAgentId) return;
 
     onInputChange("");
-    const userMsg: Message = { role: "user", content: text };
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages((prev) => [...prev, { role: "user", content: text }]);
     setStreaming(true);
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
     try {
-      const res = await fetch("/api/chat", {
+      const res = await fetch(`/api/agents/${activeAgentId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text }),
@@ -87,14 +134,14 @@ export function ChatColumn({
         const next = [...prev];
         next[next.length - 1] = {
           role: "assistant",
-          content: `Error: ${err instanceof Error ? err.message : "Unknown error"}. Is Claude CLI installed?`,
+          content: `Error: ${err instanceof Error ? err.message : "Unknown error"}`,
         };
         return next;
       });
     }
 
     setStreaming(false);
-  }, [inputValue, streaming, onInputChange]);
+  }, [inputValue, streaming, activeAgentId, onInputChange, setMessages]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -103,27 +150,168 @@ export function ChatColumn({
     }
   };
 
+  const handleCreateAgent = useCallback(
+    async (name: string, role: string) => {
+      try {
+        const res = await fetch("/api/agents", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, role }),
+        });
+        const agent: AgentInfo = await res.json();
+        setAgents((prev) => [...prev, agent]);
+        setActiveAgentId(agent.id);
+        setShowNewAgent(false);
+      } catch {
+        // silently fail
+      }
+    },
+    [setActiveAgentId]
+  );
+
+  const handleDeleteAgent = useCallback(
+    async (id: string) => {
+      await fetch(`/api/agents/${id}`, { method: "DELETE" });
+      setAgents((prev) => prev.filter((a) => a.id !== id));
+      setMessagesByAgent((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      if (activeAgentId === id) {
+        const remaining = agents.filter((a) => a.id !== id);
+        setActiveAgentId(remaining.length > 0 ? remaining[0].id : null);
+      }
+    },
+    [activeAgentId, agents, setActiveAgentId, setMessagesByAgent]
+  );
+
+  const activeAgent = agents.find((a) => a.id === activeAgentId);
+
   return (
     <div
       className="panel"
       style={{ height: "100%", display: "flex", flexDirection: "column", marginBottom: 0 }}
     >
-      {/* Chat header */}
-      <div className="panel-header" style={{ cursor: "default" }}>
-        <div className="panel-title-row">
-          <span className="panel-title">Agent</span>
-          <span className="tag tag-dim">claude code</span>
+      {/* Agent tabs */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          borderBottom: "1px solid var(--border)",
+          background: "var(--surface)",
+          minHeight: "2rem",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            flex: 1,
+            overflowX: "auto",
+            gap: 0,
+          }}
+        >
+          {agents.map((agent) => (
+            <button
+              key={agent.id}
+              onClick={() => setActiveAgentId(agent.id)}
+              style={{
+                background:
+                  agent.id === activeAgentId
+                    ? "var(--bg)"
+                    : "transparent",
+                border: "none",
+                borderRight: "1px solid var(--border)",
+                padding: "0.35rem 0.6rem",
+                fontSize: "0.55rem",
+                fontWeight: agent.id === activeAgentId ? 600 : 400,
+                color:
+                  agent.id === activeAgentId
+                    ? "var(--text)"
+                    : "var(--text-dim)",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.3rem",
+                whiteSpace: "nowrap",
+                transition: "all 0.1s",
+              }}
+            >
+              <span
+                className="dot"
+                style={{
+                  background: agent.busy
+                    ? "var(--yellow)"
+                    : "var(--green)",
+                  width: 5,
+                  height: 5,
+                }}
+              />
+              {agent.name}
+              <span
+                style={{
+                  fontSize: "0.45rem",
+                  color: "var(--text-muted)",
+                }}
+              >
+                {ROLE_LABELS[agent.role] || agent.role}
+              </span>
+              {agents.length > 1 && (
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteAgent(agent.id);
+                  }}
+                  style={{
+                    fontSize: "0.5rem",
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    marginLeft: "0.15rem",
+                    opacity: 0.5,
+                  }}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.opacity = "1")
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.opacity = "0.5")
+                  }
+                >
+                  ×
+                </span>
+              )}
+            </button>
+          ))}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
-          <span
-            className="dot"
-            style={{ background: claudeConnected ? "var(--green)" : "var(--red)" }}
-          />
-          <span style={{ fontSize: "0.5rem", color: "var(--text-muted)" }}>
-            {claudeConnected ? "ready" : "disconnected"}
-          </span>
-        </div>
+
+        {/* New agent button */}
+        <button
+          onClick={() => setShowNewAgent(!showNewAgent)}
+          style={{
+            background: "none",
+            border: "none",
+            borderLeft: "1px solid var(--border)",
+            padding: "0.35rem 0.5rem",
+            fontSize: "0.65rem",
+            color: "var(--text-muted)",
+            cursor: "pointer",
+            fontFamily: "inherit",
+            flexShrink: 0,
+          }}
+          title="New agent"
+        >
+          +
+        </button>
       </div>
+
+      {/* New agent form */}
+      {showNewAgent && (
+        <NewAgentForm
+          onSubmit={handleCreateAgent}
+          onCancel={() => setShowNewAgent(false)}
+        />
+      )}
 
       {/* Messages area */}
       <div
@@ -134,7 +322,7 @@ export function ChatColumn({
           padding: "0.75rem",
         }}
       >
-        {messages.length === 0 && (
+        {messages.length === 0 && activeAgent && (
           <div
             style={{
               display: "flex",
@@ -152,7 +340,16 @@ export function ChatColumn({
                 textAlign: "center",
               }}
             >
-              Good morning, {context.user}
+              {activeAgent.name}
+              <span
+                style={{
+                  fontSize: "0.5rem",
+                  color: "var(--text-muted)",
+                  marginLeft: "0.4rem",
+                }}
+              >
+                {ROLE_LABELS[activeAgent.role]}
+              </span>
             </div>
             <div
               style={{
@@ -162,7 +359,14 @@ export function ChatColumn({
                 maxWidth: "80%",
               }}
             >
-              Click anything in the panels, or ask about your projects, calendar, metrics, or team.
+              {activeAgent.role === "general" &&
+                "Click anything in the panels, or ask about your projects, calendar, metrics, or team."}
+              {activeAgent.role === "research" &&
+                "Ask me to dig into a topic, compare options, or analyze data."}
+              {activeAgent.role === "writer" &&
+                "I can draft emails, memos, announcements, or any document."}
+              {activeAgent.role === "ops" &&
+                "I can help plan, schedule, track, and organize operations."}
             </div>
             <div
               style={{
@@ -173,12 +377,7 @@ export function ChatColumn({
                 marginTop: "0.5rem",
               }}
             >
-              {[
-                "Prep me for today's meetings",
-                "Status across all projects?",
-                "Compare our competitors",
-                "What should I focus on today?",
-              ].map((q) => (
+              {getStarters(activeAgent.role).map((q) => (
                 <button
                   key={q}
                   onClick={() => onInputChange(q)}
@@ -190,12 +389,28 @@ export function ChatColumn({
                     fontSize: "0.55rem",
                     color: "var(--text-dim)",
                     cursor: "pointer",
+                    fontFamily: "inherit",
                   }}
                 >
                   {q}
                 </button>
               ))}
             </div>
+          </div>
+        )}
+
+        {!activeAgent && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              height: "100%",
+              fontSize: "0.55rem",
+              color: "var(--text-muted)",
+            }}
+          >
+            Create an agent to get started
           </div>
         )}
 
@@ -247,11 +462,13 @@ export function ChatColumn({
             onChange={(e) => onInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={
-              claudeConnected
-                ? "Ask anything about your work..."
-                : "Claude CLI not connected..."
+              !claudeConnected
+                ? "Claude CLI not connected..."
+                : !activeAgent
+                  ? "Create an agent first..."
+                  : `Message ${activeAgent.name}...`
             }
-            disabled={!claudeConnected}
+            disabled={!claudeConnected || !activeAgent}
             rows={1}
             style={{
               flex: 1,
@@ -267,12 +484,16 @@ export function ChatColumn({
           />
           <button
             onClick={sendMessage}
-            disabled={!inputValue.trim() || streaming || !claudeConnected}
+            disabled={!inputValue.trim() || streaming || !claudeConnected || !activeAgent}
             style={{
-              background: inputValue.trim() && claudeConnected
-                ? "var(--accent)"
-                : "var(--border)",
-              color: inputValue.trim() && claudeConnected ? "var(--bg)" : "var(--text-muted)",
+              background:
+                inputValue.trim() && claudeConnected && activeAgent
+                  ? "var(--accent)"
+                  : "var(--border)",
+              color:
+                inputValue.trim() && claudeConnected && activeAgent
+                  ? "var(--bg)"
+                  : "var(--text-muted)",
               border: "none",
               borderRadius: 3,
               width: 22,
@@ -280,7 +501,10 @@ export function ChatColumn({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              cursor: inputValue.trim() && !streaming && claudeConnected ? "pointer" : "default",
+              cursor:
+                inputValue.trim() && !streaming && claudeConnected && activeAgent
+                  ? "pointer"
+                  : "default",
               fontSize: "0.6rem",
               fontWeight: 700,
               flexShrink: 0,
@@ -289,7 +513,171 @@ export function ChatColumn({
             ↑
           </button>
         </div>
+        {agents.length > 1 && (
+          <div
+            style={{
+              fontSize: "0.45rem",
+              color: "var(--text-muted)",
+              marginTop: "0.25rem",
+              textAlign: "center",
+            }}
+          >
+            {agents.length} agents active
+          </div>
+        )}
       </div>
     </div>
   );
+}
+
+// ─── New Agent Form ────────────────────────────────────────────────
+
+function NewAgentForm({
+  onSubmit,
+  onCancel,
+}: {
+  onSubmit: (name: string, role: string) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [role, setRole] = useState("general");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const handleSubmit = () => {
+    if (name.trim()) {
+      onSubmit(name.trim(), role);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        padding: "0.5rem 0.6rem",
+        borderBottom: "1px solid var(--border)",
+        background: "rgba(255,255,255,0.015)",
+      }}
+    >
+      <div
+        style={{
+          fontSize: "0.55rem",
+          fontWeight: 600,
+          color: "var(--text-dim)",
+          marginBottom: "0.4rem",
+        }}
+      >
+        New Agent
+      </div>
+
+      <div style={{ display: "flex", gap: "0.35rem", marginBottom: "0.35rem" }}>
+        <input
+          ref={inputRef}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+          placeholder="Agent name..."
+          style={{
+            flex: 1,
+            background: "var(--bg)",
+            border: "1px solid var(--border)",
+            borderRadius: 3,
+            padding: "0.25rem 0.4rem",
+            fontSize: "0.55rem",
+            color: "var(--text)",
+            fontFamily: "inherit",
+            outline: "none",
+          }}
+        />
+        <select
+          value={role}
+          onChange={(e) => setRole(e.target.value)}
+          style={{
+            background: "var(--bg)",
+            border: "1px solid var(--border)",
+            borderRadius: 3,
+            padding: "0.25rem 0.4rem",
+            fontSize: "0.55rem",
+            color: "var(--text)",
+            fontFamily: "inherit",
+            outline: "none",
+          }}
+        >
+          <option value="general">General</option>
+          <option value="research">Research</option>
+          <option value="writer">Writer</option>
+          <option value="ops">Ops</option>
+        </select>
+      </div>
+
+      <div style={{ display: "flex", gap: "0.3rem" }}>
+        <button
+          onClick={handleSubmit}
+          disabled={!name.trim()}
+          style={{
+            background: name.trim() ? "var(--text)" : "var(--border)",
+            color: name.trim() ? "var(--bg)" : "var(--text-muted)",
+            border: "none",
+            borderRadius: 3,
+            padding: "0.2rem 0.5rem",
+            fontSize: "0.5rem",
+            fontWeight: 600,
+            cursor: name.trim() ? "pointer" : "default",
+            fontFamily: "inherit",
+          }}
+        >
+          Create
+        </button>
+        <button
+          onClick={onCancel}
+          style={{
+            background: "none",
+            border: "1px solid var(--border)",
+            borderRadius: 3,
+            padding: "0.2rem 0.5rem",
+            fontSize: "0.5rem",
+            color: "var(--text-muted)",
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Role-specific starters ────────────────────────────────────────
+
+function getStarters(role: string): string[] {
+  switch (role) {
+    case "research":
+      return [
+        "Compare our competitors",
+        "Research market sizing for...",
+        "What are the trends in...",
+      ];
+    case "writer":
+      return [
+        "Draft an update email to investors",
+        "Write a team announcement about...",
+        "Help me write a cold outreach email",
+      ];
+    case "ops":
+      return [
+        "Plan next week's priorities",
+        "Create a checklist for...",
+        "What's blocking progress on...",
+      ];
+    default:
+      return [
+        "Prep me for today's meetings",
+        "Status across all projects?",
+        "What should I focus on today?",
+        "Compare our competitors",
+      ];
+  }
 }
