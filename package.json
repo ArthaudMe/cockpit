@@ -1,11 +1,15 @@
 {
-  "name": "mio-harness-prototype",
+  "name": "cockpit",
   "version": "0.1.0",
   "private": true,
+  "main": "electron/main.js",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "electron:dev": "NODE_ENV=development electron .",
+    "electron:build": "next build && electron-builder",
+    "electron:start": "electron ."
   },
   "dependencies": {
     "next": "^15.3.3",
@@ -13,12 +17,40 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.0",
     "@types/node": "^22.15.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
-    "typescript": "^5.8.0",
-    "@tailwindcss/postcss": "^4.1.0",
+    "electron": "^41.0.2",
+    "electron-builder": "^26.8.1",
+    "postcss": "^8.5.0",
     "tailwindcss": "^4.1.0",
-    "postcss": "^8.5.0"
+    "typescript": "^5.8.0"
+  },
+  "build": {
+    "appId": "com.cockpit.app",
+    "productName": "Cockpit",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "electron/**/*",
+      ".next/**/*",
+      "node_modules/**/*",
+      "package.json",
+      "public/**/*",
+      "context.json"
+    ],
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.productivity",
+      "icon": "public/icon.icns"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
   }
 }
