@@ -1,6 +1,8 @@
 {
   "name": "cockpit",
   "version": "0.1.0",
+  "description": "Pilot your company — desktop cockpit with AI co-pilot",
+  "author": "Emdash",
   "private": true,
   "main": "electron/main.js",
   "scripts": {

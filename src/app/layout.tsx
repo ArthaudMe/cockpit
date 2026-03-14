@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Mio Cockpit",
-  description: "Founder's cockpit — see your situation, work with your agent",
+  title: "Cockpit",
+  description: "Pilot your company",
 };
 
 export default function RootLayout({
