@@ -135,20 +135,37 @@ export default function Home() {
       <div
         style={{
           display: "flex",
+          flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
           height: "100vh",
           background: "var(--bg)",
-          gap: "0.5rem",
+          gap: "0.75rem",
         }}
       >
-        <span
-          className="dot"
-          style={{ background: "var(--accent)", animation: "pulse 1.5s ease-in-out infinite" }}
-        />
-        <span style={{ fontSize: "0.6rem", color: "var(--text-muted)" }}>
-          Connecting to Claude Code...
-        </span>
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 10,
+            border: "1px solid var(--border-light)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: "1.1rem",
+          }}
+        >
+          &#9670;
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+          <span
+            className="dot"
+            style={{ background: "var(--accent)", animation: "pulse 1.5s ease-in-out infinite" }}
+          />
+          <span style={{ fontSize: "0.55rem", color: "var(--text-muted)" }}>
+            Connecting...
+          </span>
+        </div>
       </div>
     );
   }
