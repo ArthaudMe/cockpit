@@ -14,7 +14,7 @@ type AgentInfo = {
 type BackendStatus = {
   id: string;
   label: string;
-  available: boolean;
+  installed: boolean;
   version?: string;
 };
 
@@ -38,15 +38,14 @@ const ROLE_LABELS: Record<string, string> = {
   ops: "Ops",
 };
 
-const TOOLS = [
-  { id: "linear", name: "Linear", description: "Issue tracking & project management", icon: "◫" },
-  { id: "github", name: "GitHub", description: "Code repositories & pull requests", icon: "◭" },
-  { id: "slack", name: "Slack", description: "Team messaging & channels", icon: "◬" },
-  { id: "notion", name: "Notion", description: "Docs, wikis & knowledge base", icon: "◧" },
-  { id: "google-calendar", name: "Google Calendar", description: "Calendar events & scheduling", icon: "◨" },
-  { id: "attio", name: "Attio", description: "CRM & contact management", icon: "◩" },
-  { id: "granola", name: "Granola", description: "Meeting notes & transcripts", icon: "◪" },
-];
+type DatasourceInfo = {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  connected: boolean;
+  needsOAuth: boolean;
+};
 
 export function SettingsView({
   onBack,
@@ -60,6 +59,15 @@ export function SettingsView({
   const [backendDefs, setBackendDefs] = useState<BackendDef[]>([]);
   const [editingAgent, setEditingAgent] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [datasources, setDatasources] = useState<DatasourceInfo[]>([]);
+  const [connecting, setConnecting] = useState<string | null>(null);
+
+  const fetchDatasources = useCallback(() => {
+    fetch("/api/datasources")
+      .then((r) => r.json())
+      .then((data: { datasources: DatasourceInfo[] }) => setDatasources(data.datasources))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     fetch("/api/agents")
@@ -76,7 +84,48 @@ export function SettingsView({
       .then((r) => r.json())
       .then((data: BackendDef[]) => setBackendDefs(data))
       .catch(() => {});
+
+    fetchDatasources();
+  }, [fetchDatasources]);
+
+  // Poll for datasource status while connecting, with 2-minute timeout
+  useEffect(() => {
+    if (!connecting) return;
+    const interval = setInterval(fetchDatasources, 2000);
+    const timeout = setTimeout(() => setConnecting(null), 120_000);
+    return () => { clearInterval(interval); clearTimeout(timeout); };
+  }, [connecting, fetchDatasources]);
+
+  // Clear connecting state when the service becomes connected
+  useEffect(() => {
+    if (connecting && datasources.find((d) => d.id === connecting)?.connected) {
+      setConnecting(null);
+    }
+  }, [connecting, datasources]);
+
+  const handleConnect = useCallback(async (serviceId: string) => {
+    try {
+      setConnecting(serviceId);
+      const res = await fetch(`/api/datasources/connect?service=${serviceId}`);
+      const data = await res.json();
+      if (data.url) {
+        window.open(data.url, "_blank", "width=600,height=700");
+      }
+    } catch {
+      setConnecting(null);
+    }
   }, []);
+
+  const handleDisconnect = useCallback(async (serviceId: string) => {
+    try {
+      await fetch("/api/datasources/disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ service: serviceId }),
+      });
+      fetchDatasources();
+    } catch {}
+  }, [fetchDatasources]);
 
   const handleRenameAgent = useCallback(
     async (id: string) => {
@@ -219,43 +268,92 @@ export function SettingsView({
         {/* ── Connected Tools ── */}
         <div style={{ ...sectionTitle, marginTop: "1.25rem" }}>Connected Tools</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.4rem" }}>
-          {TOOLS.map((tool) => (
-            <div key={tool.id} style={card}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                  <span style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>{tool.icon}</span>
-                  <div>
-                    <div style={{ fontSize: "0.6rem", fontWeight: 600, color: "var(--text)" }}>
-                      {tool.name}
-                    </div>
-                    <div style={{ fontSize: "0.45rem", color: "var(--text-muted)" }}>
-                      {tool.description}
+          {datasources.map((ds) => {
+            const isConnecting = connecting === ds.id;
+            const actionBtn: React.CSSProperties = {
+              background: "none",
+              border: "1px solid var(--border)",
+              borderRadius: 4,
+              color: "var(--text)",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              fontSize: "0.45rem",
+              padding: "0.2rem 0.5rem",
+              transition: "all 0.15s",
+              marginTop: "0.35rem",
+            };
+            return (
+              <div key={ds.id} style={card}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                    <span style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>{ds.icon}</span>
+                    <div>
+                      <div style={{ fontSize: "0.6rem", fontWeight: 600, color: "var(--text)" }}>
+                        {ds.name}
+                      </div>
+                      <div style={{ fontSize: "0.45rem", color: "var(--text-muted)" }}>
+                        {ds.description}
+                      </div>
                     </div>
                   </div>
+                  <span
+                    className="dot"
+                    style={{
+                      background: ds.connected
+                        ? "var(--green)"
+                        : isConnecting
+                          ? "var(--yellow)"
+                          : "var(--border)",
+                      width: 6,
+                      height: 6,
+                      flexShrink: 0,
+                      animation: isConnecting ? "pulse 1.5s ease-in-out infinite" : "none",
+                    }}
+                  />
                 </div>
-                <span
-                  className="dot"
-                  style={{
-                    background: "var(--border)",
-                    width: 6,
-                    height: 6,
-                    flexShrink: 0,
-                  }}
-                  title="Not connected"
-                />
+                <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                  {ds.connected ? (
+                    <button
+                      onClick={() => handleDisconnect(ds.id)}
+                      style={actionBtn}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = "var(--red)";
+                        e.currentTarget.style.color = "var(--red)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = "var(--border)";
+                        e.currentTarget.style.color = "var(--text)";
+                      }}
+                    >
+                      Disconnect
+                    </button>
+                  ) : ds.needsOAuth ? (
+                    <button
+                      onClick={() => !isConnecting && handleConnect(ds.id)}
+                      disabled={isConnecting}
+                      style={{
+                        ...actionBtn,
+                        borderColor: isConnecting ? "var(--yellow)" : "var(--accent)",
+                        color: isConnecting ? "var(--yellow)" : "var(--accent)",
+                        cursor: isConnecting ? "wait" : "pointer",
+                      }}
+                    >
+                      {isConnecting ? "Waiting..." : "Connect"}
+                    </button>
+                  ) : (
+                    <span style={{ fontSize: "0.4rem", color: "var(--text-muted)", marginTop: "0.35rem" }}>
+                      Auto-detected
+                    </span>
+                  )}
+                  {ds.connected && (
+                    <span style={{ fontSize: "0.4rem", color: "var(--green)", marginTop: "0.35rem" }}>
+                      Connected
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-        <div
-          style={{
-            fontSize: "0.45rem",
-            color: "var(--text-muted)",
-            marginTop: "0.35rem",
-            fontStyle: "italic",
-          }}
-        >
-          Tool connections coming soon via Mio integration
+            );
+          })}
         </div>
 
         {/* ── AI Engines ── */}
@@ -268,7 +366,7 @@ export function SettingsView({
                 ...card,
                 flex: 1,
                 marginBottom: 0,
-                opacity: b.available ? 1 : 0.5,
+                opacity: b.installed ? 1 : 0.5,
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginBottom: "0.25rem" }}>
@@ -281,13 +379,13 @@ export function SettingsView({
                 <span
                   className="dot"
                   style={{
-                    background: b.available ? "var(--green)" : "var(--red)",
+                    background: b.installed ? "var(--green)" : "var(--red)",
                     width: 5,
                     height: 5,
                   }}
                 />
                 <span style={{ fontSize: "0.45rem", color: "var(--text-muted)" }}>
-                  {b.available ? b.version || "Ready" : "Not installed"}
+                  {b.installed ? b.version || "Ready" : "Not installed"}
                 </span>
               </div>
             </div>

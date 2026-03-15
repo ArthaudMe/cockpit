@@ -1,0 +1,99 @@
+import fs from "fs";
+import path from "path";
+import os from "os";
+import type { ServiceId, TokenSet } from "./types";
+
+const STORE_DIR = path.join(os.homedir(), ".cockpit");
+const STORE_PATH = path.join(STORE_DIR, "tokens.json");
+
+type TokenStore = Partial<Record<ServiceId, TokenSet>>;
+
+function ensureDir() {
+  if (!fs.existsSync(STORE_DIR)) {
+    fs.mkdirSync(STORE_DIR, { recursive: true, mode: 0o700 });
+  }
+}
+
+function read(): TokenStore {
+  try {
+    if (!fs.existsSync(STORE_PATH)) return {};
+    const raw = fs.readFileSync(STORE_PATH, "utf-8");
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+function write(store: TokenStore) {
+  ensureDir();
+  fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2), {
+    mode: 0o600,
+  });
+}
+
+export function getTokens(service: ServiceId): TokenSet | null {
+  const store = read();
+  return store[service] ?? null;
+}
+
+export function saveTokens(service: ServiceId, tokens: TokenSet) {
+  const store = read();
+  store[service] = tokens;
+  write(store);
+}
+
+export function removeTokens(service: ServiceId) {
+  const store = read();
+  delete store[service];
+  write(store);
+}
+
+export function getConnectedServices(): ServiceId[] {
+  const store = read();
+  return Object.keys(store) as ServiceId[];
+}
+
+// File-based state store for OAuth CSRF protection
+// (in-memory Map gets cleared by Next.js HMR reloads)
+const STATES_PATH = path.join(STORE_DIR, "oauth-states.json");
+
+type StateEntry = { service: ServiceId; createdAt: number };
+type StateStore = Record<string, StateEntry>;
+
+function readStates(): StateStore {
+  try {
+    if (!fs.existsSync(STATES_PATH)) return {};
+    return JSON.parse(fs.readFileSync(STATES_PATH, "utf-8"));
+  } catch {
+    return {};
+  }
+}
+
+function writeStates(states: StateStore) {
+  ensureDir();
+  fs.writeFileSync(STATES_PATH, JSON.stringify(states, null, 2), {
+    mode: 0o600,
+  });
+}
+
+export function createOAuthState(service: ServiceId): string {
+  const state = crypto.randomUUID();
+  const states = readStates();
+  states[state] = { service, createdAt: Date.now() };
+  // Clean up old states (> 10 min)
+  for (const key of Object.keys(states)) {
+    if (Date.now() - states[key].createdAt > 600_000) delete states[key];
+  }
+  writeStates(states);
+  return state;
+}
+
+export function consumeOAuthState(state: string): ServiceId | null {
+  const states = readStates();
+  const entry = states[state];
+  if (!entry) return null;
+  delete states[state];
+  writeStates(states);
+  if (Date.now() - entry.createdAt > 600_000) return null;
+  return entry.service;
+}

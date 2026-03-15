@@ -2,6 +2,7 @@ const { app, BrowserWindow, shell, dialog, Menu, Tray, nativeImage } = require("
 const { spawn, execFileSync } = require("child_process");
 const path = require("path");
 const net = require("net");
+const http = require("http");
 
 // ─── Config ────────────────────────────────────────────────────────
 let mainWindow;
@@ -9,6 +10,7 @@ let nextServer;
 
 const isDev = process.env.NODE_ENV === "development";
 const PORT = isDev ? 3000 : 3123;
+const PROTOCOL = "cockpit";
 
 const APP_ROOT = app.isPackaged
   ? path.join(process.resourcesPath, "app")
@@ -243,6 +245,71 @@ function buildMenu() {
   ];
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+// ─── Deep Link Protocol (cockpit://) ────────────────────────────────
+// Register as default handler for cockpit:// URLs
+if (process.defaultApp) {
+  // Dev: register with full path to electron binary
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [
+      path.resolve(process.argv[1]),
+    ]);
+  }
+} else {
+  app.setAsDefaultProtocolClient(PROTOCOL);
+}
+
+// Handle the deep link URL — forward OAuth callback to Next.js server
+function handleDeepLink(url) {
+  if (!url) return;
+  console.log("[electron] deep link:", url);
+
+  // cockpit://oauth/callback?code=xxx&state=yyy
+  // → forward to http://localhost:{PORT}/api/datasources/callback?code=xxx&state=yyy
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname === "oauth" && parsed.pathname.startsWith("/callback")) {
+      const forwardUrl = `http://localhost:${PORT}/api/datasources/callback${parsed.search}`;
+
+      // Hit the local Next.js callback endpoint
+      http.get(forwardUrl, (res) => {
+        console.log("[electron] OAuth callback forwarded, status:", res.statusCode);
+        // Bring Cockpit window to front
+        if (mainWindow) {
+          if (mainWindow.isMinimized()) mainWindow.restore();
+          mainWindow.focus();
+        }
+      }).on("error", (err) => {
+        console.error("[electron] OAuth callback forward failed:", err.message);
+      });
+    }
+  } catch (err) {
+    console.error("[electron] Failed to parse deep link:", err.message);
+  }
+}
+
+// macOS: open-url event fires when app is already running
+app.on("open-url", (event, url) => {
+  event.preventDefault();
+  handleDeepLink(url);
+});
+
+// Windows/Linux: deep link URL comes as process argument
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on("second-instance", (_event, argv) => {
+    // On Windows, the deep link URL is the last argument
+    const url = argv.find((arg) => arg.startsWith(`${PROTOCOL}://`));
+    if (url) handleDeepLink(url);
+
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
 }
 
 // ─── Startup ───────────────────────────────────────────────────────
