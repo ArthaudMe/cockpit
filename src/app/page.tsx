@@ -118,13 +118,12 @@ export default function Home() {
     ? contextData.projects[selectedProjectIndex]
     : null;
 
-  // Show onboarding if Claude CLI is not connected (and we're done checking)
+  // Show onboarding if no backends are connected (and we're done checking)
   if (!claudeStatus.checking && !claudeStatus.connected) {
     return (
       <OnboardingView
         onRetry={handleRetryConnection}
         checking={claudeStatus.checking}
-        error="not_connected"
       />
     );
   }

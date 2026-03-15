@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAgent, deleteAgent } from "@/lib/agent-manager";
+import { getAgent, deleteAgent, updateAgent } from "@/lib/agent-manager";
 
 export async function GET(
   _req: NextRequest,
@@ -11,6 +11,20 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   return NextResponse.json(agent);
+}
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const body = await req.json();
+
+  const updated = updateAgent(id, body);
+  if (!updated) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  return NextResponse.json(updated);
 }
 
 export async function DELETE(
