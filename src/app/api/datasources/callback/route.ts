@@ -1,13 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { consumeOAuthState, saveTokens } from "@/lib/datasources/token-store";
 import { exchangeCode } from "@/lib/datasources/manager";
+import type { ServiceId } from "@/lib/datasources/types";
 
-function getRedirectUri(origin: string): string {
+function getRedirectUri(origin: string, service: ServiceId): string {
   const isDev = process.env.NODE_ENV === "development";
   if (isDev) {
+    // Slack requires HTTPS redirect URIs — must match connect route
+    if (service === "slack") {
+      return `https://localhost:3000/api/datasources/callback`;
+    }
     return `${origin}/api/datasources/callback`;
   }
   return "cockpit://oauth/callback";
+}
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 export async function GET(req: NextRequest) {
@@ -39,7 +53,7 @@ export async function GET(req: NextRequest) {
   try {
     const origin = req.nextUrl.origin;
     // Must match the redirect_uri used in the authorize request
-    const redirectUri = getRedirectUri(origin);
+    const redirectUri = getRedirectUri(origin, service);
     const tokens = await exchangeCode(service, code, redirectUri);
     saveTokens(service, tokens);
 
@@ -61,10 +75,12 @@ export async function GET(req: NextRequest) {
 }
 
 function renderHTML(title: string, message: string, success: boolean): string {
+  const safeTitle = escapeHtml(title);
+  const safeMessage = escapeHtml(message);
   return `<!DOCTYPE html>
 <html>
 <head>
-  <title>Cockpit - ${title}</title>
+  <title>Cockpit - ${safeTitle}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -95,8 +111,8 @@ function renderHTML(title: string, message: string, success: boolean): string {
 <body>
   <div class="container">
     <div class="icon">${success ? "&#10003;" : "&#10007;"}</div>
-    <h1>${title}</h1>
-    <p>${message}</p>
+    <h1>${safeTitle}</h1>
+    <p>${safeMessage}</p>
   </div>
   ${success ? "<script>setTimeout(() => window.close(), 2000)</script>" : ""}
 </body>

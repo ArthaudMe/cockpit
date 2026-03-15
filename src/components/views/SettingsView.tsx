@@ -88,11 +88,12 @@ export function SettingsView({
     fetchDatasources();
   }, [fetchDatasources]);
 
-  // Poll for datasource status while connecting
+  // Poll for datasource status while connecting, with 2-minute timeout
   useEffect(() => {
     if (!connecting) return;
     const interval = setInterval(fetchDatasources, 2000);
-    return () => clearInterval(interval);
+    const timeout = setTimeout(() => setConnecting(null), 120_000);
+    return () => { clearInterval(interval); clearTimeout(timeout); };
   }, [connecting, fetchDatasources]);
 
   // Clear connecting state when the service becomes connected
