@@ -3,3 +3,5 @@ node_modules/
 next-env.d.ts
 dist-electron/
 .env.local
+certs/
+tsconfig.tsbuildinfo

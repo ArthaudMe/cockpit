@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import contextData from "../../context.json";
+import { type Context, buildContextFromLiveData } from "@/lib/context";
+import type { DatasourceData } from "@/lib/datasources/types";
 import { Header } from "@/components/layout/Header";
 import { ProjectsColumn } from "@/components/columns/ProjectsColumn";
 import { FeedColumn } from "@/components/columns/FeedColumn";
@@ -17,12 +18,7 @@ import {
   focusSlackMessage,
   focusCompetitor,
   focusTodo,
-  focusProject,
-  focusProjectLinear,
-  focusProjectGitHub,
-  focusProjectSlack,
   focusMeeting,
-  focusPerson,
 } from "@/lib/focus";
 
 type CenterView =
@@ -30,6 +26,17 @@ type CenterView =
   | { type: "project"; index: number }
   | { type: "focus"; focus: ContextFocus }
   | { type: "settings" };
+
+const EMPTY_CONTEXT: Context = {
+  user: "User",
+  projects: [],
+  calendar: [],
+  usage_analytics: {},
+  slack_highlights: [],
+  competitor_updates: [],
+  todos: [],
+  company_feed: [],
+};
 
 export default function Home() {
   const [chatInput, setChatInput] = useState("");
@@ -39,6 +46,26 @@ export default function Home() {
     version?: string;
     checking: boolean;
   }>({ connected: false, checking: true });
+  const [contextData, setContextData] = useState<Context>(EMPTY_CONTEXT);
+
+  // Fetch live datasource data
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+
+    const fetchLiveData = () => {
+      fetch("/api/datasources/data")
+        .then((r) => r.json())
+        .then((data: DatasourceData) => {
+          setContextData(buildContextFromLiveData(data));
+        })
+        .catch(() => {});
+    };
+
+    fetchLiveData();
+    interval = setInterval(fetchLiveData, 30_000); // refresh every 30s
+
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     fetch("/api/status")
@@ -95,24 +122,24 @@ export default function Home() {
   // Context column click handlers
   const handleCalendarClick = useCallback((index: number) => {
     handleOpenFocus(focusCalendarEvent(contextData.calendar[index]));
-  }, [handleOpenFocus]);
+  }, [handleOpenFocus, contextData.calendar]);
 
   const handleMetricClick = useCallback((key: string) => {
     const metric = contextData.usage_analytics[key as keyof typeof contextData.usage_analytics];
     handleOpenFocus(focusMetric(key, metric));
-  }, [handleOpenFocus]);
+  }, [handleOpenFocus, contextData.usage_analytics]);
 
   const handleSlackClick = useCallback((index: number) => {
     handleOpenFocus(focusSlackMessage(contextData.slack_highlights[index]));
-  }, [handleOpenFocus]);
+  }, [handleOpenFocus, contextData.slack_highlights]);
 
   const handleCompetitorClick = useCallback((index: number) => {
     handleOpenFocus(focusCompetitor(contextData.competitor_updates[index]));
-  }, [handleOpenFocus]);
+  }, [handleOpenFocus, contextData.competitor_updates]);
 
   const handleTodoClick = useCallback((index: number) => {
     handleOpenFocus(focusTodo(contextData.todos[index]));
-  }, [handleOpenFocus]);
+  }, [handleOpenFocus, contextData.todos]);
 
   // Project view sub-item click handlers
   const handleProjectFocus = useCallback((focus: ContextFocus) => {

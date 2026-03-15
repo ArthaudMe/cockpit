@@ -132,6 +132,7 @@ export async function fetchCalendarEvents(): Promise<CalendarEvent[]> {
           minute: "2-digit",
           hour12: true,
         }),
+        date: startDate.toISOString().split("T")[0],
         duration: durationMin >= 60 ? `${Math.round(durationMin / 60)}h` : `${durationMin}m`,
         attendees: (event.attendees || [])
           .filter((a: any) => !a.self)

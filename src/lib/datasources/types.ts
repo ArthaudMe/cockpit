@@ -34,6 +34,7 @@ export interface OAuthConfig {
 export interface CalendarEvent {
   title: string;
   time: string;
+  date: string; // ISO date string e.g. "2026-03-16"
   duration: string;
   attendees: string[];
   description?: string;

@@ -13,9 +13,13 @@ const VALID_SERVICES: ServiceId[] = [
 
 // In production Electron, use deep link protocol.
 // In dev, use localhost callback directly.
-function getRedirectUri(origin: string): string {
+function getRedirectUri(origin: string, service: ServiceId): string {
   const isDev = process.env.NODE_ENV === "development";
   if (isDev) {
+    // Slack requires HTTPS redirect URIs
+    if (service === "slack") {
+      return `https://localhost:3000/api/datasources/callback`;
+    }
     return `${origin}/api/datasources/callback`;
   }
   return "cockpit://oauth/callback";
@@ -32,7 +36,7 @@ export async function GET(req: NextRequest) {
   }
 
   const origin = req.nextUrl.origin;
-  const redirectUri = getRedirectUri(origin);
+  const redirectUri = getRedirectUri(origin, service);
   const state = createOAuthState(service);
 
   const authUrl = getAuthUrl(service, redirectUri, state);
