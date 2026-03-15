@@ -4,25 +4,37 @@ import { promisify } from "util";
 
 const execFileAsync = promisify(execFile);
 
-export async function GET() {
-  // Remove CLAUDECODE to allow checking inside a Claude Code session
+function cleanEnv() {
   const env = { ...process.env };
   delete env.CLAUDECODE;
+  return env;
+}
 
+async function check(bin: string, args: string[]): Promise<{ ok: boolean; version?: string }> {
   try {
-    const { stdout } = await execFileAsync("claude", ["--version"], {
-      timeout: 5000,
-      env,
-    });
-    return NextResponse.json({
-      connected: true,
-      version: stdout.trim(),
-    });
-  } catch (err) {
-    return NextResponse.json({
-      connected: false,
-      error:
-        err instanceof Error ? err.message : "Claude CLI not found or not authenticated",
-    });
+    const { stdout } = await execFileAsync(bin, args, { timeout: 5000, env: cleanEnv() });
+    return { ok: true, version: stdout.trim() };
+  } catch {
+    return { ok: false };
   }
+}
+
+export async function GET() {
+  const [claude, codex, ollama] = await Promise.all([
+    check("claude", ["--version"]),
+    check("codex", ["--version"]),
+    check("ollama", ["--version"]),
+  ]);
+
+  const connected = claude.ok || codex.ok || ollama.ok;
+
+  return NextResponse.json({
+    connected,
+    version: claude.version || codex.version || ollama.version,
+    backends: {
+      claude: { connected: claude.ok, version: claude.version },
+      codex: { connected: codex.ok, version: codex.version },
+      ollama: { connected: ollama.ok, version: ollama.version },
+    },
+  });
 }

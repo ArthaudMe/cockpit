@@ -38,6 +38,10 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
+/* Electron window drag */
+.cockpit-header { -webkit-app-region: drag; }
+.cockpit-header-actions { -webkit-app-region: no-drag; }
+
 /* Panel system */
 .panel {
   background: var(--surface);

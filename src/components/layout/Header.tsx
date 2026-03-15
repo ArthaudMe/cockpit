@@ -3,20 +3,23 @@
 export function Header({
   claudeStatus,
   onRetryConnection,
+  onSettingsClick,
 }: {
   claudeStatus: { connected: boolean; version?: string; checking: boolean };
   onRetryConnection: () => void;
+  onSettingsClick?: () => void;
 }) {
   return (
     <header
+      className="cockpit-header"
       style={{
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        padding: "0.4rem 0.75rem",
+        padding: "0.4rem 0.75rem 0.4rem 5rem",
         borderBottom: "1px solid var(--border)",
         background: "var(--surface)",
-        minHeight: "2rem",
+        minHeight: "2.2rem",
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -29,7 +32,7 @@ export function Header({
             textTransform: "uppercase",
           }}
         >
-          MIO COCKPIT
+          COCKPIT
         </span>
         <span
           style={{
@@ -38,11 +41,11 @@ export function Header({
             letterSpacing: "0.03em",
           }}
         >
-          founder's workspace
+          pilot your company
         </span>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+      <div className="cockpit-header-actions" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
         <button
           onClick={onRetryConnection}
           disabled={claudeStatus.checking}
@@ -76,6 +79,26 @@ export function Header({
               ? `CLAUDE CLI ${claudeStatus.version || ""}`
               : "CLAUDE DISCONNECTED"}
         </button>
+        {onSettingsClick && (
+          <button
+            onClick={onSettingsClick}
+            style={{
+              background: "none",
+              border: "1px solid var(--border)",
+              borderRadius: 3,
+              padding: "0.2rem 0.4rem",
+              cursor: "pointer",
+              fontSize: "0.6rem",
+              color: "var(--text-dim)",
+              fontFamily: "inherit",
+              display: "flex",
+              alignItems: "center",
+            }}
+            title="Settings"
+          >
+            ⚙
+          </button>
+        )}
       </div>
     </header>
   );

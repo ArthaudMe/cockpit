@@ -14,14 +14,22 @@ type AgentInfo = {
   id: string;
   name: string;
   role: string;
+  backend: string;
+  model: string;
   busy: boolean;
 };
 
-const ROLE_LABELS: Record<string, string> = {
-  general: "general",
-  research: "research",
-  writer: "writer",
-  ops: "ops",
+type BackendDef = {
+  id: string;
+  label: string;
+  models: { id: string; label: string }[];
+  defaultModel: string;
+};
+
+const BACKEND_ICONS: Record<string, string> = {
+  claude: "◇",
+  codex: "◆",
+  ollama: "○",
 };
 
 export function ChatColumn({
@@ -36,6 +44,7 @@ export function ChatColumn({
   claudeConnected: boolean;
 }) {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [backends, setBackends] = useState<BackendDef[]>([]);
   const [activeAgentId, setActiveAgentId] = usePersistedState<string | null>(
     "cockpit-active-agent",
     null
@@ -45,10 +54,10 @@ export function ChatColumn({
   >("cockpit-chat-agents", {});
   const [streaming, setStreaming] = useState(false);
   const [showNewAgent, setShowNewAgent] = useState(false);
+  const [showSwitcher, setShowSwitcher] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Fetch agents on mount
   useEffect(() => {
     fetch("/api/agents")
       .then((r) => r.json())
@@ -58,6 +67,11 @@ export function ChatColumn({
           setActiveAgentId(data[0].id);
         }
       })
+      .catch(() => {});
+
+    fetch("/api/backends")
+      .then((r) => r.json())
+      .then((data: BackendDef[]) => setBackends(data))
       .catch(() => {});
   }, []);
 
@@ -151,12 +165,12 @@ export function ChatColumn({
   };
 
   const handleCreateAgent = useCallback(
-    async (name: string, role: string) => {
+    async (name: string, role: string, backend: string, model: string) => {
       try {
         const res = await fetch("/api/agents", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, role }),
+          body: JSON.stringify({ name, role, backend, model }),
         });
         const agent: AgentInfo = await res.json();
         setAgents((prev) => [...prev, agent]);
@@ -186,7 +200,32 @@ export function ChatColumn({
     [activeAgentId, agents, setActiveAgentId, setMessagesByAgent]
   );
 
+  const handleSwitchBackend = useCallback(
+    async (backend: string, model: string) => {
+      if (!activeAgentId) return;
+      try {
+        const res = await fetch(`/api/agents/${activeAgentId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ backend, model }),
+        });
+        const updated: AgentInfo = await res.json();
+        setAgents((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+        setShowSwitcher(false);
+      } catch {
+        // silently fail
+      }
+    },
+    [activeAgentId]
+  );
+
   const activeAgent = agents.find((a) => a.id === activeAgentId);
+
+  const shortModel = (model: string) => {
+    if (!model) return "?";
+    if (model.startsWith("claude-")) return model.split("-")[1];
+    return model;
+  };
 
   return (
     <div
@@ -204,32 +243,19 @@ export function ChatColumn({
           overflow: "hidden",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            flex: 1,
-            overflowX: "auto",
-            gap: 0,
-          }}
-        >
+        <div style={{ display: "flex", flex: 1, overflowX: "auto", gap: 0 }}>
           {agents.map((agent) => (
             <button
               key={agent.id}
               onClick={() => setActiveAgentId(agent.id)}
               style={{
-                background:
-                  agent.id === activeAgentId
-                    ? "var(--bg)"
-                    : "transparent",
+                background: agent.id === activeAgentId ? "var(--bg)" : "transparent",
                 border: "none",
                 borderRight: "1px solid var(--border)",
                 padding: "0.35rem 0.6rem",
                 fontSize: "0.55rem",
                 fontWeight: agent.id === activeAgentId ? 600 : 400,
-                color:
-                  agent.id === activeAgentId
-                    ? "var(--text)"
-                    : "var(--text-dim)",
+                color: agent.id === activeAgentId ? "var(--text)" : "var(--text-dim)",
                 cursor: "pointer",
                 fontFamily: "inherit",
                 display: "flex",
@@ -242,21 +268,14 @@ export function ChatColumn({
               <span
                 className="dot"
                 style={{
-                  background: agent.busy
-                    ? "var(--yellow)"
-                    : "var(--green)",
+                  background: agent.busy ? "var(--yellow)" : "var(--green)",
                   width: 5,
                   height: 5,
                 }}
               />
               {agent.name}
-              <span
-                style={{
-                  fontSize: "0.45rem",
-                  color: "var(--text-muted)",
-                }}
-              >
-                {ROLE_LABELS[agent.role] || agent.role}
+              <span style={{ fontSize: "0.45rem", color: "var(--text-muted)" }}>
+                {BACKEND_ICONS[agent.backend] || "?"} {shortModel(agent.model)}
               </span>
               {agents.length > 1 && (
                 <span
@@ -271,12 +290,8 @@ export function ChatColumn({
                     marginLeft: "0.15rem",
                     opacity: 0.5,
                   }}
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.opacity = "1")
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.opacity = "0.5")
-                  }
+                  onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+                  onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.5")}
                 >
                   ×
                 </span>
@@ -285,7 +300,6 @@ export function ChatColumn({
           ))}
         </div>
 
-        {/* New agent button */}
         <button
           onClick={() => setShowNewAgent(!showNewAgent)}
           style={{
@@ -305,98 +319,18 @@ export function ChatColumn({
         </button>
       </div>
 
-      {/* New agent form */}
       {showNewAgent && (
         <NewAgentForm
+          backends={backends}
           onSubmit={handleCreateAgent}
           onCancel={() => setShowNewAgent(false)}
         />
       )}
 
       {/* Messages area */}
-      <div
-        ref={scrollRef}
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          padding: "0.75rem",
-        }}
-      >
+      <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "0.75rem" }}>
         {messages.length === 0 && activeAgent && (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              height: "100%",
-              gap: "0.75rem",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "0.7rem",
-                color: "var(--text-dim)",
-                textAlign: "center",
-              }}
-            >
-              {activeAgent.name}
-              <span
-                style={{
-                  fontSize: "0.5rem",
-                  color: "var(--text-muted)",
-                  marginLeft: "0.4rem",
-                }}
-              >
-                {ROLE_LABELS[activeAgent.role]}
-              </span>
-            </div>
-            <div
-              style={{
-                fontSize: "0.55rem",
-                color: "var(--text-muted)",
-                textAlign: "center",
-                maxWidth: "80%",
-              }}
-            >
-              {activeAgent.role === "general" &&
-                "Click anything in the panels, or ask about your projects, calendar, metrics, or team."}
-              {activeAgent.role === "research" &&
-                "Ask me to dig into a topic, compare options, or analyze data."}
-              {activeAgent.role === "writer" &&
-                "I can draft emails, memos, announcements, or any document."}
-              {activeAgent.role === "ops" &&
-                "I can help plan, schedule, track, and organize operations."}
-            </div>
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                justifyContent: "center",
-                gap: "0.35rem",
-                marginTop: "0.5rem",
-              }}
-            >
-              {getStarters(activeAgent.role).map((q) => (
-                <button
-                  key={q}
-                  onClick={() => onInputChange(q)}
-                  style={{
-                    background: "var(--surface-hover)",
-                    border: "1px solid var(--border)",
-                    borderRadius: 3,
-                    padding: "0.25rem 0.5rem",
-                    fontSize: "0.55rem",
-                    color: "var(--text-dim)",
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                  }}
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
-          </div>
+          <EmptyState agent={activeAgent} onPrefill={onInputChange} />
         )}
 
         {!activeAgent && (
@@ -419,32 +353,26 @@ export function ChatColumn({
         ))}
 
         {streaming && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.3rem",
-              padding: "0.25rem 0",
-            }}
-          >
-            <span
-              className="dot dot-green"
-              style={{ animation: "spin 1s linear infinite" }}
-            />
-            <span style={{ fontSize: "0.5rem", color: "var(--text-muted)" }}>
-              thinking...
-            </span>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", padding: "0.25rem 0" }}>
+            <span className="dot dot-green" style={{ animation: "spin 1s linear infinite" }} />
+            <span style={{ fontSize: "0.5rem", color: "var(--text-muted)" }}>thinking...</span>
           </div>
         )}
       </div>
 
-      {/* Input area */}
-      <div
-        style={{
-          borderTop: "1px solid var(--border)",
-          padding: "0.5rem",
-        }}
-      >
+      {/* Input area with backend switcher */}
+      <div style={{ borderTop: "1px solid var(--border)", padding: "0.5rem", position: "relative" }}>
+        {/* Backend switcher popover */}
+        {showSwitcher && activeAgent && (
+          <BackendSwitcher
+            backends={backends}
+            currentBackend={activeAgent.backend}
+            currentModel={activeAgent.model}
+            onSelect={handleSwitchBackend}
+            onClose={() => setShowSwitcher(false)}
+          />
+        )}
+
         <div
           style={{
             display: "flex",
@@ -456,6 +384,32 @@ export function ChatColumn({
             padding: "0.4rem 0.5rem",
           }}
         >
+          {/* Backend toggle button */}
+          {activeAgent && (
+            <button
+              onClick={() => setShowSwitcher(!showSwitcher)}
+              style={{
+                background: showSwitcher ? "var(--surface-hover)" : "transparent",
+                border: "1px solid var(--border)",
+                borderRadius: 3,
+                padding: "0.15rem 0.4rem",
+                fontSize: "0.5rem",
+                color: "var(--text-dim)",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.25rem",
+                flexShrink: 0,
+                transition: "all 0.1s",
+              }}
+            >
+              <span style={{ fontSize: "0.6rem" }}>{BACKEND_ICONS[activeAgent.backend] || "?"}</span>
+              {shortModel(activeAgent.model)}
+              <span style={{ fontSize: "0.4rem", opacity: 0.6 }}>▼</span>
+            </button>
+          )}
+
           <textarea
             ref={inputRef}
             value={inputValue}
@@ -463,7 +417,7 @@ export function ChatColumn({
             onKeyDown={handleKeyDown}
             placeholder={
               !claudeConnected
-                ? "Claude CLI not connected..."
+                ? "No agents connected..."
                 : !activeAgent
                   ? "Create an agent first..."
                   : `Message ${activeAgent.name}...`
@@ -513,35 +467,232 @@ export function ChatColumn({
             ↑
           </button>
         </div>
-        {agents.length > 1 && (
-          <div
-            style={{
-              fontSize: "0.45rem",
-              color: "var(--text-muted)",
-              marginTop: "0.25rem",
-              textAlign: "center",
-            }}
-          >
-            {agents.length} agents active
-          </div>
-        )}
       </div>
     </div>
   );
 }
 
-// ─── New Agent Form ────────────────────────────────────────────────
+// ─── Backend Switcher (Emdash-style popover) ────────────────────────
+
+function BackendSwitcher({
+  backends,
+  currentBackend,
+  currentModel,
+  onSelect,
+  onClose,
+}: {
+  backends: BackendDef[];
+  currentBackend: string;
+  currentModel: string;
+  onSelect: (backend: string, model: string) => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close on click outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={ref}
+      style={{
+        position: "absolute",
+        bottom: "calc(100% + 0.25rem)",
+        left: "0.5rem",
+        width: 280,
+        background: "var(--surface)",
+        border: "1px solid var(--border-light)",
+        borderRadius: 8,
+        boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+        overflow: "hidden",
+        zIndex: 100,
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          padding: "0.5rem 0.6rem",
+          borderBottom: "1px solid var(--border)",
+          fontSize: "0.6rem",
+          fontWeight: 600,
+          color: "var(--text-dim)",
+        }}
+      >
+        Switch engine
+      </div>
+
+      {/* Backend list */}
+      <div style={{ maxHeight: 320, overflowY: "auto" }}>
+        {backends.map((backend) => (
+          <div key={backend.id}>
+            {/* Backend header */}
+            <div
+              style={{
+                padding: "0.4rem 0.6rem 0.2rem",
+                fontSize: "0.5rem",
+                fontWeight: 600,
+                color: "var(--text-muted)",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.3rem",
+              }}
+            >
+              <span style={{ fontSize: "0.6rem" }}>{BACKEND_ICONS[backend.id] || "?"}</span>
+              {backend.label}
+            </div>
+
+            {/* Model options */}
+            {backend.models.map((model) => {
+              const isActive = backend.id === currentBackend && model.id === currentModel;
+              return (
+                <button
+                  key={model.id}
+                  onClick={() => onSelect(backend.id, model.id)}
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "0.4rem 0.6rem 0.4rem 1.4rem",
+                    background: isActive ? "rgba(255,255,255,0.05)" : "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    fontSize: "0.6rem",
+                    color: isActive ? "var(--text)" : "var(--text-dim)",
+                    transition: "background 0.1s",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive) e.currentTarget.style.background = "rgba(255,255,255,0.03)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) e.currentTarget.style.background = "transparent";
+                  }}
+                >
+                  <span>{model.label}</span>
+                  {isActive && (
+                    <span style={{ color: "var(--green)", fontSize: "0.7rem" }}>✓</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Empty State ────────────────────────────────────────────────────
+
+function EmptyState({
+  agent,
+  onPrefill,
+}: {
+  agent: AgentInfo;
+  onPrefill: (text: string) => void;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        height: "100%",
+        gap: "0.75rem",
+      }}
+    >
+      <div style={{ fontSize: "0.7rem", color: "var(--text-dim)", textAlign: "center" }}>
+        {agent.name}
+        <span style={{ fontSize: "0.5rem", color: "var(--text-muted)", marginLeft: "0.4rem" }}>
+          {BACKEND_ICONS[agent.backend]} {agent.backend}
+        </span>
+      </div>
+      <div
+        style={{
+          fontSize: "0.55rem",
+          color: "var(--text-muted)",
+          textAlign: "center",
+          maxWidth: "80%",
+        }}
+      >
+        {agent.role === "general" &&
+          "Click anything in the panels, or ask about your projects, calendar, metrics, or team."}
+        {agent.role === "research" &&
+          "Ask me to dig into a topic, compare options, or analyze data."}
+        {agent.role === "writer" &&
+          "I can draft emails, memos, announcements, or any document."}
+        {agent.role === "ops" &&
+          "I can help plan, schedule, track, and organize operations."}
+      </div>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          justifyContent: "center",
+          gap: "0.35rem",
+          marginTop: "0.5rem",
+        }}
+      >
+        {getStarters(agent.role).map((q) => (
+          <button
+            key={q}
+            onClick={() => onPrefill(q)}
+            style={{
+              background: "var(--surface-hover)",
+              border: "1px solid var(--border)",
+              borderRadius: 3,
+              padding: "0.25rem 0.5rem",
+              fontSize: "0.55rem",
+              color: "var(--text-dim)",
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            {q}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── New Agent Form ─────────────────────────────────────────────────
 
 function NewAgentForm({
+  backends,
   onSubmit,
   onCancel,
 }: {
-  onSubmit: (name: string, role: string) => void;
+  backends: BackendDef[];
+  onSubmit: (name: string, role: string, backend: string, model: string) => void;
   onCancel: () => void;
 }) {
   const [name, setName] = useState("");
   const [role, setRole] = useState("general");
+  const [backend, setBackend] = useState("claude");
+  const [model, setModel] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const selectedBackend = backends.find((b) => b.id === backend);
+  const models = selectedBackend?.models || [];
+
+  useEffect(() => {
+    if (selectedBackend) {
+      setModel(selectedBackend.defaultModel);
+    }
+  }, [backend, selectedBackend]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -549,8 +700,19 @@ function NewAgentForm({
 
   const handleSubmit = () => {
     if (name.trim()) {
-      onSubmit(name.trim(), role);
+      onSubmit(name.trim(), role, backend, model || "");
     }
+  };
+
+  const selectStyle: React.CSSProperties = {
+    background: "var(--bg)",
+    border: "1px solid var(--border)",
+    borderRadius: 3,
+    padding: "0.25rem 0.4rem",
+    fontSize: "0.55rem",
+    color: "var(--text)",
+    fontFamily: "inherit",
+    outline: "none",
   };
 
   return (
@@ -591,24 +753,28 @@ function NewAgentForm({
             outline: "none",
           }}
         />
-        <select
-          value={role}
-          onChange={(e) => setRole(e.target.value)}
-          style={{
-            background: "var(--bg)",
-            border: "1px solid var(--border)",
-            borderRadius: 3,
-            padding: "0.25rem 0.4rem",
-            fontSize: "0.55rem",
-            color: "var(--text)",
-            fontFamily: "inherit",
-            outline: "none",
-          }}
-        >
+        <select value={role} onChange={(e) => setRole(e.target.value)} style={selectStyle}>
           <option value="general">General</option>
           <option value="research">Research</option>
           <option value="writer">Writer</option>
           <option value="ops">Ops</option>
+        </select>
+      </div>
+
+      <div style={{ display: "flex", gap: "0.35rem", marginBottom: "0.35rem" }}>
+        <select value={backend} onChange={(e) => setBackend(e.target.value)} style={{ ...selectStyle, flex: 1 }}>
+          {backends.map((b) => (
+            <option key={b.id} value={b.id}>
+              {BACKEND_ICONS[b.id]} {b.label}
+            </option>
+          ))}
+        </select>
+        <select value={model} onChange={(e) => setModel(e.target.value)} style={{ ...selectStyle, flex: 1 }}>
+          {models.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -650,34 +816,17 @@ function NewAgentForm({
   );
 }
 
-// ─── Role-specific starters ────────────────────────────────────────
+// ─── Starters ───────────────────────────────────────────────────────
 
 function getStarters(role: string): string[] {
   switch (role) {
     case "research":
-      return [
-        "Compare our competitors",
-        "Research market sizing for...",
-        "What are the trends in...",
-      ];
+      return ["Compare our competitors", "Research market sizing for...", "What are the trends in..."];
     case "writer":
-      return [
-        "Draft an update email to investors",
-        "Write a team announcement about...",
-        "Help me write a cold outreach email",
-      ];
+      return ["Draft an update email to investors", "Write a team announcement about...", "Help me write a cold outreach email"];
     case "ops":
-      return [
-        "Plan next week's priorities",
-        "Create a checklist for...",
-        "What's blocking progress on...",
-      ];
+      return ["Plan next week's priorities", "Create a checklist for...", "What's blocking progress on..."];
     default:
-      return [
-        "Prep me for today's meetings",
-        "Status across all projects?",
-        "What should I focus on today?",
-        "Compare our competitors",
-      ];
+      return ["Prep me for today's meetings", "Status across all projects?", "What should I focus on today?", "Compare our competitors"];
   }
 }

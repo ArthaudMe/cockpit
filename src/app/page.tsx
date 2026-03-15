@@ -10,6 +10,7 @@ import { ChatColumn } from "@/components/columns/ChatColumn";
 import { ProjectView } from "@/components/views/ProjectView";
 import { ContextualChatView, type ContextFocus } from "@/components/views/ContextualChatView";
 import { OnboardingView } from "@/components/views/OnboardingView";
+import { SettingsView } from "@/components/views/SettingsView";
 import {
   focusCalendarEvent,
   focusMetric,
@@ -27,7 +28,8 @@ import {
 type CenterView =
   | { type: "chat" }
   | { type: "project"; index: number }
-  | { type: "focus"; focus: ContextFocus };
+  | { type: "focus"; focus: ContextFocus }
+  | { type: "settings" };
 
 export default function Home() {
   const [chatInput, setChatInput] = useState("");
@@ -82,6 +84,10 @@ export default function Home() {
     setCenterView({ type: "chat" });
   }, []);
 
+  const handleSettingsClick = useCallback(() => {
+    setCenterView({ type: "settings" });
+  }, []);
+
   const handleOpenFocus = useCallback((focus: ContextFocus) => {
     setCenterView({ type: "focus", focus });
   }, []);
@@ -118,13 +124,12 @@ export default function Home() {
     ? contextData.projects[selectedProjectIndex]
     : null;
 
-  // Show onboarding if Claude CLI is not connected (and we're done checking)
+  // Show onboarding if no backends are connected (and we're done checking)
   if (!claudeStatus.checking && !claudeStatus.connected) {
     return (
       <OnboardingView
         onRetry={handleRetryConnection}
         checking={claudeStatus.checking}
-        error="not_connected"
       />
     );
   }
@@ -175,6 +180,7 @@ export default function Home() {
       <Header
         claudeStatus={claudeStatus}
         onRetryConnection={handleRetryConnection}
+        onSettingsClick={handleSettingsClick}
       />
       <div className="flex flex-1 overflow-hidden" style={{ padding: "0.5rem", gap: "0.5rem" }}>
         <div style={{ width: 280, minWidth: 240, flexShrink: 0 }} className="overflow-y-auto">
@@ -190,7 +196,12 @@ export default function Home() {
           />
         </div>
         <div className="flex-1 min-w-0">
-          {centerView.type === "focus" ? (
+          {centerView.type === "settings" ? (
+            <SettingsView
+              onBack={handleBackToChat}
+              userName={contextData.user}
+            />
+          ) : centerView.type === "focus" ? (
             <ContextualChatView
               focus={centerView.focus}
               onBack={handleBackToChat}
