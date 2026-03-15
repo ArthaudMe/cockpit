@@ -222,6 +222,7 @@ export function ChatColumn({
   const activeAgent = agents.find((a) => a.id === activeAgentId);
 
   const shortModel = (model: string) => {
+    if (!model) return "?";
     if (model.startsWith("claude-")) return model.split("-")[1];
     return model;
   };
