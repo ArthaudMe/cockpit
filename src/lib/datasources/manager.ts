@@ -4,7 +4,7 @@ import { isGranolaAvailable, fetchGranolaMeetings } from "./connectors/granola";
 import { fetchCalendarEvents, fetchRecentEmails } from "./connectors/google";
 import { fetchLinearIssues } from "./connectors/linear";
 import { fetchGitHubPRs, fetchGitHubNotifications } from "./connectors/github";
-import { fetchNotionPages } from "./connectors/notion";
+import { fetchNotionPages, isNotionConnected } from "./connectors/notion";
 import { fetchSlackMessages } from "./connectors/slack";
 import {
   getGoogleAuthUrl,
@@ -77,7 +77,11 @@ export function getDatasourceStatuses(): DatasourceStatus[] {
     id: id as ServiceId,
     ...meta,
     connected:
-      id === "granola" ? granolaAvailable : connected.includes(id as ServiceId),
+      id === "granola"
+        ? granolaAvailable
+        : id === "notion"
+          ? isNotionConnected()
+          : connected.includes(id as ServiceId),
   }));
 }
 
@@ -142,7 +146,7 @@ export async function fetchAllData(): Promise<DatasourceData> {
     connected.includes("linear") ? fetchLinearIssues() : [],
     connected.includes("github") ? fetchGitHubPRs() : [],
     connected.includes("github") ? fetchGitHubNotifications() : [],
-    connected.includes("notion") ? fetchNotionPages() : [],
+    isNotionConnected() ? fetchNotionPages() : [],
     connected.includes("slack") ? fetchSlackMessages() : [],
   ]);
 

@@ -51,7 +51,19 @@ export async function exchangeNotionCode(
 }
 
 function getNotionTokens(): TokenSet | null {
-  return getTokens("notion");
+  // Check for stored OAuth tokens first, then fall back to internal integration token
+  const stored = getTokens("notion");
+  if (stored) return stored;
+
+  const internalToken = process.env.NOTION_INTERNAL_TOKEN;
+  if (internalToken) {
+    return { access_token: internalToken, token_type: "bearer" };
+  }
+  return null;
+}
+
+export function isNotionConnected(): boolean {
+  return getNotionTokens() !== null;
 }
 
 export async function fetchNotionPages(): Promise<NotionPage[]> {
