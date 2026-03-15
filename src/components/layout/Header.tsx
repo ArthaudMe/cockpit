@@ -3,9 +3,11 @@
 export function Header({
   claudeStatus,
   onRetryConnection,
+  onSettingsClick,
 }: {
   claudeStatus: { connected: boolean; version?: string; checking: boolean };
   onRetryConnection: () => void;
+  onSettingsClick?: () => void;
 }) {
   return (
     <header
@@ -43,7 +45,7 @@ export function Header({
         </span>
       </div>
 
-      <div className="cockpit-header-actions" style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+      <div className="cockpit-header-actions" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
         <button
           onClick={onRetryConnection}
           disabled={claudeStatus.checking}
@@ -77,6 +79,26 @@ export function Header({
               ? `CLAUDE CLI ${claudeStatus.version || ""}`
               : "CLAUDE DISCONNECTED"}
         </button>
+        {onSettingsClick && (
+          <button
+            onClick={onSettingsClick}
+            style={{
+              background: "none",
+              border: "1px solid var(--border)",
+              borderRadius: 3,
+              padding: "0.2rem 0.4rem",
+              cursor: "pointer",
+              fontSize: "0.6rem",
+              color: "var(--text-dim)",
+              fontFamily: "inherit",
+              display: "flex",
+              alignItems: "center",
+            }}
+            title="Settings"
+          >
+            ⚙
+          </button>
+        )}
       </div>
     </header>
   );
