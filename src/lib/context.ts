@@ -1,4 +1,5 @@
 import contextData from "../../context.json";
+import type { DatasourceData } from "./datasources/types";
 
 export type Context = typeof contextData;
 
@@ -6,7 +7,7 @@ export function getContext(): Context {
   return contextData;
 }
 
-export function buildSystemPrompt(ctx: Context): string {
+export function buildSystemPrompt(ctx: Context, live?: DatasourceData): string {
   const projects = ctx.projects
     .map((p) => {
       const activities = p.recent_activity
@@ -19,12 +20,20 @@ export function buildSystemPrompt(ctx: Context): string {
     })
     .join("\n\n");
 
-  const calendar = ctx.calendar
-    .map(
-      (m) =>
-        `- ${m.time} (${m.duration}) — ${m.title} [${m.attendees.join(", ")}]`
-    )
-    .join("\n");
+  // Use live calendar data if available, fall back to static
+  const calendarData = live?.calendar?.length
+    ? live.calendar
+        .map(
+          (m) =>
+            `- ${m.time} (${m.duration}) — ${m.title} [${m.attendees.join(", ")}]`
+        )
+        .join("\n")
+    : ctx.calendar
+        .map(
+          (m) =>
+            `- ${m.time} (${m.duration}) — ${m.title} [${m.attendees.join(", ")}]`
+        )
+        .join("\n");
 
   const analytics = Object.entries(ctx.usage_analytics)
     .map(([key, v]) => {
@@ -34,9 +43,14 @@ export function buildSystemPrompt(ctx: Context): string {
     })
     .join("\n");
 
-  const slack = ctx.slack_highlights
-    .map((s) => `- ${s.channel} (${s.time}): ${s.message}`)
-    .join("\n");
+  // Use live Slack data if available
+  const slack = live?.slackMessages?.length
+    ? live.slackMessages
+        .map((s) => `- ${s.channel} (${s.time}): ${s.author}: ${s.message}`)
+        .join("\n")
+    : ctx.slack_highlights
+        .map((s) => `- ${s.channel} (${s.time}): ${s.message}`)
+        .join("\n");
 
   const competitors = ctx.competitor_updates
     .map((c) => `- ${c.competitor} (${c.time}, via ${c.source}): ${c.event}`)
@@ -46,6 +60,49 @@ export function buildSystemPrompt(ctx: Context): string {
     .map((t) => `- [${t.done ? "x" : " "}] ${t.text}`)
     .join("\n");
 
+  // Live datasource sections
+  const liveLinear = live?.linearIssues?.length
+    ? `\n\n## Linear Issues (assigned to you)\n${live.linearIssues
+        .map(
+          (i) =>
+            `- ${i.id}: ${i.title} [${i.state}] (${i.priority}) — updated ${i.updatedAt}`
+        )
+        .join("\n")}`
+    : "";
+
+  const liveGitHub = live?.githubPRs?.length
+    ? `\n\n## GitHub Pull Requests\n${live.githubPRs
+        .map(
+          (pr) =>
+            `- ${pr.repo}: ${pr.title} by ${pr.author} [${pr.status}] — ${pr.time}`
+        )
+        .join("\n")}`
+    : "";
+
+  const liveEmails = live?.emails?.length
+    ? `\n\n## Recent Emails\n${live.emails
+        .slice(0, 5)
+        .map((e) => `- ${e.from}: ${e.subject} — ${e.snippet.slice(0, 80)}`)
+        .join("\n")}`
+    : "";
+
+  const liveNotion = live?.notionPages?.length
+    ? `\n\n## Recent Notion Pages\n${live.notionPages
+        .slice(0, 8)
+        .map((p) => `- ${p.title} (edited ${p.lastEdited})`)
+        .join("\n")}`
+    : "";
+
+  const liveGranola = live?.granolaMeetings?.length
+    ? `\n\n## Recent Meeting Notes (Granola)\n${live.granolaMeetings
+        .slice(0, 5)
+        .map(
+          (m) =>
+            `- ${m.title} (${m.time}) [${m.attendees.join(", ")}]${m.summary ? `\n  Summary: ${m.summary}` : ""}`
+        )
+        .join("\n")}`
+    : "";
+
   return `You are Mio, an AI work companion embedded in a founder's cockpit. The user is ${ctx.user}. They see a sidebar with their calendar, projects, analytics, Slack, competitor updates, and todo. You have persistent context about their work across all tools.
 
 Here is what you know:
@@ -54,7 +111,7 @@ Here is what you know:
 ${projects}
 
 ## Today's Calendar
-${calendar}
+${calendarData}
 
 ## Key Metrics
 ${analytics}
@@ -66,7 +123,7 @@ ${slack}
 ${competitors}
 
 ## Todo List
-${todos}
+${todos}${liveLinear}${liveGitHub}${liveEmails}${liveNotion}${liveGranola}
 
 When answering questions, use this context naturally. Don't say "based on the context I was given" — just answer as if you naturally know this information. Be concise and direct, like a sharp chief of staff.
 
