@@ -13,6 +13,7 @@ export interface Context {
   competitor_updates: { competitor: string; event: string; source: string; time: string }[];
   todos: { text: string; done: boolean }[];
   company_feed: { type: string; actor: string; event: string; project: string | null; time: string; icon: string; detail?: string }[];
+  connected: Record<string, boolean>;
 }
 
 const EMPTY_CONTEXT: Context = {
@@ -24,6 +25,7 @@ const EMPTY_CONTEXT: Context = {
   competitor_updates: [],
   todos: [],
   company_feed: [],
+  connected: {},
 };
 
 export function getContext(): Context {
@@ -205,6 +207,7 @@ export function buildContextFromLiveData(live: DatasourceData): Context {
     competitor_updates: [],
     todos: [],
     company_feed,
+    connected: live._connected || {},
   };
 }
 

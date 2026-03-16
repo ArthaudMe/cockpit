@@ -74,9 +74,13 @@ const TYPE_COLOR: Record<string, string> = {
 export function FeedColumn({
   feed,
   onOpenFocus,
+  hasAnyDatasource,
+  onSettingsClick,
 }: {
   feed: FeedItem[];
   onOpenFocus: (focus: ContextFocus) => void;
+  hasAnyDatasource?: boolean;
+  onSettingsClick?: () => void;
 }) {
   const [visibleCount, setVisibleCount] = useState(0);
   const [filter, setFilter] = useState<string | null>(null);
@@ -92,9 +96,55 @@ export function FeedColumn({
   const filteredFeed = filter ? feed.filter((f) => f.type === filter) : feed;
   const types = Array.from(new Set(feed.map((f) => f.type)));
 
+  if (feed.length === 0 && !hasAnyDatasource) {
+    return (
+      <Panel title="Live Feed" count={0}>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "0.4rem",
+            padding: "0.75rem 0.5rem",
+            textAlign: "center",
+          }}
+        >
+          <span style={{ fontSize: "0.55rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
+            Connect your tools to see live activity from your team
+          </span>
+          <button
+            onClick={() => onSettingsClick?.()}
+            style={{
+              background: "none",
+              border: "1px solid var(--accent)",
+              borderRadius: 4,
+              color: "var(--accent)",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              fontSize: "0.5rem",
+              padding: "0.25rem 0.6rem",
+              transition: "all 0.15s",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "var(--accent)";
+              e.currentTarget.style.color = "var(--bg)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "none";
+              e.currentTarget.style.color = "var(--accent)";
+            }}
+          >
+            Connect datasources
+          </button>
+        </div>
+      </Panel>
+    );
+  }
+
   return (
     <Panel title="Live Feed" count={feed.length}>
       {/* Filter chips */}
+      {feed.length > 0 && (
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.2rem", marginBottom: "0.4rem" }}>
         <button
           onClick={() => setFilter(null)}
@@ -114,6 +164,7 @@ export function FeedColumn({
           </button>
         ))}
       </div>
+      )}
 
       {/* Feed items */}
       {filteredFeed.map((item, i) => (
