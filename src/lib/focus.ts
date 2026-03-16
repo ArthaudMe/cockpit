@@ -124,7 +124,7 @@ export function focusProject(project: Project): ContextFocus {
       { Project: project.name, Category: project.category, Status: project.status },
       { Linear: issuesSummary, GitHub: githubSummary },
       ...(project.people.length > 0
-        ? [{ Team: project.people.map((p) => `${p.name} (${p.role})`).join(", ") }]
+        ? [{ Team: project.people.map((p: { name: string; role: string }) => `${p.name} (${p.role})`).join(", ") }]
         : []),
     ],
     suggestedQuestions: [
@@ -133,7 +133,7 @@ export function focusProject(project: Project): ContextFocus {
       `Summarize this week's progress`,
       `What should the team focus on next?`,
     ],
-    systemContext: `The user is focused on project "${project.name}" (${project.category}, ${project.status}). Tools: ${project.tools.join(", ")}. ${issuesSummary}. ${githubSummary}. Team: ${project.people.map((p) => `${p.name} (${p.role})`).join(", ")}. Key decisions: ${project.key_decisions.join("; ") || "none recorded"}. Help them understand the project status and take action.`,
+    systemContext: `The user is focused on project "${project.name}" (${project.category}, ${project.status}). Tools: ${project.tools.join(", ")}. ${issuesSummary}. ${githubSummary}. Team: ${project.people.map((p: { name: string; role: string }) => `${p.name} (${p.role})`).join(", ")}. Key decisions: ${project.key_decisions.join("; ") || "none recorded"}. Help them understand the project status and take action.`,
   };
 }
 
@@ -144,7 +144,7 @@ export function focusProjectLinear(project: Project): ContextFocus {
     subtitle: `${linear.project} · ${linear.completed}/${linear.total_issues} done`,
     source: "Linear",
     icon: "📋",
-    data: linear.recent_issues.map((i) => ({
+    data: linear.recent_issues.map((i: { id: string; title: string; assignee: string; state: string; priority: string }) => ({
       ID: i.id,
       Title: i.title,
       Assignee: i.assignee,
@@ -157,7 +157,7 @@ export function focusProjectLinear(project: Project): ContextFocus {
       `Which issues are at risk?`,
       `What should ${linear.recent_issues[0]?.assignee || "the team"} focus on?`,
     ],
-    systemContext: `The user is looking at the Linear board for "${project.name}". Project: ${linear.project}. ${linear.completed}/${linear.total_issues} issues completed, ${linear.in_progress} in progress, ${linear.backlog} in backlog. ${linear.current_cycle ? `Current cycle: ${linear.current_cycle} (${Math.round((linear.cycle_progress || 0) * 100)}% complete)` : "No active cycle"}. Issues: ${linear.recent_issues.map((i) => `${i.id} "${i.title}" (${i.state}, ${i.priority}, ${i.assignee})`).join("; ")}`,
+    systemContext: `The user is looking at the Linear board for "${project.name}". Project: ${linear.project}. ${linear.completed}/${linear.total_issues} issues completed, ${linear.in_progress} in progress, ${linear.backlog} in backlog. ${linear.current_cycle ? `Current cycle: ${linear.current_cycle} (${Math.round((linear.cycle_progress || 0) * 100)}% complete)` : "No active cycle"}. Issues: ${linear.recent_issues.map((i: { id: string; title: string; state: string; priority: string; assignee: string }) => `${i.id} "${i.title}" (${i.state}, ${i.priority}, ${i.assignee})`).join("; ")}`,
   };
 }
 
@@ -168,7 +168,7 @@ export function focusProjectGitHub(project: Project): ContextFocus {
     subtitle: `${github.repo} · ${github.commits_this_week} commits this week`,
     source: "GitHub",
     icon: "🐙",
-    data: github.recent_prs.map((pr) => ({
+    data: github.recent_prs.map((pr: { title: string; author: string; status: string; time: string }) => ({
       PR: pr.title,
       Author: pr.author,
       Status: pr.status,
@@ -180,7 +180,7 @@ export function focusProjectGitHub(project: Project): ContextFocus {
       `What are the top contributors working on?`,
       `Are there any risky changes?`,
     ],
-    systemContext: `The user is looking at GitHub for "${project.name}" (${github.repo}). ${github.commits_this_week} commits this week, ${github.open_prs} open PRs, ${github.merged_this_week} merged. Top contributors: ${github.top_contributors.join(", ")}. Recent PRs: ${github.recent_prs.map((pr) => `"${pr.title}" by ${pr.author} (${pr.status}, ${pr.time})`).join("; ")}`,
+    systemContext: `The user is looking at GitHub for "${project.name}" (${github.repo}). ${github.commits_this_week} commits this week, ${github.open_prs} open PRs, ${github.merged_this_week} merged. Top contributors: ${github.top_contributors.join(", ")}. Recent PRs: ${github.recent_prs.map((pr: { title: string; author: string; status: string; time: string }) => `"${pr.title}" by ${pr.author} (${pr.status}, ${pr.time})`).join("; ")}`,
   };
 }
 
@@ -191,7 +191,7 @@ export function focusProjectSlack(project: Project): ContextFocus {
     subtitle: `${slack.channel} · ${slack.messages_today} messages today`,
     source: "Slack",
     icon: "💬",
-    data: slack.recent.map((m) => ({
+    data: slack.recent.map((m: { author: string; message: string; time: string }) => ({
       Author: m.author,
       Message: m.message,
       Time: m.time,
@@ -202,7 +202,7 @@ export function focusProjectSlack(project: Project): ContextFocus {
       `Are there any action items I missed?`,
       `Draft a reply to the latest message`,
     ],
-    systemContext: `The user is looking at Slack channel ${slack.channel} for project "${project.name}". ${slack.messages_today} messages today. Recent messages: ${slack.recent.map((m) => `${m.author} (${m.time}): "${m.message}"`).join("; ")}`,
+    systemContext: `The user is looking at Slack channel ${slack.channel} for project "${project.name}". ${slack.messages_today} messages today. Recent messages: ${slack.recent.map((m: { author: string; time: string; message: string }) => `${m.author} (${m.time}): "${m.message}"`).join("; ")}`,
   };
 }
 

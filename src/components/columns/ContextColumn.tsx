@@ -61,61 +61,125 @@ export function ContextColumn({
     <div>
       {/* Calendar */}
       <Panel title="Calendar" count={context.calendar.length} defaultOpen>
-        {context.calendar.map((m, i) => (
-          <div
-            key={i}
-            className="feed-item"
-            onClick={() => onCalendarClick ? onCalendarClick(i) : onPrefill(`Prep me for the ${m.title} — what should I know?`)}
-          >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span className="feed-title">{m.title}</span>
-              <span className="feed-time">{m.duration}</span>
-            </div>
-            <div className="feed-meta">
-              <span style={{ fontSize: "0.6rem", color: "var(--accent)" }}>{m.time}</span>
-              <span className="feed-time">{m.attendees.join(", ")}</span>
-            </div>
-          </div>
-        ))}
+        {context.calendar.length === 0 ? (
+          <div className="empty-state">Connect Google to see your calendar</div>
+        ) : (() => {
+          // Group events by date
+          const groups: Record<string, typeof context.calendar> = {};
+          for (const m of context.calendar) {
+            const key = m.date || "unknown";
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(m);
+          }
+          const DAY_COLORS = ["var(--accent)", "var(--green)", "var(--yellow)", "#a78bfa", "#f472b6", "#60a5fa", "#f97316"];
+          const sortedDates = Object.keys(groups).sort();
+
+          return sortedDates.map((dateStr, di) => {
+            const events = groups[dateStr];
+            const date = dateStr !== "unknown" ? new Date(dateStr + "T12:00:00") : null;
+            const today = new Date();
+            today.setHours(12, 0, 0, 0);
+            const todayStr = today.toISOString().split("T")[0];
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const tomorrowStr = tomorrow.toISOString().split("T")[0];
+            const isToday = dateStr === todayStr;
+            const isTomorrow = dateStr === tomorrowStr;
+            const dayLabel = !date ? "Upcoming" : isToday ? "Today" : isTomorrow ? "Tomorrow" : date.toLocaleDateString("en-US", { weekday: "long" });
+            const dateLabel = date ? date.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+            const color = DAY_COLORS[di % DAY_COLORS.length];
+
+            return (
+              <div key={dateStr}>
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  padding: "0.3rem 0",
+                  marginTop: di > 0 ? "0.25rem" : 0,
+                }}>
+                  <span style={{
+                    fontSize: "0.45rem",
+                    fontWeight: 700,
+                    color: color,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                  }}>
+                    {dayLabel}
+                  </span>
+                  <span style={{ fontSize: "0.4rem", color: "var(--text-muted)" }}>
+                    {dateLabel}
+                  </span>
+                  <div style={{ flex: 1, height: 1, background: color, opacity: 0.2 }} />
+                </div>
+                {events.map((m, i) => {
+                  const globalIndex = context.calendar.indexOf(m);
+                  return (
+                    <div
+                      key={i}
+                      className="feed-item"
+                      onClick={() => onCalendarClick ? onCalendarClick(globalIndex) : onPrefill(`Prep me for the ${m.title} — what should I know?`)}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <span className="feed-title">{m.title}</span>
+                        <span className="feed-time">{m.duration}</span>
+                      </div>
+                      <div className="feed-meta">
+                        <span style={{ fontSize: "0.6rem", color }}>{m.time}</span>
+                        <span className="feed-time">{m.attendees.join(", ")}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          });
+        })()}
       </Panel>
 
       {/* Usage Analytics */}
       <Panel title="Metrics" count={Object.keys(context.usage_analytics).length} defaultOpen>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.35rem" }}>
-          {Object.entries(context.usage_analytics).map(([key, v]) => {
-            const label = key.toUpperCase();
-            const isNegativeChange = v.change.startsWith("-") && !v.change.startsWith("-0");
-            const isGood = key === "churn" ? isNegativeChange : !isNegativeChange;
+        {Object.keys(context.usage_analytics).length === 0 ? (
+          <div className="empty-state">No metrics available</div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.35rem" }}>
+            {Object.entries(context.usage_analytics).map(([key, v]) => {
+              const label = key.toUpperCase();
+              const isNegativeChange = v.change.startsWith("-") && !v.change.startsWith("-0");
+              const isGood = key === "churn" ? isNegativeChange : !isNegativeChange;
 
-            return (
-              <div
-                key={key}
-                className="feed-item"
-                onClick={() => onMetricClick ? onMetricClick(key) : onPrefill(`${label} is ${v.change} over the last ${v.period}. What's driving that?`)}
-                style={{
-                  padding: "0.4rem",
-                  borderBottom: "none",
-                  background: "rgba(255,255,255,0.02)",
-                  borderRadius: 3,
-                }}
-              >
-                <div className="metric-label">{label}</div>
-                <div className="metric-value">
-                  {key === "mrr" ? `$${v.value.toLocaleString()}` : `${v.value}${"unit" in v ? v.unit : ""}`}
+              return (
+                <div
+                  key={key}
+                  className="feed-item"
+                  onClick={() => onMetricClick ? onMetricClick(key) : onPrefill(`${label} is ${v.change} over the last ${v.period}. What's driving that?`)}
+                  style={{
+                    padding: "0.4rem",
+                    borderBottom: "none",
+                    background: "rgba(255,255,255,0.02)",
+                    borderRadius: 3,
+                  }}
+                >
+                  <div className="metric-label">{label}</div>
+                  <div className="metric-value">
+                    {key === "mrr" ? `$${v.value.toLocaleString()}` : `${v.value}${"unit" in v ? v.unit : ""}`}
+                  </div>
+                  <div className={`metric-change ${isGood ? "positive" : "negative"}`}>
+                    {v.change}
+                    <span style={{ color: "var(--text-muted)" }}> / {v.period}</span>
+                  </div>
                 </div>
-                <div className={`metric-change ${isGood ? "positive" : "negative"}`}>
-                  {v.change}
-                  <span style={{ color: "var(--text-muted)" }}> / {v.period}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </Panel>
 
       {/* Slack */}
       <Panel title="Slack" count={context.slack_highlights.length}>
-        {context.slack_highlights.map((h, i) => (
+        {context.slack_highlights.length === 0 ? (
+          <div className="empty-state">Connect Slack to see messages</div>
+        ) : context.slack_highlights.map((h, i) => (
           <div
             key={i}
             className="feed-item"
@@ -132,7 +196,9 @@ export function ContextColumn({
 
       {/* Competitors */}
       <Panel title="Competitors" count={context.competitor_updates.length}>
-        {context.competitor_updates.map((u, i) => (
+        {context.competitor_updates.length === 0 ? (
+          <div className="empty-state">No competitor updates</div>
+        ) : context.competitor_updates.map((u, i) => (
           <div
             key={i}
             className="feed-item"
@@ -153,8 +219,10 @@ export function ContextColumn({
       </Panel>
 
       {/* Todo */}
-      <Panel title="Todo" count={todos.filter((t) => !t.done).length + "/" + todos.length}>
-        {todos.map((t, i) => (
+      <Panel title="Todo" count={todos.length > 0 ? todos.filter((t) => !t.done).length + "/" + todos.length : 0}>
+        {todos.length === 0 ? (
+          <div className="empty-state">No todos yet</div>
+        ) : todos.map((t, i) => (
           <div
             key={i}
             style={{

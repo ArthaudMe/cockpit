@@ -14,7 +14,7 @@ type DetectionResult = {
   anyAvailable: boolean;
 };
 
-type OnboardingStep = "welcome" | "setup" | "ready";
+type OnboardingStep = "welcome" | "setup" | "datasources" | "ready";
 
 const BACKEND_INFO: Record<
   string,
@@ -37,6 +37,15 @@ const BACKEND_INFO: Record<
     icon: "○",
   },
 };
+
+interface DatasourceInfo {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  connected: boolean;
+  needsOAuth: boolean;
+}
 
 export function OnboardingView({
   onRetry,
@@ -77,6 +86,10 @@ export function OnboardingView({
     return <WelcomeScreen onContinue={() => setStep("setup")} />;
   }
 
+  if (step === "datasources") {
+    return <DatasourcesScreen onContinue={() => setStep("ready")} />;
+  }
+
   if (step === "ready") {
     return <ReadyScreen detection={detection} onEnter={onRetry} />;
   }
@@ -88,11 +101,277 @@ export function OnboardingView({
       checking={checking}
       onDetect={detect}
       onContinue={() => {
-        // Refresh main status and enter cockpit
-        onRetry();
-        setStep("ready");
+        // Advance to datasources step
+        setStep("datasources");
       }}
     />
+  );
+}
+
+/* =====================
+   Datasources Screen
+   ===================== */
+
+function DatasourcesScreen({ onContinue }: { onContinue: () => void }) {
+  const [datasources, setDatasources] = useState<DatasourceInfo[]>([]);
+  const [connecting, setConnecting] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/datasources");
+      const data = await res.json();
+      setDatasources(data.datasources || []);
+      setLoaded(true);
+    } catch {
+      setLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchStatus();
+    // Poll for connection status updates (user may be completing OAuth in browser)
+    const interval = setInterval(fetchStatus, 3000);
+    return () => clearInterval(interval);
+  }, [fetchStatus]);
+
+  const handleConnect = useCallback(async (serviceId: string) => {
+    setConnecting(serviceId);
+    try {
+      const res = await fetch(`/api/datasources/connect?service=${serviceId}`);
+      const data = await res.json();
+      if (data.url) {
+        window.open(data.url, "_blank", "noopener,noreferrer");
+      }
+    } catch {
+      // Will show as not connected
+    }
+    // Don't clear connecting state — polling will update status
+    setTimeout(() => setConnecting(null), 5000);
+  }, []);
+
+  const connectedCount = datasources.filter((d) => d.connected).length;
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        height: "100vh",
+        background: "var(--bg)",
+        padding: "2rem",
+      }}
+    >
+      <div style={{ maxWidth: 480, width: "100%" }}>
+        {/* Header */}
+        <div style={{ marginBottom: "1.5rem" }}>
+          <div
+            style={{
+              fontSize: "0.55rem",
+              fontWeight: 600,
+              color: "var(--text-muted)",
+              textTransform: "uppercase",
+              letterSpacing: "0.1em",
+              marginBottom: "0.5rem",
+            }}
+          >
+            Cockpit
+          </div>
+          <div
+            style={{
+              fontSize: "1.1rem",
+              fontWeight: 700,
+              color: "var(--text)",
+              letterSpacing: "-0.02em",
+              lineHeight: 1.2,
+            }}
+          >
+            Connect your datasources
+          </div>
+          <div
+            style={{
+              fontSize: "0.65rem",
+              color: "var(--text-dim)",
+              marginTop: "0.35rem",
+              lineHeight: 1.5,
+            }}
+          >
+            Link your tools so Cockpit can see your work.
+            <br />
+            All data stays local on your machine.
+          </div>
+        </div>
+
+        {/* Datasource list */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+          {loaded &&
+            datasources.map((ds) => (
+              <DatasourceCard
+                key={ds.id}
+                datasource={ds}
+                connecting={connecting === ds.id}
+                onConnect={() => handleConnect(ds.id)}
+              />
+            ))}
+        </div>
+
+        {/* Continue */}
+        <div style={{ marginTop: "1.5rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+          <button
+            onClick={onContinue}
+            style={{
+              background: "var(--text)",
+              color: "var(--bg)",
+              border: "none",
+              borderRadius: 5,
+              padding: "0.4rem 1.2rem",
+              fontSize: "0.65rem",
+              fontWeight: 700,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              transition: "opacity 0.15s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+          >
+            {connectedCount > 0 ? "Continue" : "Skip for now"}
+          </button>
+          {connectedCount > 0 && (
+            <span style={{ fontSize: "0.55rem", color: "var(--text-dim)" }}>
+              {connectedCount} connected
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DatasourceCard({
+  datasource,
+  connecting,
+  onConnect,
+}: {
+  datasource: DatasourceInfo;
+  connecting: boolean;
+  onConnect: () => void;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "0.6rem",
+        padding: "0.5rem 0.65rem",
+        border: `1px solid ${datasource.connected ? "var(--green)" : "var(--border)"}`,
+        borderRadius: 6,
+        background: datasource.connected
+          ? "rgba(74, 222, 128, 0.04)"
+          : "transparent",
+        transition: "all 0.2s",
+      }}
+    >
+      {/* Icon */}
+      <div
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: 6,
+          border: `1px solid ${datasource.connected ? "var(--green)" : "var(--border-light)"}`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: "0.5rem",
+          fontWeight: 700,
+          color: datasource.connected ? "var(--green)" : "var(--text-dim)",
+          flexShrink: 0,
+        }}
+      >
+        {datasource.icon}
+      </div>
+
+      {/* Info */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: "0.65rem",
+            fontWeight: 600,
+            color: "var(--text)",
+          }}
+        >
+          {datasource.name}
+        </div>
+        <div
+          style={{
+            fontSize: "0.5rem",
+            color: "var(--text-muted)",
+            marginTop: "0.1rem",
+          }}
+        >
+          {datasource.description}
+        </div>
+      </div>
+
+      {/* Action */}
+      {datasource.connected ? (
+        <span
+          style={{
+            fontSize: "0.5rem",
+            color: "var(--green)",
+            fontWeight: 600,
+            flexShrink: 0,
+          }}
+        >
+          Connected
+        </span>
+      ) : datasource.needsOAuth ? (
+        <button
+          onClick={onConnect}
+          disabled={connecting}
+          style={{
+            background: connecting ? "var(--border)" : "rgba(255,255,255,0.08)",
+            color: connecting ? "var(--text-muted)" : "var(--text)",
+            border: "1px solid var(--border-light)",
+            borderRadius: 4,
+            padding: "0.2rem 0.6rem",
+            fontSize: "0.55rem",
+            fontWeight: 600,
+            cursor: connecting ? "default" : "pointer",
+            fontFamily: "inherit",
+            flexShrink: 0,
+            display: "flex",
+            alignItems: "center",
+            gap: "0.3rem",
+            transition: "all 0.15s",
+          }}
+        >
+          {connecting && (
+            <span
+              style={{
+                width: 4,
+                height: 4,
+                borderRadius: "50%",
+                background: "var(--text-muted)",
+                animation: "pulse 1s ease-in-out infinite",
+              }}
+            />
+          )}
+          {connecting ? "Connecting..." : "Connect"}
+        </button>
+      ) : (
+        <span
+          style={{
+            fontSize: "0.5rem",
+            color: datasource.connected ? "var(--green)" : "var(--text-muted)",
+            fontWeight: 600,
+            flexShrink: 0,
+          }}
+        >
+          {datasource.connected ? "Detected" : "Not found"}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -117,7 +396,7 @@ function WelcomeScreen({ onContinue }: { onContinue: () => void }) {
             fontSize: "1.2rem",
           }}
         >
-          ◈
+          &#9672;
         </div>
 
         <div
@@ -340,7 +619,7 @@ function SetupScreen({
                 cursor: anyAvailable ? "pointer" : "default",
               }}
             >
-              Enter cockpit
+              Continue
             </button>
           </div>
         </div>
@@ -658,7 +937,7 @@ function ReadyScreen({
             color: "var(--green)",
           }}
         >
-          ✓
+          &#10003;
         </div>
 
         <div

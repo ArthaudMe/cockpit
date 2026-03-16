@@ -111,6 +111,12 @@ body {
   transition: background 0.1s;
 }
 .feed-item:last-child { border-bottom: none; }
+.empty-state {
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  padding: 0.5rem 0;
+  text-align: center;
+}
 .feed-item:hover {
   background: var(--surface-hover);
   margin: 0 -0.5rem;

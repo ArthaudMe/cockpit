@@ -10,6 +10,7 @@ type FeedItem = {
   project: string | null;
   time: string;
   icon: string;
+  detail?: string;
 };
 
 function Panel({
@@ -57,7 +58,7 @@ function feedItemToFocus(item: FeedItem): ContextFocus {
       : item.type === "meeting"
       ? ["Prep me for this", "What context do I need?", "Draft an agenda", "What are the open items?"]
       : ["Tell me more about this", "What's the context?", "What should I do about this?", "How does this affect our plans?"],
-    systemContext: `The user is looking at a company feed event: ${item.actor} — "${item.event}" (type: ${item.type}, ${item.time}${item.project ? `, project: ${item.project}` : ""}). Help them understand and take action.`,
+    systemContext: `The user is looking at a company feed event: ${item.actor} — "${item.event}" (type: ${item.type}, ${item.time}${item.project ? `, project: ${item.project}` : ""}).${item.detail ? `\n\nFull details:\n${item.detail}` : ""}\n\nHelp them understand and take action. Use the details above to give a specific, informed answer.`,
   };
 }
 

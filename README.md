@@ -1,6 +1,5 @@
-# Mio Harness Prototype
-
-Founder's cockpit — see your situation on the left, work with a context-aware Claude agent on the right.
+# cockpit
+Command center for your company
 
 ## Prerequisites
 

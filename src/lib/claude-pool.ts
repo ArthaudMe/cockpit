@@ -1,5 +1,7 @@
 import { spawn, type ChildProcess } from "child_process";
 import { getContext, buildSystemPrompt } from "./context";
+import { fetchAllData } from "./datasources/manager";
+import type { DatasourceData } from "./datasources/types";
 
 /**
  * Pre-warms a `claude -p` process with the system prompt baked in.
@@ -17,14 +19,38 @@ function cleanEnv() {
   return env;
 }
 
-const systemPrompt = buildSystemPrompt();
+// Cache live datasource data with TTL
+let cachedLiveData: DatasourceData | undefined;
+let cacheTimestamp = 0;
+const CACHE_TTL = 30_000; // 30 seconds
+
+async function getLiveData(): Promise<DatasourceData | undefined> {
+  const now = Date.now();
+  if (cachedLiveData && now - cacheTimestamp < CACHE_TTL) {
+    return cachedLiveData;
+  }
+  try {
+    cachedLiveData = await fetchAllData();
+    cacheTimestamp = now;
+    return cachedLiveData;
+  } catch {
+    return cachedLiveData; // Return stale data on error
+  }
+}
+
+function getSystemPrompt(liveData?: DatasourceData): string {
+  return buildSystemPrompt(getContext(), liveData);
+}
+
+// Initial system prompt (without live data for fast startup)
+let currentSystemPrompt = getSystemPrompt();
 
 let warmProc: ChildProcess | null = null;
 
 function spawnWarm(): ChildProcess {
   const proc = spawn(
     "claude",
-    ["-p", "--output-format", "text", "--append-system-prompt", systemPrompt],
+    ["-p", "--output-format", "text", "--append-system-prompt", currentSystemPrompt],
     {
       stdio: ["pipe", "pipe", "pipe"],
       env: cleanEnv(),
@@ -82,11 +108,26 @@ export function send(userMessage: string, focusContext?: string): ChildProcess {
   proc.stdin!.write(prompt);
   proc.stdin!.end();
 
-  // Immediately start warming the next process
-  setTimeout(() => preheat(), 50);
+  // Immediately start warming the next process with fresh data
+  setTimeout(async () => {
+    const live = await getLiveData();
+    if (live) currentSystemPrompt = getSystemPrompt(live);
+    preheat();
+  }, 50);
 
   return proc;
 }
 
-// Auto-preheat on module load
+// Auto-preheat on module load (async refresh of live data)
 preheat();
+getLiveData().then((live) => {
+  if (live) {
+    currentSystemPrompt = getSystemPrompt(live);
+    // Kill stale warm process so next one gets fresh context
+    if (warmProc) {
+      warmProc.kill();
+      warmProc = null;
+    }
+    preheat();
+  }
+});
