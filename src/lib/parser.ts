@@ -1,17 +1,17 @@
-export type MioRenderBlock =
+export type RenderBlock =
   | {
-      mio_render: "table";
+      cockpit_render: "table";
       title?: string;
       columns: string[];
       rows: string[][];
     }
   | {
-      mio_render: "bar_chart";
+      cockpit_render: "bar_chart";
       title?: string;
       data: { label: string; value: number }[];
     }
   | {
-      mio_render: "card_grid";
+      cockpit_render: "card_grid";
       title?: string;
       cards: {
         title: string;
@@ -21,10 +21,18 @@ export type MioRenderBlock =
       }[];
     };
 
+export type SubagentSuggestion = {
+  name: string;
+  role: string;
+  task: string;
+};
+
 export type ParsedSegment =
   | { type: "text"; content: string }
-  | { type: "render"; block: MioRenderBlock }
-  | { type: "loading" };
+  | { type: "render"; block: RenderBlock }
+  | { type: "loading" }
+  | { type: "skill_active"; skillSlash: string }
+  | { type: "subagent_suggestion"; suggestion: SubagentSuggestion };
 
 /**
  * Find the matching closing brace for an opening brace at `start`.
@@ -68,6 +76,14 @@ function findMatchingBrace(text: string, start: number): number {
 
 export function parseResponse(text: string): ParsedSegment[] {
   const segments: ParsedSegment[] = [];
+
+  // Pre-pass: detect [skill: /slash] tag on first line
+  const skillMatch = text.match(/^\[skill:\s*(\/\w+)\]\s*\n?/);
+  if (skillMatch) {
+    segments.push({ type: "skill_active", skillSlash: skillMatch[1] });
+    text = text.slice(skillMatch[0].length);
+  }
+
   // Find ```json fence openings
   const fenceOpen = /```json\s*\n/g;
   let lastIndex = 0;
@@ -98,7 +114,7 @@ export function parseResponse(text: string): ParsedSegment[] {
     const jsonBody = text.slice(contentStart, closeIdx).trim();
     const fenceEnd = closeIdx + 4; // length of "\n```"
 
-    // Try to find a JSON object with mio_render
+    // Try to find a JSON object with cockpit_render
     const braceStart = jsonBody.indexOf("{");
     if (braceStart !== -1) {
       const closingBrace = findMatchingBrace(jsonBody, braceStart);
@@ -106,11 +122,20 @@ export function parseResponse(text: string): ParsedSegment[] {
         const jsonStr = jsonBody.slice(braceStart, closingBrace + 1);
         try {
           const parsed = JSON.parse(jsonStr);
-          if (parsed.mio_render) {
-            // Success — add text before this block, then the render block
+          if (parsed.cockpit_render) {
             const before = text.slice(lastIndex, match.index).trim();
             if (before) segments.push({ type: "text", content: before });
-            segments.push({ type: "render", block: parsed as MioRenderBlock });
+            segments.push({ type: "render", block: parsed as RenderBlock });
+            lastIndex = fenceEnd;
+            continue;
+          }
+          if (parsed.cockpit_subagent && parsed.name && parsed.task) {
+            const before = text.slice(lastIndex, match.index).trim();
+            if (before) segments.push({ type: "text", content: before });
+            segments.push({
+              type: "subagent_suggestion",
+              suggestion: { name: parsed.name, role: parsed.role || "general", task: parsed.task },
+            });
             lastIndex = fenceEnd;
             continue;
           }
@@ -120,7 +145,7 @@ export function parseResponse(text: string): ParsedSegment[] {
       }
     }
 
-    // Not a mio_render block — skip it, let it be handled as regular text
+    // Not a cockpit_render block — skip it, let it be handled as regular text
   }
 
   // Add remaining text

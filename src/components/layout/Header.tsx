@@ -16,7 +16,7 @@ export function Header({
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        padding: "0.4rem 0.75rem 0.4rem 5rem",
+        padding: "0.4rem 0.75rem 0.4rem 5.5rem",
         borderBottom: "1px solid var(--border)",
         background: "var(--surface)",
         minHeight: "2.2rem",

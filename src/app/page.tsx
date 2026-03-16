@@ -8,7 +8,6 @@ import { ProjectsColumn } from "@/components/columns/ProjectsColumn";
 import { FeedColumn } from "@/components/columns/FeedColumn";
 import { ContextColumn } from "@/components/columns/ContextColumn";
 import { ChatColumn } from "@/components/columns/ChatColumn";
-import { ProjectView } from "@/components/views/ProjectView";
 import { ContextualChatView, type ContextFocus } from "@/components/views/ContextualChatView";
 import { OnboardingView } from "@/components/views/OnboardingView";
 import { SettingsView } from "@/components/views/SettingsView";
@@ -23,7 +22,6 @@ import {
 
 type CenterView =
   | { type: "chat" }
-  | { type: "project"; index: number }
   | { type: "focus"; focus: ContextFocus }
   | { type: "settings" };
 
@@ -103,10 +101,6 @@ export default function Home() {
       });
   }, []);
 
-  const handleProjectClick = useCallback((index: number) => {
-    setCenterView({ type: "project", index });
-  }, []);
-
   const handleBackToChat = useCallback(() => {
     setCenterView({ type: "chat" });
   }, []);
@@ -140,16 +134,6 @@ export default function Home() {
   const handleTodoClick = useCallback((index: number) => {
     handleOpenFocus(focusTodo(contextData.todos[index]));
   }, [handleOpenFocus, contextData.todos]);
-
-  // Project view sub-item click handlers
-  const handleProjectFocus = useCallback((focus: ContextFocus) => {
-    setCenterView({ type: "focus", focus });
-  }, []);
-
-  const selectedProjectIndex = centerView.type === "project" ? centerView.index : null;
-  const selectedProject = selectedProjectIndex !== null
-    ? contextData.projects[selectedProjectIndex]
-    : null;
 
   // Show onboarding if no backends are connected (and we're done checking)
   if (!claudeStatus.checking && !claudeStatus.connected) {
@@ -211,12 +195,7 @@ export default function Home() {
       />
       <div className="flex flex-1 overflow-hidden" style={{ padding: "0.5rem", gap: "0.5rem" }}>
         <div style={{ width: 280, minWidth: 240, flexShrink: 0 }} className="overflow-y-auto">
-          <ProjectsColumn
-            projects={contextData.projects}
-            onPrefill={handlePrefill}
-            onProjectClick={handleProjectClick}
-            selectedIndex={selectedProjectIndex}
-          />
+          <ProjectsColumn onPrefill={handlePrefill} />
           <FeedColumn
             feed={contextData.company_feed}
             onOpenFocus={handleOpenFocus}
@@ -224,22 +203,12 @@ export default function Home() {
         </div>
         <div className="flex-1 min-w-0">
           {centerView.type === "settings" ? (
-            <SettingsView
-              onBack={handleBackToChat}
-              userName={contextData.user}
-            />
+            <SettingsView onBack={handleBackToChat} />
           ) : centerView.type === "focus" ? (
             <ContextualChatView
               focus={centerView.focus}
               onBack={handleBackToChat}
               claudeConnected={claudeStatus.connected}
-            />
-          ) : selectedProject ? (
-            <ProjectView
-              project={selectedProject as any}
-              onBack={handleBackToChat}
-              onPrefill={handlePrefill}
-              onOpenFocus={handleProjectFocus}
             />
           ) : (
             <ChatColumn

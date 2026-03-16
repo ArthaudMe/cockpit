@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import type { Context } from "@/lib/context";
 import { ChatMessage } from "../ui/ChatMessage";
 import { usePersistedState } from "@/lib/use-persisted-state";
+import { SKILLS, expandSlashCommand } from "@/lib/skills-defs";
+import type { SubagentSuggestion } from "@/lib/parser";
 
 type Message = {
   role: "user" | "assistant";
@@ -52,11 +54,38 @@ export function ChatColumn({
   const [messagesByAgent, setMessagesByAgent] = usePersistedState<
     Record<string, Message[]>
   >("cockpit-chat-agents", {});
-  const [streaming, setStreaming] = useState(false);
+  const [streamingAgents, setStreamingAgents] = useState<Set<string>>(new Set());
+  const [notifiedAgents, setNotifiedAgents] = useState<Set<string>>(new Set());
   const [showNewAgent, setShowNewAgent] = useState(false);
   const [showSwitcher, setShowSwitcher] = useState(false);
+  const [slashSelected, setSlashSelected] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Slash command autocomplete
+  const slashMatches = useMemo(() => {
+    const trimmed = inputValue.trim();
+    if (!trimmed.startsWith("/")) return [];
+    const query = trimmed.split(" ")[0].toLowerCase();
+    return SKILLS.filter((s) => s.slash.startsWith(query));
+  }, [inputValue]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const activeAgentIdRef = useRef(activeAgentId);
+
+  // Keep ref in sync for use in callbacks
+  useEffect(() => {
+    activeAgentIdRef.current = activeAgentId;
+  }, [activeAgentId]);
+
+  // Clear notification when switching to an agent
+  useEffect(() => {
+    if (activeAgentId) {
+      setNotifiedAgents((prev) => {
+        const next = new Set(prev);
+        next.delete(activeAgentId);
+        return next;
+      });
+    }
+  }, [activeAgentId]);
 
   useEffect(() => {
     fetch("/api/agents")
@@ -76,6 +105,7 @@ export function ChatColumn({
   }, []);
 
   const messages = activeAgentId ? messagesByAgent[activeAgentId] || [] : [];
+  const streaming = activeAgentId ? streamingAgents.has(activeAgentId) : false;
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -89,35 +119,46 @@ export function ChatColumn({
     }
   }, [inputValue]);
 
+  const setMessagesFor = useCallback(
+    (agentId: string, updater: (prev: Message[]) => Message[]) => {
+      setMessagesByAgent((prev) => ({
+        ...prev,
+        [agentId]: updater(prev[agentId] || []),
+      }));
+    },
+    [setMessagesByAgent]
+  );
+
   const setMessages = useCallback(
     (updater: (prev: Message[]) => Message[]) => {
       if (!activeAgentId) return;
-      setMessagesByAgent((prev) => ({
-        ...prev,
-        [activeAgentId]: updater(prev[activeAgentId] || []),
-      }));
+      setMessagesFor(activeAgentId, updater);
     },
-    [activeAgentId, setMessagesByAgent]
+    [activeAgentId, setMessagesFor]
   );
 
   const sendMessage = useCallback(async () => {
     const text = inputValue.trim();
     if (!text || streaming || !activeAgentId) return;
 
+    const expansion = expandSlashCommand(text);
+    const messageToSend = expansion ? expansion.expandedMessage : text;
+
+    const targetAgentId = activeAgentId;
     onInputChange("");
-    setMessages((prev) => [...prev, { role: "user", content: text }]);
-    setStreaming(true);
-    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+    setMessagesFor(targetAgentId, (prev) => [...prev, { role: "user", content: text }]);
+    setStreamingAgents((prev) => new Set(prev).add(targetAgentId));
+    setMessagesFor(targetAgentId, (prev) => [...prev, { role: "assistant", content: "" }]);
 
     try {
-      const res = await fetch(`/api/agents/${activeAgentId}/chat`, {
+      const res = await fetch(`/api/agents/${targetAgentId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: messageToSend }),
       });
 
       if (!res.ok || !res.body) {
-        setMessages((prev) => {
+        setMessagesFor(targetAgentId, (prev) => {
           const next = [...prev];
           next[next.length - 1] = {
             role: "assistant",
@@ -125,7 +166,11 @@ export function ChatColumn({
           };
           return next;
         });
-        setStreaming(false);
+        setStreamingAgents((prev) => {
+          const next = new Set(prev);
+          next.delete(targetAgentId);
+          return next;
+        });
         return;
       }
 
@@ -136,7 +181,7 @@ export function ChatColumn({
         const { done, value } = await reader.read();
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
-        setMessages((prev) => {
+        setMessagesFor(targetAgentId, (prev) => {
           const next = [...prev];
           const last = next[next.length - 1];
           next[next.length - 1] = { ...last, content: last.content + chunk };
@@ -144,7 +189,7 @@ export function ChatColumn({
         });
       }
     } catch (err) {
-      setMessages((prev) => {
+      setMessagesFor(targetAgentId, (prev) => {
         const next = [...prev];
         next[next.length - 1] = {
           role: "assistant",
@@ -154,13 +199,61 @@ export function ChatColumn({
       });
     }
 
-    setStreaming(false);
-  }, [inputValue, streaming, activeAgentId, onInputChange, setMessages]);
+    setStreamingAgents((prev) => {
+      const next = new Set(prev);
+      next.delete(targetAgentId);
+      return next;
+    });
+    // Notify if user switched away from this agent while it was working
+    if (activeAgentIdRef.current !== targetAgentId) {
+      setNotifiedAgents((prev) => new Set(prev).add(targetAgentId));
+    }
+  }, [inputValue, streaming, activeAgentId, onInputChange, setMessagesFor]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Slash command autocomplete navigation
+    if (slashMatches.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSlashSelected((prev) => Math.min(prev + 1, slashMatches.length - 1));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSlashSelected((prev) => Math.max(prev - 1, 0));
+        return;
+      }
+      if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+        const match = slashMatches[slashSelected];
+        if (match) {
+          e.preventDefault();
+          onInputChange(match.slash + " ");
+          setSlashSelected(0);
+          return;
+        }
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onInputChange("");
+        setSlashSelected(0);
+        return;
+      }
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
+    }
+    if (e.key === "Tab") {
+      e.preventDefault();
+      const ta = e.currentTarget;
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      const value = ta.value;
+      onInputChange(value.substring(0, start) + "\t" + value.substring(end));
+      requestAnimationFrame(() => {
+        ta.selectionStart = ta.selectionEnd = start + 1;
+      });
     }
   };
 
@@ -198,6 +291,65 @@ export function ChatColumn({
       }
     },
     [activeAgentId, agents, setActiveAgentId, setMessagesByAgent]
+  );
+
+  const handleApproveSubagent = useCallback(
+    async (suggestion: SubagentSuggestion) => {
+      try {
+        const res = await fetch("/api/agents", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: suggestion.name, role: suggestion.role }),
+        });
+        const agent: AgentInfo = await res.json();
+        setAgents((prev) => [...prev, agent]);
+        setActiveAgentId(agent.id);
+
+        setMessagesFor(agent.id, () => [
+          { role: "user", content: suggestion.task },
+          { role: "assistant", content: "" },
+        ]);
+        setStreamingAgents((prev) => new Set(prev).add(agent.id));
+
+        const chatRes = await fetch(`/api/agents/${agent.id}/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: suggestion.task }),
+        });
+
+        if (!chatRes.ok || !chatRes.body) {
+          setMessagesFor(agent.id, (prev) => {
+            const next = [...prev];
+            next[next.length - 1] = { role: "assistant", content: `Error: ${chatRes.status}` };
+            return next;
+          });
+          setStreamingAgents((prev) => { const next = new Set(prev); next.delete(agent.id); return next; });
+          return;
+        }
+
+        const reader = chatRes.body.getReader();
+        const decoder = new TextDecoder();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          setMessagesFor(agent.id, (prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            next[next.length - 1] = { ...last, content: last.content + chunk };
+            return next;
+          });
+        }
+
+        setStreamingAgents((prev) => { const next = new Set(prev); next.delete(agent.id); return next; });
+        if (activeAgentIdRef.current !== agent.id) {
+          setNotifiedAgents((prev) => new Set(prev).add(agent.id));
+        }
+      } catch (err) {
+        console.error("[subagent] failed:", err);
+      }
+    },
+    [setActiveAgentId, setMessagesFor]
   );
 
   const handleSwitchBackend = useCallback(
@@ -268,12 +420,36 @@ export function ChatColumn({
               <span
                 className="dot"
                 style={{
-                  background: agent.busy ? "var(--yellow)" : "var(--green)",
+                  background: notifiedAgents.has(agent.id)
+                    ? "var(--blue)"
+                    : streamingAgents.has(agent.id)
+                      ? "var(--yellow)"
+                      : "var(--green)",
                   width: 5,
                   height: 5,
+                  animation: streamingAgents.has(agent.id) ? "pulse 1s ease-in-out infinite" : undefined,
                 }}
               />
               {agent.name}
+              {notifiedAgents.has(agent.id) && (
+                <span
+                  style={{
+                    fontSize: "0.4rem",
+                    background: "var(--blue)",
+                    color: "var(--bg)",
+                    borderRadius: "50%",
+                    width: 12,
+                    height: 12,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontWeight: 700,
+                    flexShrink: 0,
+                  }}
+                >
+                  !
+                </span>
+              )}
               <span style={{ fontSize: "0.45rem", color: "var(--text-muted)" }}>
                 {BACKEND_ICONS[agent.backend] || "?"} {shortModel(agent.model)}
               </span>
@@ -328,7 +504,7 @@ export function ChatColumn({
       )}
 
       {/* Messages area */}
-      <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "0.75rem" }}>
+      <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "0.75rem" }}>
         {messages.length === 0 && activeAgent && (
           <EmptyState agent={activeAgent} onPrefill={onInputChange} />
         )}
@@ -349,7 +525,7 @@ export function ChatColumn({
         )}
 
         {messages.map((msg, i) => (
-          <ChatMessage key={i} message={msg} />
+          <ChatMessage key={i} message={msg} onApproveSubagent={handleApproveSubagent} />
         ))}
 
         {streaming && (
@@ -362,6 +538,56 @@ export function ChatColumn({
 
       {/* Input area with backend switcher */}
       <div style={{ borderTop: "1px solid var(--border)", padding: "0.5rem", position: "relative" }}>
+        {/* Slash command autocomplete */}
+        {slashMatches.length > 0 && (
+          <div
+            style={{
+              position: "absolute",
+              bottom: "calc(100% + 0.15rem)",
+              left: "0.5rem",
+              right: "0.5rem",
+              background: "var(--surface)",
+              border: "1px solid var(--border-light)",
+              borderRadius: 6,
+              boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+              overflow: "hidden",
+              zIndex: 101,
+            }}
+          >
+            <div style={{ padding: "0.35rem 0.5rem", borderBottom: "1px solid var(--border)", fontSize: "0.45rem", color: "var(--text-muted)" }}>
+              Skills — Tab to select
+            </div>
+            {slashMatches.map((skill, idx) => (
+              <button
+                key={skill.id}
+                onClick={() => { onInputChange(skill.slash + " "); setSlashSelected(0); inputRef.current?.focus(); }}
+                onMouseEnter={() => setSlashSelected(idx)}
+                style={{
+                  width: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.4rem",
+                  padding: "0.4rem 0.6rem",
+                  background: idx === slashSelected ? "rgba(255,255,255,0.06)" : "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  textAlign: "left",
+                }}
+              >
+                <span style={{ fontSize: "0.7rem", width: 16, textAlign: "center" }}>{skill.icon}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: "0.6rem", color: "var(--text)", fontWeight: 500 }}>
+                    {skill.slash}
+                    <span style={{ color: "var(--text-muted)", fontWeight: 400, marginLeft: "0.4rem" }}>{skill.name}</span>
+                  </div>
+                  <div style={{ fontSize: "0.45rem", color: "var(--text-dim)", marginTop: "0.1rem" }}>{skill.description}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Backend switcher popover */}
         {showSwitcher && activeAgent && (
           <BackendSwitcher
@@ -413,7 +639,13 @@ export function ChatColumn({
           <textarea
             ref={inputRef}
             value={inputValue}
-            onChange={(e) => onInputChange(e.target.value)}
+            onChange={(e) => {
+              onInputChange(e.target.value);
+              // Auto-resize
+              const ta = e.target;
+              ta.style.height = "auto";
+              ta.style.height = Math.min(ta.scrollHeight, 180) + "px";
+            }}
             onKeyDown={handleKeyDown}
             placeholder={
               !claudeConnected
@@ -433,7 +665,9 @@ export function ChatColumn({
               color: "var(--text)",
               fontSize: "0.7rem",
               fontFamily: "inherit",
-              maxHeight: 100,
+              maxHeight: 180,
+              overflow: "auto",
+              lineHeight: 1.5,
             }}
           />
           <button

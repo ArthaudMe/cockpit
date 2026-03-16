@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "child_process";
-import { getContext, buildSystemPrompt } from "./context";
+import { buildSystemPrompt } from "./context";
 import { randomBytes } from "crypto";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
@@ -160,10 +160,14 @@ const ROLE_PROMPTS: Record<AgentRole, string> = {
   ops: `You are an operations assistant. Help with planning, scheduling, tracking, and process. Think in systems and checklists.`,
 };
 
-const baseContext = buildSystemPrompt(getContext());
+// Build fresh each time an agent is created so it picks up profile changes
+function getBaseContext() {
+  return buildSystemPrompt();
+}
 
 interface AgentStateExt extends AgentState {
   customPrompt?: string | null;
+  activeRequests?: number;
 }
 
 const agents = new Map<string, AgentStateExt>();
@@ -174,7 +178,7 @@ function genId(): string {
 
 function buildAgentSystemPrompt(role: AgentRole, customPrompt?: string | null): string {
   const rolePrompt = customPrompt || ROLE_PROMPTS[role];
-  return `${rolePrompt}\n\n${baseContext}`;
+  return `${rolePrompt}\n\n${getBaseContext()}`;
 }
 
 function spawnForBackend(backend: AgentBackend, model: string, systemPrompt: string): ChildProcess {
@@ -333,6 +337,7 @@ export function sendToAgent(
     proc = spawnForBackend(backend, model, systemPrompt);
   }
 
+  state.activeRequests = (state.activeRequests || 0) + 1;
   state.info.busy = true;
 
   let prompt = message;
@@ -345,8 +350,10 @@ export function sendToAgent(
 
   const def = BACKENDS[backend];
   proc.on("close", () => {
-    state.info.busy = false;
-    if (agents.has(id) && def.supportsPrewarm) {
+    state.activeRequests = Math.max(0, (state.activeRequests || 1) - 1);
+    state.info.busy = state.activeRequests > 0;
+    // Pre-warm a fresh process for the next request
+    if (agents.has(id) && def.supportsPrewarm && !state.warmProc) {
       warmAgent(state);
     }
   });
