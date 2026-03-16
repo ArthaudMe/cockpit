@@ -1,81 +1,71 @@
-import contextData from "../../context.json";
+import { readFileSync, existsSync } from "fs";
+import { join } from "path";
+import { homedir } from "os";
 
+// Still used by ContextColumn, FeedColumn for mock data display
+import contextData from "../../context.json";
 export type Context = typeof contextData;
 
 export function getContext(): Context {
   return contextData;
 }
 
-export function buildSystemPrompt(ctx: Context): string {
-  const projects = ctx.projects
-    .map((p) => {
-      const activities = p.recent_activity
-        .map((a) => `  - [${a.date}] ${a.event} (${a.source})`)
-        .join("\n");
-      const decisions = p.key_decisions.length
-        ? `  Key decisions:\n${p.key_decisions.map((d) => `  - ${d}`).join("\n")}`
-        : "";
-      return `### ${p.name} (${p.category} — ${p.status})\n  Tools: ${p.tools.join(", ")}\n  Recent activity:\n${activities}${decisions ? "\n" + decisions : ""}`;
-    })
-    .join("\n\n");
+type Profile = {
+  name: string;
+  role: string;
+  company: string;
+};
 
-  const calendar = ctx.calendar
-    .map(
-      (m) =>
-        `- ${m.time} (${m.duration}) — ${m.title} [${m.attendees.join(", ")}]`
-    )
-    .join("\n");
+type Project = {
+  id: string;
+  name: string;
+  color: string;
+};
 
-  const analytics = Object.entries(ctx.usage_analytics)
-    .map(([key, v]) => {
-      const label = key.toUpperCase();
-      const unit = "unit" in v ? v.unit : "";
-      return `- ${label}: ${v.value}${unit} (${v.change} over ${v.period})`;
-    })
-    .join("\n");
+function loadProfile(): Profile {
+  try {
+    const p = join(homedir(), ".cockpit", "profile.json");
+    if (!existsSync(p)) return { name: "", role: "", company: "" };
+    return JSON.parse(readFileSync(p, "utf-8"));
+  } catch {
+    return { name: "", role: "", company: "" };
+  }
+}
 
-  const slack = ctx.slack_highlights
-    .map((s) => `- ${s.channel} (${s.time}): ${s.message}`)
-    .join("\n");
+function loadProjects(): Project[] {
+  try {
+    const p = join(homedir(), ".cockpit", "projects.json");
+    if (!existsSync(p)) return [];
+    return JSON.parse(readFileSync(p, "utf-8"));
+  } catch {
+    return [];
+  }
+}
 
-  const competitors = ctx.competitor_updates
-    .map((c) => `- ${c.competitor} (${c.time}, via ${c.source}): ${c.event}`)
-    .join("\n");
+export function buildSystemPrompt(): string {
+  const profile = loadProfile();
+  const projects = loadProjects();
 
-  const todos = ctx.todos
-    .map((t) => `- [${t.done ? "x" : " "}] ${t.text}`)
-    .join("\n");
+  const userName = profile.name || "the user";
+  const roleLine = profile.role ? ` Their role is ${profile.role}.` : "";
+  const companyLine = profile.company ? ` They work at ${profile.company}.` : "";
 
-  return `You are Mio, an AI work companion embedded in a founder's cockpit. The user is ${ctx.user}. They see a sidebar with their calendar, projects, analytics, Slack, competitor updates, and todo. You have persistent context about their work across all tools.
+  const projectList = projects.length > 0
+    ? `\n\n## Active Projects\n${projects.map((p) => `- ${p.name}`).join("\n")}`
+    : "";
 
-Here is what you know:
+  return `You are a sharp AI co-pilot embedded in Cockpit, a founder's command center. The user is ${userName}.${roleLine}${companyLine}
 
-## Current Projects
-${projects}
+You have access to their projects, tools, and data sources through Cockpit. Be concise, direct, and actionable — like a sharp chief of staff.${projectList}
 
-## Today's Calendar
-${calendar}
+When answering questions, be direct. Don't hedge or add unnecessary caveats. If you don't have information, say so clearly rather than making things up.
 
-## Key Metrics
-${analytics}
-
-## Recent Slack Activity
-${slack}
-
-## Competitor Intel
-${competitors}
-
-## Todo List
-${todos}
-
-When answering questions, use this context naturally. Don't say "based on the context I was given" — just answer as if you naturally know this information. Be concise and direct, like a sharp chief of staff.
-
-IMPORTANT: When your response contains structured data that would benefit from visual rendering, output it as a JSON code block with a \`mio_render\` key. This renders as rich UI inline in the chat. Supported types:
+IMPORTANT: When your response contains structured data that would benefit from visual rendering, output it as a JSON code block with a \`cockpit_render\` key. This renders as rich UI inline in the chat. Supported types:
 
 **table** — for comparisons, metrics, lists:
 \`\`\`json
 {
-  "mio_render": "table",
+  "cockpit_render": "table",
   "title": "Example",
   "columns": ["Col1", "Col2"],
   "rows": [["val1", "val2"]]
@@ -85,7 +75,7 @@ IMPORTANT: When your response contains structured data that would benefit from v
 **bar_chart** — for numeric comparisons:
 \`\`\`json
 {
-  "mio_render": "bar_chart",
+  "cockpit_render": "bar_chart",
   "title": "Example",
   "data": [{"label": "A", "value": 100}]
 }
@@ -94,7 +84,7 @@ IMPORTANT: When your response contains structured data that would benefit from v
 **card_grid** — for project summaries, activity feeds:
 \`\`\`json
 {
-  "mio_render": "card_grid",
+  "cockpit_render": "card_grid",
   "title": "Example",
   "cards": [{"title": "Card", "status": "Active", "subtitle": "Info", "items": ["Item 1"]}]
 }

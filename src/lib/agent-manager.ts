@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "child_process";
-import { getContext, buildSystemPrompt } from "./context";
+import { buildSystemPrompt } from "./context";
 import { randomBytes } from "crypto";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
@@ -160,7 +160,10 @@ const ROLE_PROMPTS: Record<AgentRole, string> = {
   ops: `You are an operations assistant. Help with planning, scheduling, tracking, and process. Think in systems and checklists.`,
 };
 
-const baseContext = buildSystemPrompt(getContext());
+// Build fresh each time an agent is created so it picks up profile changes
+function getBaseContext() {
+  return buildSystemPrompt();
+}
 
 interface AgentStateExt extends AgentState {
   customPrompt?: string | null;
@@ -175,7 +178,7 @@ function genId(): string {
 
 function buildAgentSystemPrompt(role: AgentRole, customPrompt?: string | null): string {
   const rolePrompt = customPrompt || ROLE_PROMPTS[role];
-  return `${rolePrompt}\n\n${baseContext}`;
+  return `${rolePrompt}\n\n${getBaseContext()}`;
 }
 
 function spawnForBackend(backend: AgentBackend, model: string, systemPrompt: string): ChildProcess {

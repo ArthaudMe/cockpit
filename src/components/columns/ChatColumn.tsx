@@ -196,10 +196,22 @@ export function ChatColumn({
     }
   }, [inputValue, streaming, activeAgentId, onInputChange, setMessagesFor]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
+    }
+    if (e.key === "Tab") {
+      e.preventDefault();
+      const ta = e.currentTarget;
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      const value = ta.value;
+      onInputChange(value.substring(0, start) + "\t" + value.substring(end));
+      // Restore cursor position after React re-render
+      requestAnimationFrame(() => {
+        ta.selectionStart = ta.selectionEnd = start + 1;
+      });
     }
   };
 
@@ -476,7 +488,13 @@ export function ChatColumn({
           <textarea
             ref={inputRef}
             value={inputValue}
-            onChange={(e) => onInputChange(e.target.value)}
+            onChange={(e) => {
+              onInputChange(e.target.value);
+              // Auto-resize
+              const ta = e.target;
+              ta.style.height = "auto";
+              ta.style.height = Math.min(ta.scrollHeight, 180) + "px";
+            }}
             onKeyDown={handleKeyDown}
             placeholder={
               !claudeConnected
@@ -496,7 +514,9 @@ export function ChatColumn({
               color: "var(--text)",
               fontSize: "0.7rem",
               fontFamily: "inherit",
-              maxHeight: 100,
+              maxHeight: 180,
+              overflow: "auto",
+              lineHeight: 1.5,
             }}
           />
           <button

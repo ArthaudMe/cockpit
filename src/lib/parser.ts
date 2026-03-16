@@ -1,17 +1,17 @@
-export type MioRenderBlock =
+export type RenderBlock =
   | {
-      mio_render: "table";
+      cockpit_render: "table";
       title?: string;
       columns: string[];
       rows: string[][];
     }
   | {
-      mio_render: "bar_chart";
+      cockpit_render: "bar_chart";
       title?: string;
       data: { label: string; value: number }[];
     }
   | {
-      mio_render: "card_grid";
+      cockpit_render: "card_grid";
       title?: string;
       cards: {
         title: string;
@@ -23,7 +23,7 @@ export type MioRenderBlock =
 
 export type ParsedSegment =
   | { type: "text"; content: string }
-  | { type: "render"; block: MioRenderBlock }
+  | { type: "render"; block: RenderBlock }
   | { type: "loading" };
 
 /**
@@ -98,7 +98,7 @@ export function parseResponse(text: string): ParsedSegment[] {
     const jsonBody = text.slice(contentStart, closeIdx).trim();
     const fenceEnd = closeIdx + 4; // length of "\n```"
 
-    // Try to find a JSON object with mio_render
+    // Try to find a JSON object with cockpit_render
     const braceStart = jsonBody.indexOf("{");
     if (braceStart !== -1) {
       const closingBrace = findMatchingBrace(jsonBody, braceStart);
@@ -106,11 +106,11 @@ export function parseResponse(text: string): ParsedSegment[] {
         const jsonStr = jsonBody.slice(braceStart, closingBrace + 1);
         try {
           const parsed = JSON.parse(jsonStr);
-          if (parsed.mio_render) {
+          if (parsed.cockpit_render) {
             // Success — add text before this block, then the render block
             const before = text.slice(lastIndex, match.index).trim();
             if (before) segments.push({ type: "text", content: before });
-            segments.push({ type: "render", block: parsed as MioRenderBlock });
+            segments.push({ type: "render", block: parsed as RenderBlock });
             lastIndex = fenceEnd;
             continue;
           }
@@ -120,7 +120,7 @@ export function parseResponse(text: string): ParsedSegment[] {
       }
     }
 
-    // Not a mio_render block — skip it, let it be handled as regular text
+    // Not a cockpit_render block — skip it, let it be handled as regular text
   }
 
   // Add remaining text

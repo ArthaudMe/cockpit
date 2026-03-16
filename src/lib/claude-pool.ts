@@ -17,7 +17,7 @@ function cleanEnv() {
   return env;
 }
 
-const systemPrompt = buildSystemPrompt(getContext());
+const systemPrompt = buildSystemPrompt();
 
 let warmProc: ChildProcess | null = null;
 

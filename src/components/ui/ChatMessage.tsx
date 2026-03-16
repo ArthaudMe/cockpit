@@ -172,7 +172,7 @@ export function ChatMessage({ message }: { message: Message }) {
 
           if (seg.type === "render") {
             const block = seg.block;
-            switch (block.mio_render) {
+            switch (block.cockpit_render) {
               case "table":
                 return <RenderTable key={i} title={block.title} columns={block.columns} rows={block.rows} />;
               case "bar_chart":
