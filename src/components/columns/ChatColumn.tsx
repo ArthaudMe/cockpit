@@ -328,7 +328,7 @@ export function ChatColumn({
       )}
 
       {/* Messages area */}
-      <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "0.75rem" }}>
+      <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "0.75rem" }}>
         {messages.length === 0 && activeAgent && (
           <EmptyState agent={activeAgent} onPrefill={onInputChange} />
         )}

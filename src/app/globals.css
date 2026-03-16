@@ -117,6 +117,12 @@ body {
   padding: 0.4rem 0.5rem;
   border-radius: 4px;
 }
+.feed-item:hover .project-delete {
+  opacity: 0.5 !important;
+}
+.feed-item:hover .project-delete:hover {
+  opacity: 1 !important;
+}
 
 .feed-source {
   font-size: 0.55rem;

@@ -63,7 +63,7 @@ function SimpleMarkdown({ content }: { content: string }) {
       elements.push(<h1 key={i} style={{ fontSize: "0.85rem", fontWeight: 600, margin: "0.6em 0 0.2em", color: "var(--text)" }}>{inlineFormat(line.slice(2))}</h1>);
     } else if (line.startsWith("> ")) {
       elements.push(
-        <blockquote key={i} style={{ borderLeft: "2px solid var(--border-light)", paddingLeft: "0.6em", margin: "0.4em 0", color: "var(--text-dim)" }}>
+        <blockquote key={i} style={{ borderLeft: "2px solid var(--border-light)", paddingLeft: "0.6em", margin: "0.4em 0", color: "var(--text-dim)", overflowWrap: "break-word" }}>
           {inlineFormat(line.slice(2))}
         </blockquote>
       );
@@ -98,7 +98,7 @@ function SimpleMarkdown({ content }: { content: string }) {
     } else if (line.trim() === "") {
       // skip
     } else {
-      elements.push(<p key={i} style={{ margin: "0.3em 0", lineHeight: 1.5, fontSize: "0.7rem" }}>{inlineFormat(line)}</p>);
+      elements.push(<p key={i} style={{ margin: "0.3em 0", lineHeight: 1.5, fontSize: "0.7rem", overflowWrap: "break-word", wordBreak: "break-word" }}>{inlineFormat(line)}</p>);
     }
 
     i++;
@@ -132,7 +132,7 @@ export function ChatMessage({ message }: { message: Message }) {
 
   return (
     <div style={{ marginBottom: "0.5rem" }}>
-      <div style={{ maxWidth: "90%" }}>
+      <div style={{ maxWidth: "90%", overflowWrap: "break-word", wordBreak: "break-word" }}>
         {segments.map((seg, i) => {
           if (seg.type === "loading") {
             return (

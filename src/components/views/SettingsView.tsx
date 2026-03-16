@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 type AgentInfo = {
   id: string;
@@ -23,6 +23,12 @@ type BackendDef = {
   label: string;
   models: { id: string; label: string }[];
   defaultModel: string;
+};
+
+type Profile = {
+  name: string;
+  role: string;
+  company: string;
 };
 
 const BACKEND_ICONS: Record<string, string> = {
@@ -48,18 +54,14 @@ const TOOLS = [
   { id: "granola", name: "Granola", description: "Meeting notes & transcripts", icon: "◪" },
 ];
 
-export function SettingsView({
-  onBack,
-  userName,
-}: {
-  onBack: () => void;
-  userName: string;
-}) {
+export function SettingsView({ onBack }: { onBack: () => void }) {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [backends, setBackends] = useState<BackendStatus[]>([]);
   const [backendDefs, setBackendDefs] = useState<BackendDef[]>([]);
+  const [profile, setProfile] = useState<Profile>({ name: "", role: "", company: "" });
   const [editingAgent, setEditingAgent] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [editingField, setEditingField] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/agents")
@@ -76,7 +78,25 @@ export function SettingsView({
       .then((r) => r.json())
       .then((data: BackendDef[]) => setBackendDefs(data))
       .catch(() => {});
+
+    fetch("/api/profile")
+      .then((r) => r.json())
+      .then((data: Profile) => setProfile(data))
+      .catch(() => {});
   }, []);
+
+  const saveProfile = useCallback(async (updates: Partial<Profile>) => {
+    const updated = { ...profile, ...updates };
+    setProfile(updated);
+    setEditingField(null);
+    try {
+      await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+    } catch {}
+  }, [profile]);
 
   const handleRenameAgent = useCallback(
     async (id: string) => {
@@ -180,7 +200,7 @@ export function SettingsView({
                 width: 36,
                 height: 36,
                 borderRadius: "50%",
-                background: "var(--accent)",
+                background: profile.name ? "var(--accent)" : "var(--border)",
                 color: "var(--bg)",
                 display: "flex",
                 alignItems: "center",
@@ -190,15 +210,27 @@ export function SettingsView({
                 flexShrink: 0,
               }}
             >
-              {userName.charAt(0).toUpperCase()}
+              {profile.name ? profile.name.charAt(0).toUpperCase() : "?"}
             </div>
-            <div>
-              <div style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--text)" }}>
-                {userName}
-              </div>
-              <div style={{ fontSize: "0.5rem", color: "var(--text-muted)", marginTop: "0.1rem" }}>
-                Founder
-              </div>
+            <div style={{ flex: 1 }}>
+              <EditableField
+                value={profile.name}
+                placeholder="Your name"
+                isEditing={editingField === "name"}
+                onStartEdit={() => setEditingField("name")}
+                onSave={(v) => saveProfile({ name: v })}
+                onCancel={() => setEditingField(null)}
+                style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--text)" }}
+              />
+              <EditableField
+                value={profile.role}
+                placeholder="Your role"
+                isEditing={editingField === "role"}
+                onStartEdit={() => setEditingField("role")}
+                onSave={(v) => saveProfile({ role: v })}
+                onCancel={() => setEditingField(null)}
+                style={{ fontSize: "0.5rem", color: "var(--text-muted)", marginTop: "0.1rem" }}
+              />
             </div>
           </div>
           <div
@@ -206,13 +238,21 @@ export function SettingsView({
               marginTop: "0.6rem",
               paddingTop: "0.5rem",
               borderTop: "1px solid var(--border)",
-              display: "flex",
-              gap: "0.5rem",
-              flexWrap: "wrap",
             }}
           >
-            <InfoPill label="Role" value="Founder & CEO" />
-            <InfoPill label="Workspace" value="Cockpit" />
+            <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.5rem" }}>
+              <span style={{ color: "var(--text-muted)" }}>Company:</span>
+              <EditableField
+                value={profile.company}
+                placeholder="Your company"
+                isEditing={editingField === "company"}
+                onStartEdit={() => setEditingField("company")}
+                onSave={(v) => saveProfile({ company: v })}
+                onCancel={() => setEditingField(null)}
+                style={{ fontSize: "0.5rem", color: "var(--text-dim)" }}
+                inline
+              />
+            </div>
           </div>
         </div>
 
@@ -246,16 +286,6 @@ export function SettingsView({
               </div>
             </div>
           ))}
-        </div>
-        <div
-          style={{
-            fontSize: "0.45rem",
-            color: "var(--text-muted)",
-            marginTop: "0.35rem",
-            fontStyle: "italic",
-          }}
-        >
-          Tool connections coming soon via Mio integration
         </div>
 
         {/* ── AI Engines ── */}
@@ -297,7 +327,6 @@ export function SettingsView({
         {/* ── Agents ── */}
         <div style={{ ...sectionTitle, marginTop: "1.25rem" }}>Agents</div>
         {agents.map((agent) => {
-          const backendDef = backendDefs.find((b) => b.id === agent.backend);
           const isEditing = editingAgent === agent.id;
 
           return (
@@ -442,20 +471,77 @@ export function SettingsView({
   );
 }
 
-// ─── Small components ────────────────────────────────────────────────
+// ─── Editable Field ──────────────────────────────────────────────────
 
-function InfoPill({ label, value }: { label: string; value: string }) {
+function EditableField({
+  value,
+  placeholder,
+  isEditing,
+  onStartEdit,
+  onSave,
+  onCancel,
+  style,
+  inline,
+}: {
+  value: string;
+  placeholder: string;
+  isEditing: boolean;
+  onStartEdit: () => void;
+  onSave: (value: string) => void;
+  onCancel: () => void;
+  style?: React.CSSProperties;
+  inline?: boolean;
+}) {
+  const [draft, setDraft] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isEditing) {
+      setDraft(value);
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  }, [isEditing, value]);
+
+  if (isEditing) {
+    return (
+      <input
+        ref={inputRef}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => onSave(draft)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") onSave(draft);
+          if (e.key === "Escape") onCancel();
+        }}
+        placeholder={placeholder}
+        style={{
+          ...style,
+          background: "var(--bg)",
+          border: "1px solid var(--border-light)",
+          borderRadius: 3,
+          padding: "0.1rem 0.25rem",
+          fontFamily: "inherit",
+          outline: "none",
+          width: inline ? 140 : "100%",
+          display: inline ? "inline-block" : "block",
+        }}
+      />
+    );
+  }
+
   return (
     <div
+      onClick={onStartEdit}
       style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "0.3rem",
-        fontSize: "0.5rem",
+        ...style,
+        cursor: "pointer",
+        display: inline ? "inline" : "block",
       }}
+      title="Click to edit"
     >
-      <span style={{ color: "var(--text-muted)" }}>{label}:</span>
-      <span style={{ color: "var(--text-dim)" }}>{value}</span>
+      {value || (
+        <span style={{ color: "var(--text-muted)", fontStyle: "italic" }}>{placeholder}</span>
+      )}
     </div>
   );
 }
