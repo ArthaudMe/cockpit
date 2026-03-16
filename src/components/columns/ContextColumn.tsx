@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Context } from "@/lib/context";
+import type { Context } from "@/lib/context-client";
 import { usePersistedState } from "@/lib/use-persisted-state";
 
 function Panel({

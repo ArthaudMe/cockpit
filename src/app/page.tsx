@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { type Context, buildContextFromLiveData } from "@/lib/context";
+import { type Context, buildContextFromLiveData } from "@/lib/context-client";
 import type { DatasourceData } from "@/lib/datasources/types";
 import { Header } from "@/components/layout/Header";
 import { ProjectsColumn } from "@/components/columns/ProjectsColumn";

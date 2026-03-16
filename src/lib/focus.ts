@@ -1,5 +1,5 @@
 import type { ContextFocus } from "@/components/views/ContextualChatView";
-import type { Context } from "./context";
+import type { Context } from "./context-client";
 
 type CalendarEvent = Context["calendar"][number];
 type SlackHighlight = Context["slack_highlights"][number];
