@@ -164,6 +164,7 @@ const baseContext = buildSystemPrompt(getContext());
 
 interface AgentStateExt extends AgentState {
   customPrompt?: string | null;
+  activeRequests?: number;
 }
 
 const agents = new Map<string, AgentStateExt>();
@@ -333,6 +334,7 @@ export function sendToAgent(
     proc = spawnForBackend(backend, model, systemPrompt);
   }
 
+  state.activeRequests = (state.activeRequests || 0) + 1;
   state.info.busy = true;
 
   let prompt = message;
@@ -345,8 +347,10 @@ export function sendToAgent(
 
   const def = BACKENDS[backend];
   proc.on("close", () => {
-    state.info.busy = false;
-    if (agents.has(id) && def.supportsPrewarm) {
+    state.activeRequests = Math.max(0, (state.activeRequests || 1) - 1);
+    state.info.busy = state.activeRequests > 0;
+    // Pre-warm a fresh process for the next request
+    if (agents.has(id) && def.supportsPrewarm && !state.warmProc) {
       warmAgent(state);
     }
   });

@@ -52,11 +52,29 @@ export function ChatColumn({
   const [messagesByAgent, setMessagesByAgent] = usePersistedState<
     Record<string, Message[]>
   >("cockpit-chat-agents", {});
-  const [streaming, setStreaming] = useState(false);
+  const [streamingAgents, setStreamingAgents] = useState<Set<string>>(new Set());
+  const [notifiedAgents, setNotifiedAgents] = useState<Set<string>>(new Set());
   const [showNewAgent, setShowNewAgent] = useState(false);
   const [showSwitcher, setShowSwitcher] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const activeAgentIdRef = useRef(activeAgentId);
+
+  // Keep ref in sync for use in callbacks
+  useEffect(() => {
+    activeAgentIdRef.current = activeAgentId;
+  }, [activeAgentId]);
+
+  // Clear notification when switching to an agent
+  useEffect(() => {
+    if (activeAgentId) {
+      setNotifiedAgents((prev) => {
+        const next = new Set(prev);
+        next.delete(activeAgentId);
+        return next;
+      });
+    }
+  }, [activeAgentId]);
 
   useEffect(() => {
     fetch("/api/agents")
@@ -76,6 +94,7 @@ export function ChatColumn({
   }, []);
 
   const messages = activeAgentId ? messagesByAgent[activeAgentId] || [] : [];
+  const streaming = activeAgentId ? streamingAgents.has(activeAgentId) : false;
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -89,35 +108,43 @@ export function ChatColumn({
     }
   }, [inputValue]);
 
+  const setMessagesFor = useCallback(
+    (agentId: string, updater: (prev: Message[]) => Message[]) => {
+      setMessagesByAgent((prev) => ({
+        ...prev,
+        [agentId]: updater(prev[agentId] || []),
+      }));
+    },
+    [setMessagesByAgent]
+  );
+
   const setMessages = useCallback(
     (updater: (prev: Message[]) => Message[]) => {
       if (!activeAgentId) return;
-      setMessagesByAgent((prev) => ({
-        ...prev,
-        [activeAgentId]: updater(prev[activeAgentId] || []),
-      }));
+      setMessagesFor(activeAgentId, updater);
     },
-    [activeAgentId, setMessagesByAgent]
+    [activeAgentId, setMessagesFor]
   );
 
   const sendMessage = useCallback(async () => {
     const text = inputValue.trim();
     if (!text || streaming || !activeAgentId) return;
 
+    const targetAgentId = activeAgentId;
     onInputChange("");
-    setMessages((prev) => [...prev, { role: "user", content: text }]);
-    setStreaming(true);
-    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+    setMessagesFor(targetAgentId, (prev) => [...prev, { role: "user", content: text }]);
+    setStreamingAgents((prev) => new Set(prev).add(targetAgentId));
+    setMessagesFor(targetAgentId, (prev) => [...prev, { role: "assistant", content: "" }]);
 
     try {
-      const res = await fetch(`/api/agents/${activeAgentId}/chat`, {
+      const res = await fetch(`/api/agents/${targetAgentId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text }),
       });
 
       if (!res.ok || !res.body) {
-        setMessages((prev) => {
+        setMessagesFor(targetAgentId, (prev) => {
           const next = [...prev];
           next[next.length - 1] = {
             role: "assistant",
@@ -125,7 +152,11 @@ export function ChatColumn({
           };
           return next;
         });
-        setStreaming(false);
+        setStreamingAgents((prev) => {
+          const next = new Set(prev);
+          next.delete(targetAgentId);
+          return next;
+        });
         return;
       }
 
@@ -136,7 +167,7 @@ export function ChatColumn({
         const { done, value } = await reader.read();
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
-        setMessages((prev) => {
+        setMessagesFor(targetAgentId, (prev) => {
           const next = [...prev];
           const last = next[next.length - 1];
           next[next.length - 1] = { ...last, content: last.content + chunk };
@@ -144,7 +175,7 @@ export function ChatColumn({
         });
       }
     } catch (err) {
-      setMessages((prev) => {
+      setMessagesFor(targetAgentId, (prev) => {
         const next = [...prev];
         next[next.length - 1] = {
           role: "assistant",
@@ -154,8 +185,16 @@ export function ChatColumn({
       });
     }
 
-    setStreaming(false);
-  }, [inputValue, streaming, activeAgentId, onInputChange, setMessages]);
+    setStreamingAgents((prev) => {
+      const next = new Set(prev);
+      next.delete(targetAgentId);
+      return next;
+    });
+    // Notify if user switched away from this agent while it was working
+    if (activeAgentIdRef.current !== targetAgentId) {
+      setNotifiedAgents((prev) => new Set(prev).add(targetAgentId));
+    }
+  }, [inputValue, streaming, activeAgentId, onInputChange, setMessagesFor]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -268,12 +307,36 @@ export function ChatColumn({
               <span
                 className="dot"
                 style={{
-                  background: agent.busy ? "var(--yellow)" : "var(--green)",
+                  background: notifiedAgents.has(agent.id)
+                    ? "var(--blue)"
+                    : streamingAgents.has(agent.id)
+                      ? "var(--yellow)"
+                      : "var(--green)",
                   width: 5,
                   height: 5,
+                  animation: streamingAgents.has(agent.id) ? "pulse 1s ease-in-out infinite" : undefined,
                 }}
               />
               {agent.name}
+              {notifiedAgents.has(agent.id) && (
+                <span
+                  style={{
+                    fontSize: "0.4rem",
+                    background: "var(--blue)",
+                    color: "var(--bg)",
+                    borderRadius: "50%",
+                    width: 12,
+                    height: 12,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontWeight: 700,
+                    flexShrink: 0,
+                  }}
+                >
+                  !
+                </span>
+              )}
               <span style={{ fontSize: "0.45rem", color: "var(--text-muted)" }}>
                 {BACKEND_ICONS[agent.backend] || "?"} {shortModel(agent.model)}
               </span>
