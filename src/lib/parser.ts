@@ -21,10 +21,18 @@ export type RenderBlock =
       }[];
     };
 
+export type SubagentSuggestion = {
+  name: string;
+  role: string;
+  task: string;
+};
+
 export type ParsedSegment =
   | { type: "text"; content: string }
   | { type: "render"; block: RenderBlock }
-  | { type: "loading" };
+  | { type: "loading" }
+  | { type: "skill_active"; skillSlash: string }
+  | { type: "subagent_suggestion"; suggestion: SubagentSuggestion };
 
 /**
  * Find the matching closing brace for an opening brace at `start`.
@@ -68,6 +76,14 @@ function findMatchingBrace(text: string, start: number): number {
 
 export function parseResponse(text: string): ParsedSegment[] {
   const segments: ParsedSegment[] = [];
+
+  // Pre-pass: detect [skill: /slash] tag on first line
+  const skillMatch = text.match(/^\[skill:\s*(\/\w+)\]\s*\n?/);
+  if (skillMatch) {
+    segments.push({ type: "skill_active", skillSlash: skillMatch[1] });
+    text = text.slice(skillMatch[0].length);
+  }
+
   // Find ```json fence openings
   const fenceOpen = /```json\s*\n/g;
   let lastIndex = 0;
@@ -107,10 +123,19 @@ export function parseResponse(text: string): ParsedSegment[] {
         try {
           const parsed = JSON.parse(jsonStr);
           if (parsed.cockpit_render) {
-            // Success — add text before this block, then the render block
             const before = text.slice(lastIndex, match.index).trim();
             if (before) segments.push({ type: "text", content: before });
             segments.push({ type: "render", block: parsed as RenderBlock });
+            lastIndex = fenceEnd;
+            continue;
+          }
+          if (parsed.cockpit_subagent && parsed.name && parsed.task) {
+            const before = text.slice(lastIndex, match.index).trim();
+            if (before) segments.push({ type: "text", content: before });
+            segments.push({
+              type: "subagent_suggestion",
+              suggestion: { name: parsed.name, role: parsed.role || "general", task: parsed.task },
+            });
             lastIndex = fenceEnd;
             continue;
           }

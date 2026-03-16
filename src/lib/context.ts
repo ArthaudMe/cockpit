@@ -1,6 +1,7 @@
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import { buildSkillsPromptSection } from "./skills";
 
 // Still used by ContextColumn, FeedColumn for mock data display
 import contextData from "../../context.json";
@@ -90,7 +91,22 @@ IMPORTANT: When your response contains structured data that would benefit from v
 }
 \`\`\`
 
-Use these render types when the data would look better visually than as plain text. Mix them with regular markdown text naturally.`;
+Use these render types when the data would look better visually than as plain text. Mix them with regular markdown text naturally.
+
+## Subagent Delegation
+
+When a task would benefit from specialized parallel work (e.g. research while you draft, or multiple independent analyses), you can suggest spawning a subagent. Output a JSON code block with a \`cockpit_subagent\` key:
+
+\`\`\`json
+{
+  "cockpit_subagent": true,
+  "name": "Research Agent",
+  "role": "research",
+  "task": "Research the top 5 competitors in the project management space and compare their pricing"
+}
+\`\`\`
+
+The user will see a button to approve spawning this subagent. Only suggest this when the task is genuinely complex enough to benefit from parallel work. The subagent will appear as a new tab. Roles: general, research, writer, ops.${buildSkillsPromptSection()}`;
 }
 
 export function getContextStats(ctx: Context) {

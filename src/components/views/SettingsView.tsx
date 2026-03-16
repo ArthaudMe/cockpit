@@ -2,6 +2,16 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 
+type SkillInfo = {
+  id: string;
+  name: string;
+  slash: string;
+  icon: string;
+  description: string;
+  category: string;
+  enabled: boolean;
+};
+
 type AgentInfo = {
   id: string;
   name: string;
@@ -59,6 +69,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
   const [backends, setBackends] = useState<BackendStatus[]>([]);
   const [backendDefs, setBackendDefs] = useState<BackendDef[]>([]);
   const [profile, setProfile] = useState<Profile>({ name: "", role: "", company: "" });
+  const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [editingAgent, setEditingAgent] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editingField, setEditingField] = useState<string | null>(null);
@@ -82,6 +93,11 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
     fetch("/api/profile")
       .then((r) => r.json())
       .then((data: Profile) => setProfile(data))
+      .catch(() => {});
+
+    fetch("/api/skills")
+      .then((r) => r.json())
+      .then((data: SkillInfo[]) => setSkills(data))
       .catch(() => {});
   }, []);
 
@@ -121,6 +137,17 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
   const handleDeleteAgent = useCallback(async (id: string) => {
     await fetch(`/api/agents/${id}`, { method: "DELETE" });
     setAgents((prev) => prev.filter((a) => a.id !== id));
+  }, []);
+
+  const toggleSkill = useCallback(async (id: string, enabled: boolean) => {
+    setSkills((prev) => prev.map((s) => (s.id === id ? { ...s, enabled } : s)));
+    try {
+      await fetch("/api/skills", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, enabled }),
+      });
+    } catch {}
   }, []);
 
   const handleSwitchBackend = useCallback(
@@ -283,6 +310,45 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                   }}
                   title="Not connected"
                 />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Skills ── */}
+        <div style={{ ...sectionTitle, marginTop: "1.25rem" }}>
+          Skills
+          <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, marginLeft: "0.4rem", fontSize: "0.45rem" }}>
+            {skills.filter((s) => s.enabled).length}/{skills.length} active
+          </span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.4rem" }}>
+          {skills.map((skill) => (
+            <div key={skill.id} style={{ ...card, opacity: skill.enabled ? 1 : 0.5, transition: "opacity 0.15s" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flex: 1, minWidth: 0 }}>
+                  <span style={{ fontSize: "0.75rem", flexShrink: 0 }}>{skill.icon}</span>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: "0.55rem", fontWeight: 600, color: "var(--text)" }}>{skill.name}</div>
+                    <div style={{ fontSize: "0.4rem", color: "var(--text-muted)", marginTop: "0.05rem" }}>{skill.slash} — {skill.description}</div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => toggleSkill(skill.id, !skill.enabled)}
+                  style={{
+                    background: skill.enabled ? "var(--accent)" : "var(--border)",
+                    border: "none",
+                    borderRadius: 8,
+                    width: 28,
+                    height: 16,
+                    position: "relative",
+                    cursor: "pointer",
+                    flexShrink: 0,
+                    transition: "background 0.15s",
+                  }}
+                >
+                  <span style={{ position: "absolute", top: 2, left: skill.enabled ? 14 : 2, width: 12, height: 12, borderRadius: "50%", background: "var(--bg)", transition: "left 0.15s" }} />
+                </button>
               </div>
             </div>
           ))}

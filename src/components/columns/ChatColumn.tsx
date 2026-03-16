@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import type { Context } from "@/lib/context";
 import { ChatMessage } from "../ui/ChatMessage";
 import { usePersistedState } from "@/lib/use-persisted-state";
+import { SKILLS, expandSlashCommand } from "@/lib/skills-defs";
+import type { SubagentSuggestion } from "@/lib/parser";
 
 type Message = {
   role: "user" | "assistant";
@@ -56,7 +58,16 @@ export function ChatColumn({
   const [notifiedAgents, setNotifiedAgents] = useState<Set<string>>(new Set());
   const [showNewAgent, setShowNewAgent] = useState(false);
   const [showSwitcher, setShowSwitcher] = useState(false);
+  const [slashSelected, setSlashSelected] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Slash command autocomplete
+  const slashMatches = useMemo(() => {
+    const trimmed = inputValue.trim();
+    if (!trimmed.startsWith("/")) return [];
+    const query = trimmed.split(" ")[0].toLowerCase();
+    return SKILLS.filter((s) => s.slash.startsWith(query));
+  }, [inputValue]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const activeAgentIdRef = useRef(activeAgentId);
 
@@ -130,6 +141,9 @@ export function ChatColumn({
     const text = inputValue.trim();
     if (!text || streaming || !activeAgentId) return;
 
+    const expansion = expandSlashCommand(text);
+    const messageToSend = expansion ? expansion.expandedMessage : text;
+
     const targetAgentId = activeAgentId;
     onInputChange("");
     setMessagesFor(targetAgentId, (prev) => [...prev, { role: "user", content: text }]);
@@ -140,7 +154,7 @@ export function ChatColumn({
       const res = await fetch(`/api/agents/${targetAgentId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: messageToSend }),
       });
 
       if (!res.ok || !res.body) {
@@ -197,6 +211,35 @@ export function ChatColumn({
   }, [inputValue, streaming, activeAgentId, onInputChange, setMessagesFor]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Slash command autocomplete navigation
+    if (slashMatches.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSlashSelected((prev) => Math.min(prev + 1, slashMatches.length - 1));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSlashSelected((prev) => Math.max(prev - 1, 0));
+        return;
+      }
+      if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+        const match = slashMatches[slashSelected];
+        if (match) {
+          e.preventDefault();
+          onInputChange(match.slash + " ");
+          setSlashSelected(0);
+          return;
+        }
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onInputChange("");
+        setSlashSelected(0);
+        return;
+      }
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
@@ -208,7 +251,6 @@ export function ChatColumn({
       const end = ta.selectionEnd;
       const value = ta.value;
       onInputChange(value.substring(0, start) + "\t" + value.substring(end));
-      // Restore cursor position after React re-render
       requestAnimationFrame(() => {
         ta.selectionStart = ta.selectionEnd = start + 1;
       });
@@ -249,6 +291,65 @@ export function ChatColumn({
       }
     },
     [activeAgentId, agents, setActiveAgentId, setMessagesByAgent]
+  );
+
+  const handleApproveSubagent = useCallback(
+    async (suggestion: SubagentSuggestion) => {
+      try {
+        const res = await fetch("/api/agents", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: suggestion.name, role: suggestion.role }),
+        });
+        const agent: AgentInfo = await res.json();
+        setAgents((prev) => [...prev, agent]);
+        setActiveAgentId(agent.id);
+
+        setMessagesFor(agent.id, () => [
+          { role: "user", content: suggestion.task },
+          { role: "assistant", content: "" },
+        ]);
+        setStreamingAgents((prev) => new Set(prev).add(agent.id));
+
+        const chatRes = await fetch(`/api/agents/${agent.id}/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: suggestion.task }),
+        });
+
+        if (!chatRes.ok || !chatRes.body) {
+          setMessagesFor(agent.id, (prev) => {
+            const next = [...prev];
+            next[next.length - 1] = { role: "assistant", content: `Error: ${chatRes.status}` };
+            return next;
+          });
+          setStreamingAgents((prev) => { const next = new Set(prev); next.delete(agent.id); return next; });
+          return;
+        }
+
+        const reader = chatRes.body.getReader();
+        const decoder = new TextDecoder();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          setMessagesFor(agent.id, (prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            next[next.length - 1] = { ...last, content: last.content + chunk };
+            return next;
+          });
+        }
+
+        setStreamingAgents((prev) => { const next = new Set(prev); next.delete(agent.id); return next; });
+        if (activeAgentIdRef.current !== agent.id) {
+          setNotifiedAgents((prev) => new Set(prev).add(agent.id));
+        }
+      } catch (err) {
+        console.error("[subagent] failed:", err);
+      }
+    },
+    [setActiveAgentId, setMessagesFor]
   );
 
   const handleSwitchBackend = useCallback(
@@ -424,7 +525,7 @@ export function ChatColumn({
         )}
 
         {messages.map((msg, i) => (
-          <ChatMessage key={i} message={msg} />
+          <ChatMessage key={i} message={msg} onApproveSubagent={handleApproveSubagent} />
         ))}
 
         {streaming && (
@@ -437,6 +538,56 @@ export function ChatColumn({
 
       {/* Input area with backend switcher */}
       <div style={{ borderTop: "1px solid var(--border)", padding: "0.5rem", position: "relative" }}>
+        {/* Slash command autocomplete */}
+        {slashMatches.length > 0 && (
+          <div
+            style={{
+              position: "absolute",
+              bottom: "calc(100% + 0.15rem)",
+              left: "0.5rem",
+              right: "0.5rem",
+              background: "var(--surface)",
+              border: "1px solid var(--border-light)",
+              borderRadius: 6,
+              boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+              overflow: "hidden",
+              zIndex: 101,
+            }}
+          >
+            <div style={{ padding: "0.35rem 0.5rem", borderBottom: "1px solid var(--border)", fontSize: "0.45rem", color: "var(--text-muted)" }}>
+              Skills — Tab to select
+            </div>
+            {slashMatches.map((skill, idx) => (
+              <button
+                key={skill.id}
+                onClick={() => { onInputChange(skill.slash + " "); setSlashSelected(0); inputRef.current?.focus(); }}
+                onMouseEnter={() => setSlashSelected(idx)}
+                style={{
+                  width: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.4rem",
+                  padding: "0.4rem 0.6rem",
+                  background: idx === slashSelected ? "rgba(255,255,255,0.06)" : "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  textAlign: "left",
+                }}
+              >
+                <span style={{ fontSize: "0.7rem", width: 16, textAlign: "center" }}>{skill.icon}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: "0.6rem", color: "var(--text)", fontWeight: 500 }}>
+                    {skill.slash}
+                    <span style={{ color: "var(--text-muted)", fontWeight: 400, marginLeft: "0.4rem" }}>{skill.name}</span>
+                  </div>
+                  <div style={{ fontSize: "0.45rem", color: "var(--text-dim)", marginTop: "0.1rem" }}>{skill.description}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Backend switcher popover */}
         {showSwitcher && activeAgent && (
           <BackendSwitcher

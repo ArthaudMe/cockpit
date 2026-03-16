@@ -1,9 +1,11 @@
 "use client";
 
 import { parseResponse } from "@/lib/parser";
+import { SKILLS } from "@/lib/skills-defs";
 import { RenderTable } from "../renderers/Table";
 import { RenderBarChart } from "../renderers/BarChart";
 import { RenderCardGrid } from "../renderers/CardGrid";
+import type { SubagentSuggestion } from "@/lib/parser";
 
 type Message = {
   role: "user" | "assistant";
@@ -107,7 +109,13 @@ function SimpleMarkdown({ content }: { content: string }) {
   return <>{elements}</>;
 }
 
-export function ChatMessage({ message }: { message: Message }) {
+export function ChatMessage({
+  message,
+  onApproveSubagent,
+}: {
+  message: Message;
+  onApproveSubagent?: (suggestion: SubagentSuggestion) => void;
+}) {
   if (message.role === "user") {
     return (
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "0.5rem" }}>
@@ -134,6 +142,35 @@ export function ChatMessage({ message }: { message: Message }) {
     <div style={{ marginBottom: "0.5rem" }}>
       <div style={{ maxWidth: "90%", overflowWrap: "break-word", wordBreak: "break-word" }}>
         {segments.map((seg, i) => {
+          if (seg.type === "skill_active") {
+            const skill = SKILLS.find((s) => s.slash === seg.skillSlash);
+            return (
+              <div key={i} style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", background: "rgba(255,255,255,0.06)", border: "1px solid var(--border)", borderRadius: 3, padding: "0.15rem 0.45rem", marginBottom: "0.4rem", fontSize: "0.5rem", color: "var(--accent)", fontWeight: 600 }}>
+                <span>{skill?.icon || "◆"}</span>
+                {skill?.name || seg.skillSlash}
+              </div>
+            );
+          }
+
+          if (seg.type === "subagent_suggestion") {
+            const s = seg.suggestion;
+            return (
+              <div key={i} style={{ margin: "0.4rem 0", border: "1px solid var(--border-light)", borderRadius: 6, padding: "0.6rem 0.75rem", background: "var(--surface)" }}>
+                <div style={{ fontSize: "0.5rem", fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.3rem" }}>Suggested subagent</div>
+                <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)", marginBottom: "0.15rem" }}>
+                  {s.name}
+                  <span style={{ fontSize: "0.45rem", background: "rgba(255,255,255,0.06)", padding: "0.1rem 0.3rem", borderRadius: 3, color: "var(--text-muted)", marginLeft: "0.4rem", fontWeight: 400 }}>{s.role}</span>
+                </div>
+                <div style={{ fontSize: "0.55rem", color: "var(--text-dim)", marginBottom: "0.5rem", lineHeight: 1.4 }}>{s.task}</div>
+                {onApproveSubagent && (
+                  <button onClick={() => onApproveSubagent(s)} style={{ background: "var(--accent)", color: "var(--bg)", border: "none", borderRadius: 4, padding: "0.25rem 0.6rem", fontSize: "0.5rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                    Spawn agent
+                  </button>
+                )}
+              </div>
+            );
+          }
+
           if (seg.type === "loading") {
             return (
               <div
