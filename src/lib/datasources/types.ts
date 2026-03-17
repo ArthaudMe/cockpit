@@ -107,4 +107,5 @@ export interface DatasourceData {
   notionPages?: NotionPage[];
   slackMessages?: SlackMessage[];
   granolaMeetings?: GranolaMeeting[];
+  _connected?: Record<string, boolean>;
 }
