@@ -199,7 +199,8 @@ function DatasourcesScreen({ onContinue }: { onContinue: () => void }) {
           >
             Link your tools so Cockpit can see your work.
             <br />
-            All data stays local on your machine.
+            All data stays on your machine. Cockpit runs entirely locally
+            and no one else, including us, can access your data or tokens.
           </div>
         </div>
 

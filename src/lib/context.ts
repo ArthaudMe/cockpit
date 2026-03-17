@@ -196,8 +196,9 @@ export function buildContextFromLiveData(live: DatasourceData): Context {
     return parseRelativeTime(a.time) - parseRelativeTime(b.time);
   });
 
+  const profile = loadProfile();
   return {
-    user: "Arthaud",
+    user: profile.name || "User",
     projects: [],
     calendar,
     usage_analytics: {},
