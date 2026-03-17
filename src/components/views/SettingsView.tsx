@@ -334,6 +334,16 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
 
         {/* ── Connected Tools ── */}
         <div style={{ ...sectionTitle, marginTop: "1.25rem" }}>Connected Tools</div>
+        <div
+          style={{
+            fontSize: "0.45rem",
+            color: "var(--text-muted)",
+            marginBottom: "0.5rem",
+            lineHeight: 1.5,
+          }}
+        >
+          All data stays on your machine. Tokens are stored locally and no one else, including us, can access your accounts.
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.4rem" }}>
           {datasources.map((ds) => {
             const isConnecting = connecting === ds.id;
