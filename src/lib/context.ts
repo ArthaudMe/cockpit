@@ -148,6 +148,12 @@ export function buildSystemPrompt(ctx?: Context, live?: DatasourceData): string 
         .join("\n")}`
     : "";
 
+  const liveMcp = live?.mcpResources?.length
+    ? `\n\n## MCP Data Sources\n${live.mcpResources
+        .map((r) => `- [${r.serverName}] ${r.name}: ${r.text.slice(0, 200)}`)
+        .join("\n")}`
+    : "";
+
   return `You are a sharp AI co-pilot embedded in Cockpit, a founder's command center. The user is ${userName}.${roleLine}${companyLine}
 
 You have access to their projects, tools, and data sources through Cockpit. Be concise, direct, and actionable — like a sharp chief of staff.
@@ -160,7 +166,7 @@ ${analytics ? `\n## Key Metrics\n${analytics}` : ""}
 ## Recent Slack Activity
 ${slack}
 ${competitors ? `\n## Competitor Intel\n${competitors}` : ""}
-${todos ? `\n## Todo List\n${todos}` : ""}${liveLinear}${liveGitHub}${liveEmails}${liveNotion}${liveGranola}
+${todos ? `\n## Todo List\n${todos}` : ""}${liveLinear}${liveGitHub}${liveEmails}${liveNotion}${liveGranola}${liveMcp}
 
 When answering questions, use this context naturally. Don't say "based on the context I was given" — just answer as if you naturally know this information. Be concise and direct, like a sharp chief of staff. If you don't have information, say so clearly rather than making things up.
 

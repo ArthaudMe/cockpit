@@ -156,6 +156,22 @@ export function buildContextFromLiveData(live: DatasourceData): Context {
     });
   }
 
+  for (const r of live.mcpResources || []) {
+    company_feed.push({
+      type: "data",
+      actor: r.serverName,
+      event: r.name,
+      project: null,
+      time: new Date(r.fetchedAt).toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      }),
+      icon: "\u{1F50C}",
+      detail: `MCP Resource: ${r.name}\nServer: ${r.serverName}\nURI: ${r.uri}\n\n${r.text.slice(0, 500)}`,
+    });
+  }
+
   company_feed.sort((a, b) => {
     return parseRelativeTime(a.time) - parseRelativeTime(b.time);
   });
