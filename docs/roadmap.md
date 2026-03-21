@@ -1,162 +1,186 @@
 # Cockpit Roadmap
 
-What we could build next, organized by theme. Priorities and sequencing TBD.
+What we could build next, organized by theme and sequenced by dependencies.
+
+## Architecture Decision: CLI Subprocess + MCP
+
+Cockpit uses the Claude CLI (`claude -p`) as its LLM transport — no API keys, no token costs, runs on the user's existing Claude subscription. Rather than migrating to raw API usage, we push the limits of this approach:
+
+- **Tool use** — achieved by exposing an MCP server and configuring the CLI with `--mcp-config`. The CLI gets tool calling for free via MCP.
+- **Multi-turn conversation** — managed in our own persistence layer. We store message history and inject recent turns into each `claude -p` call. The CLI is stateless per invocation but the orchestration layer provides continuity.
+- **Structured output** — `cockpit_render` / `cockpit_subagent` JSON blocks parsed from the response stream.
+
+This means **MCP is the foundational unlock** — it enables tool use, actions, on-demand data fetching, and multi-step reasoning without changing the LLM transport.
 
 ---
 
-## 1. Generative Interface
+## Phase 0: Unblock Testers
 
-The current render block system (table, bar chart, card grid) is prompt-driven component selection — the LLM picks from a fixed menu of 3 read-only visualizations. The skills system (12 skills with slash commands) and subagent spawning (LLM suggests, user approves) are already live — these are the first steps toward agentic UI. To get to a full generative interface:
+### 0.1 Google OAuth Registration
+Register Google OAuth credentials so testers can connect Calendar and Gmail. Currently only works with dev credentials.
 
-### 1.1 Artifact Panel
-A persistent, editable panel beside the chat (like Claude artifacts or ChatGPT canvas) where the AI generates full interactive content — dashboards, docs, forms — that the user can manipulate, not just read.
+- Register OAuth app in Google Cloud Console
+- Configure consent screen for external users
+- Bundle credentials per datasource for distribution
 
-- **Persistent canvas** — render blocks stay visible and editable instead of scrolling away with the conversation
-- **Revise in place** — user can ask the AI to update an artifact without regenerating the whole message
+---
+
+## Phase 1: MCP Server (foundational — unlocks Phases 2-4)
+
+Expose Cockpit's datasources as an MCP server over HTTP. This is the single most important piece — it enables tool use through the CLI subprocess without any API migration.
+
+### 1.1 MCP Server Endpoint
+- Expose as a Next.js API route (`/api/mcp`), not a local process
+- Any MCP client (CLI, Claude Desktop, other agents) connects over HTTP
+- Standard MCP protocol (tools, resources, transport)
+
+### 1.2 Read Tools
+Expose each datasource as MCP tools the LLM can call on demand:
+- `search_calendar` — query events by date range, attendee, keyword
+- `search_email` — query emails by sender, subject, date, read status
+- `search_linear_issues` — query by status, assignee, project, priority
+- `search_github_prs` — query by state, author, repo
+- `search_slack` — query messages by channel, author, keyword
+- `search_notion` — query pages by title, last edited
+- `search_granola` — query meeting notes by date, participant
+
+### 1.3 Write Tools (enables Actions, Phase 3)
+- `create_linear_issue`, `update_linear_issue`
+- `create_calendar_event`, `update_calendar_event`
+- `send_slack_message`, `react_to_slack_message`
+- `create_github_comment`, `approve_github_pr`
+- `draft_gmail`, `send_gmail`
+- `create_notion_page`, `update_notion_page`
+
+### 1.4 CLI Integration
+- Generate `cockpit-mcp.json` config file pointing to the MCP server
+- Spawn `claude --mcp-config cockpit-mcp.json -p` instead of bare `claude -p`
+- The system prompt shrinks dramatically — just describes available tools instead of dumping all data
+
+---
+
+## Phase 2: Conversation Memory
+
+Currently messages live in React state / localStorage only. No history across sessions, no multi-turn continuity.
+
+### 2.1 Message Persistence
+- Store conversation history (SQLite or JSON files in `~/.cockpit/`)
+- Load recent conversations on app start
+- Conversation list in sidebar
+
+### 2.2 Multi-Turn via Prompt Injection
+- On each `claude -p` call, inject last N messages as conversation context
+- LLM sees the full thread even though each CLI call is stateless
+- Trim older messages to stay within context window
+
+### 2.3 Conversation Search
+- Search past conversations by keyword
+- LLM can reference prior conversations when relevant
+
+---
+
+## Phase 3: Actions & Write-Back
+
+Currently Cockpit is read-only. With MCP write tools (Phase 1.3), the LLM can take actions.
+
+### 3.1 Confirmation Flow
+- When the LLM calls a write tool, render a confirmation card in chat (like subagent suggestions)
+- Preview what will happen: "I'll create a Linear issue: [title], assigned to [person]"
+- User approves or rejects before execution
+- Undo where possible
+
+### 3.2 Interactive Render Blocks
+- Click handlers on render blocks — drill into a table row, click a bar to filter
+- Action buttons on blocks — approve PR, mark todo done, reschedule meeting
+- Block clicks can trigger follow-up LLM queries or direct API calls
+
+### 3.3 Multi-Step Workflows
+- Chain actions: "Schedule a meeting with the team, then post the agenda in Slack"
+- The tool-use loop handles this naturally — LLM calls tools in sequence, each step informed by the previous result
+
+---
+
+## Phase 4: Generative Interface
+
+The current render block system (table, bar chart, card grid) is prompt-driven component selection. The skills system and subagent spawning are already live. Next steps:
+
+### 4.1 Artifact Panel
+A persistent, editable panel beside the chat where the AI generates interactive content — dashboards, docs, forms — that the user can manipulate, not just read.
+
+- **Persistent canvas** — render blocks stay visible and editable instead of scrolling away
+- **Revise in place** — user asks the AI to update an artifact without regenerating the whole message
 - **Multi-artifact tabs** — hold multiple generated views simultaneously
 
-### 1.2 Interactive Render Blocks
-- **Click handlers** — drill into a table row, click a bar to filter, expand a card
-- **User actions from blocks** — approve a PR, reschedule a meeting, mark a todo done, reply to a Slack message directly from a rendered block
-- **Inline editing** — edit values in a generated table or form, feed changes back to the LLM
-
-### 1.3 Composable Layouts
+### 4.2 Composable Layouts
 - **Nested blocks** — combine chart + table + summary in a single generated layout
 - **Grid/flex arrangement** — LLM can specify layout, not just individual blocks
 - **Dashboard generation** — "show me a dashboard for Project X" produces a multi-widget view
 
-### 1.4 Dynamic Block Types
-- **Plugin/registry model** — new visualization types without shipping code changes
+### 4.3 Dynamic Block Types
 - **More built-in types** — line charts, timelines, kanban boards, forms, metric cards, sparklines, diff views
+- **Plugin/registry model** — new visualization types without shipping code changes
 - **Code-generated blocks** — LLM writes a small React component on the fly (sandboxed)
 
-### 1.5 Tool-Use Loop
-- **Multi-step rendering** — LLM calls tools, inspects results, then decides what to render based on the data (not single-shot)
-- **Adaptive visualization** — choose chart type based on data shape rather than hardcoding in prompt
+### 4.4 Adaptive Rendering
+- With MCP tool use, the LLM fetches data first, inspects its shape, then picks the right visualization
+- No more guessing chart type from prompt instructions — data-driven decisions
 
 ---
 
-## 2. MCP (Model Context Protocol) Support
+## Phase 5: Background Intelligence
 
-Expose Cockpit's datasources as an MCP server so external LLM clients (Claude Desktop, other agents) can query user data.
-
-### 2.1 MCP Server
-- Expose datasource data (calendar, email, issues, PRs, messages) as MCP resources
-- Expose actions (create issue, send message, reschedule event) as MCP tools
-- HTTP transport at a local endpoint
-
-### 2.2 MCP Client
-- Connect to external MCP servers as additional datasources
-- Let agents call tools from connected MCP servers during conversations
-
----
-
-## 3. Scheduled Jobs & Background Intelligence
-
-### 3.1 Cron / Scheduler
+### 5.1 Scheduled Jobs
 - Periodic datasource sync (not just 30s polling while app is open)
-- Scheduled reports — daily briefing generated at 8am, weekly summary on Mondays
+- Scheduled reports — daily briefing at 8am, weekly summary on Mondays
 - Webhook listeners for real-time updates (Linear, GitHub, Google push notifications)
 
-### 3.2 Proactive Notifications
+### 5.2 Proactive Notifications
 - Alert when something important happens: PR approved, meeting in 5 min, blocker assigned
 - Smart batching — don't spam, group related notifications
 - Notification center in the UI with history
 
-### 3.3 Background Agents
-- Long-running agents that monitor for conditions and act (e.g., "tell me if competitor X ships something")
+### 5.3 Background Agents
+- Long-running agents that monitor for conditions ("tell me if competitor X ships something")
 - Scheduled context refresh with diffing — surface what changed since last check
 
 ---
 
-## 4. RAG & Knowledge Layer
+## Phase 6: Knowledge Layer
 
-Currently all context is live API pulls. No persistence, no search, no memory across sessions.
+Currently all context is live API pulls. No indexing, no semantic search.
 
-### 4.1 Document Indexing
-- Index datasource content into vector embeddings (calendar events, emails, messages, issues)
+### 6.1 Document Indexing
+- Index datasource content into vector embeddings
 - Incremental sync — only embed new/changed documents
 - pgvector or local FAISS for storage
 
-### 4.2 Semantic Search
+### 6.2 Semantic Search
 - Search across all datasources with a single query
 - "Find the Slack thread where we decided on the pricing model"
 - Hybrid search (vector + keyword) for precision
+- Exposed as an MCP tool so the LLM can search on demand
 
-### 4.3 Conversation Memory
-- Persist chat history server-side (not just localStorage)
-- Search past conversations
-- LLM can reference prior conversations for continuity
-
-### 4.4 User Summary
+### 6.3 User Summary
 - Auto-generated profile of the user's role, responsibilities, active projects
 - Updated incrementally as new data comes in
-- Used as persistent context in every LLM call
+- Compact persistent context in every LLM call
 
 ---
 
-## 5. Actions & Write-Back
+## Phase 7: Search, Collaboration & Platform
 
-Currently Cockpit is read-only — it pulls data but can't act on it.
-
-### 5.1 Datasource Write APIs
-- **Linear** — create/update issues, change status, assign
-- **GitHub** — comment on PRs, approve/request changes, merge
-- **Google Calendar** — create/move/cancel events
-- **Gmail** — draft/send replies
-- **Slack** — send messages, react, create threads
-- **Notion** — create/update pages
-
-### 5.2 Confirmation Flow
-- AI proposes an action, user confirms before execution
-- Preview what will happen (e.g., "I'll create this Linear issue with these fields")
-- Undo where possible
-
-### 5.3 Multi-Step Workflows
-- Chain actions: "Schedule a meeting with the team to discuss this PR, then post the agenda in Slack"
-- Conditional logic: "If the build passes, merge the PR"
-
----
-
-## 6. Search
-
-### 6.1 Universal Search
+### 7.1 Universal Search
 - Cmd+K search across all datasources, projects, past conversations
 - Fuzzy matching with source-aware ranking
 - Quick actions from search results (open, focus, ask about)
 
-### 6.2 Filtered Search
-- Filter by source (only Slack, only GitHub), date range, project, person
-- Saved searches / filters
-
----
-
-## 7. Collaboration & Multi-User
-
-### 7.1 Team Support
+### 7.2 Team Support
 - Multiple users in a workspace, shared projects
-- See what teammates are working on
-- Shared agent configurations
-
-### 7.2 Shared Context
-- Team-level datasource connections (shared Slack workspace, shared Linear team)
+- Team-level datasource connections
 - Shared conversation threads
 
----
-
-## 8. Desktop & Platform Polish
-
-### 8.1 Offline Support
-- Cache last-known datasource state for offline viewing
-- Queue actions taken offline, sync when back
-
-### 8.2 Keyboard-First UX
-- Full keyboard navigation (Cmd+K search, Cmd+1-9 for panels, etc.)
-- Vim-style bindings option
-
-### 8.3 Tray & Menubar
-- Quick access from menubar without opening full window
-- Show upcoming calendar, unread count, active agent status
-
-### 8.4 Cross-Platform
-- Windows and Linux builds (electron-builder already configured but untested)
+### 7.3 Desktop Polish
+- Offline support — cache last-known state, queue actions for sync
+- Keyboard-first UX (Cmd+K, Cmd+1-9, vim bindings)
+- Tray & menubar — quick access without full window
+- Cross-platform builds (Windows, Linux)
