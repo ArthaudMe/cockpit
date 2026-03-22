@@ -98,6 +98,16 @@ export interface GranolaMeeting {
   summary?: string;
 }
 
+export interface McpResourceItem {
+  serverId: string;
+  serverName: string;
+  uri: string;
+  name: string;
+  mimeType?: string;
+  text: string;
+  fetchedAt: number;
+}
+
 export interface DatasourceData {
   calendar?: CalendarEvent[];
   emails?: EmailThread[];
@@ -107,5 +117,6 @@ export interface DatasourceData {
   notionPages?: NotionPage[];
   slackMessages?: SlackMessage[];
   granolaMeetings?: GranolaMeeting[];
+  mcpResources?: McpResourceItem[];
   _connected?: Record<string, boolean>;
 }

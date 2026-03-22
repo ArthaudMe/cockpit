@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { fetchAllData, getDatasourceStatuses } from "@/lib/datasources/manager";
+import { getMcpServers } from "@/lib/datasources/mcp-store";
 
 export async function GET() {
   try {
@@ -8,6 +9,10 @@ export async function GET() {
     const connected: Record<string, boolean> = {};
     for (const s of statuses) {
       connected[s.id] = s.connected;
+    }
+    // Include MCP servers in connection status
+    for (const mcp of getMcpServers()) {
+      connected[`mcp:${mcp.id}`] = mcp.enabled;
     }
     return NextResponse.json({ ...data, _connected: connected });
   } catch (err: any) {

@@ -6,6 +6,8 @@ import { fetchLinearIssues } from "./connectors/linear";
 import { fetchGitHubPRs, fetchGitHubNotifications } from "./connectors/github";
 import { fetchNotionPages, isNotionConnected } from "./connectors/notion";
 import { fetchSlackMessages } from "./connectors/slack";
+import { getMcpServers } from "./mcp-store";
+import { fetchMcpResources } from "./connectors/mcp";
 import {
   getGoogleAuthUrl,
   exchangeGoogleCode,
@@ -152,6 +154,18 @@ export async function fetchAllData(): Promise<DatasourceData> {
 
   const granolaMeetings = granolaAvailable ? fetchGranolaMeetings() : [];
 
+  // Fetch MCP resources from all enabled servers
+  const mcpServers = getMcpServers().filter((s) => s.enabled);
+  const mcpResults = await Promise.allSettled(
+    mcpServers.map((s) => fetchMcpResources(s)),
+  );
+  const mcpResources = mcpResults
+    .filter(
+      (r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof fetchMcpResources>>> =>
+        r.status === "fulfilled",
+    )
+    .flatMap((r) => r.value);
+
   return {
     calendar,
     emails,
@@ -161,5 +175,6 @@ export async function fetchAllData(): Promise<DatasourceData> {
     notionPages,
     slackMessages,
     granolaMeetings,
+    mcpResources: mcpResources.length > 0 ? mcpResources : undefined,
   };
 }
