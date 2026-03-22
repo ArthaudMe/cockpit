@@ -14,22 +14,52 @@ This means **MCP is the foundational unlock** — it enables tool use, actions, 
 
 ---
 
-## Phase 0: Unblock Testers
+## Phase 0: Zero-Config for Testers
 
-### 0.1 Google OAuth Registration
-Register Google OAuth credentials so testers can connect Calendar and Gmail. Currently only works with dev credentials.
+Testers download the DMG, open the app, and it works. No terminal, no `.env.local`, no credential sharing.
 
-- Register OAuth app in Google Cloud Console
-- Configure consent screen for external users
-- Bundle credentials per datasource for distribution
+### 0.1 Register OAuth Apps
+Register production OAuth apps for each service with redirect URIs pointing to the Electron app:
+- Google (Calendar + Gmail)
+- GitHub
+- Linear
+- Slack
+- Notion
+
+### 0.2 Bundle Credentials into the Build
+Currently all OAuth client IDs and secrets are read from `process.env` (requires `.env.local`). These need to be embedded in the app binary at build time so testers never touch a terminal.
+
+- Hardcode production credentials in the build (standard for desktop apps — VS Code, Spotify, etc.)
+- Remove `.env.local` as a requirement for end users
+- Keep `.env.local` override for local dev (check env var first, fall back to bundled)
+
+### 0.3 Redirect URI Handling
+OAuth callbacks currently redirect to `http://localhost:3000`. For the Electron app:
+- Register `http://localhost:3000/api/datasources/callback/*` as redirect URIs for each provider
+- Ensure the local Next.js server is running when the OAuth popup opens (already the case in Electron)
 
 ---
 
-## Phase 1: MCP Server (foundational — unlocks Phases 2-4)
+## Phase 1: Shared Service Layer + MCP Server (foundational — unlocks Phases 2-4)
 
 Expose Cockpit's datasources as an MCP server over HTTP. This is the single most important piece — it enables tool use through the CLI subprocess without any API migration.
 
-### 1.1 MCP Server Endpoint
+**Important:** The MCP server and the existing OAuth connectors (which power the sidebar/feed via 30s polling) both call the same external APIs. To avoid dual maintenance, refactor into a shared service layer first:
+
+```
+getCalendarEvents(query)    ← single implementation
+  ↑                    ↑
+Connector (polling)    MCP tool (LLM calls on demand)
+```
+
+The connectors stay for cheap, no-LLM sidebar refresh. MCP tools wrap the same functions for LLM-initiated queries during conversations.
+
+### 1.1 Shared Service Layer
+- Extract data-fetching logic from each connector into shared functions (e.g., `getCalendarEvents()`, `getLinearIssues()`)
+- Connectors become thin wrappers that call these on a 30s interval for the UI
+- MCP tools wrap the same functions for on-demand LLM access
+
+### 1.2 MCP Server Endpoint
 - Expose as a Next.js API route (`/api/mcp`), not a local process
 - Any MCP client (CLI, Claude Desktop, other agents) connects over HTTP
 - Standard MCP protocol (tools, resources, transport)
