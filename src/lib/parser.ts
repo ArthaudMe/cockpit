@@ -19,6 +19,44 @@ export type RenderBlock =
         subtitle?: string;
         items?: string[];
       }[];
+    }
+  | {
+      cockpit_render: "metric_cards";
+      title?: string;
+      metrics: {
+        label: string;
+        value: string;
+        change?: string;
+        period?: string;
+      }[];
+    }
+  | {
+      cockpit_render: "timeline";
+      title?: string;
+      events: {
+        time: string;
+        title: string;
+        description?: string;
+        status?: string;
+      }[];
+    }
+  | {
+      cockpit_render: "kanban";
+      title?: string;
+      columns: {
+        name: string;
+        cards: {
+          title: string;
+          subtitle?: string;
+          tag?: string;
+        }[];
+      }[];
+    }
+  | {
+      cockpit_render: "layout";
+      title?: string;
+      direction: "row" | "column";
+      blocks: RenderBlock[];
     };
 
 export type SubagentSuggestion = {

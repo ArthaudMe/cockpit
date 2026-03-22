@@ -1,4 +1,6 @@
 import { spawn, type ChildProcess } from "child_process";
+import { existsSync } from "fs";
+import { join } from "path";
 import { getContext, buildSystemPrompt } from "./context";
 import { fetchAllData } from "./datasources/manager";
 import type { DatasourceData } from "./datasources/types";
@@ -47,15 +49,21 @@ let currentSystemPrompt = getSystemPrompt();
 
 let warmProc: ChildProcess | null = null;
 
+// Resolve MCP config path (project root)
+const mcpConfigPath = join(process.cwd(), "cockpit-mcp.json");
+
 function spawnWarm(): ChildProcess {
-  const proc = spawn(
-    "claude",
-    ["-p", "--output-format", "text", "--append-system-prompt", currentSystemPrompt],
-    {
-      stdio: ["pipe", "pipe", "pipe"],
-      env: cleanEnv(),
-    }
-  );
+  const args = ["-p", "--output-format", "text", "--append-system-prompt", currentSystemPrompt];
+
+  // Add MCP config if the file exists and the server is likely running
+  if (existsSync(mcpConfigPath)) {
+    args.push("--mcp-config", mcpConfigPath);
+  }
+
+  const proc = spawn("claude", args, {
+    stdio: ["pipe", "pipe", "pipe"],
+    env: cleanEnv(),
+  });
 
   proc.stderr?.on("data", (chunk: Buffer) => {
     console.error("[claude-pool:warm:stderr]", chunk.toString());

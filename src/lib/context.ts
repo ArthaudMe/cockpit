@@ -200,7 +200,49 @@ IMPORTANT: When your response contains structured data that would benefit from v
 }
 \`\`\`
 
-Use these render types when the data would look better visually than as plain text. Mix them with regular markdown text naturally.
+**metric_cards** — for KPIs and key numbers:
+\`\`\`json
+{
+  "cockpit_render": "metric_cards",
+  "title": "Key Metrics",
+  "metrics": [{"label": "MRR", "value": "$12.4k", "change": "+8%", "period": "vs last month"}]
+}
+\`\`\`
+
+**timeline** — for chronological events, project history, activity logs:
+\`\`\`json
+{
+  "cockpit_render": "timeline",
+  "title": "Recent Activity",
+  "events": [{"time": "2h ago", "title": "PR merged", "description": "Auth refactor", "status": "done"}]
+}
+\`\`\`
+Status values: done, active, in progress, upcoming, pending, blocked, failed, overdue.
+
+**kanban** — for issue boards, task views, pipeline stages:
+\`\`\`json
+{
+  "cockpit_render": "kanban",
+  "title": "Sprint Board",
+  "columns": [{"name": "Todo", "cards": [{"title": "Fix login bug", "subtitle": "ENG-42", "tag": "bug"}]}]
+}
+\`\`\`
+Tag values: urgent, high, medium, low, bug, feature, chore.
+
+**layout** — combine multiple blocks side by side or stacked:
+\`\`\`json
+{
+  "cockpit_render": "layout",
+  "title": "Dashboard",
+  "direction": "row",
+  "blocks": [
+    {"cockpit_render": "metric_cards", "metrics": [{"label": "Users", "value": "1,204"}]},
+    {"cockpit_render": "bar_chart", "data": [{"label": "Mon", "value": 40}]}
+  ]
+}
+\`\`\`
+
+Use these render types when the data would look better visually than as plain text. Mix them with regular markdown text naturally. Use layout blocks to compose dashboards from multiple visualizations.
 
 ## Subagent Delegation
 

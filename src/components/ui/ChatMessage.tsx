@@ -5,6 +5,10 @@ import { SKILLS } from "@/lib/skills-defs";
 import { RenderTable } from "../renderers/Table";
 import { RenderBarChart } from "../renderers/BarChart";
 import { RenderCardGrid } from "../renderers/CardGrid";
+import { RenderMetricCards } from "../renderers/MetricCard";
+import { RenderTimeline } from "../renderers/Timeline";
+import { RenderKanban } from "../renderers/Kanban";
+import { RenderLayout } from "../renderers/Layout";
 import type { SubagentSuggestion } from "@/lib/parser";
 
 type Message = {
@@ -216,6 +220,14 @@ export function ChatMessage({
                 return <RenderBarChart key={i} title={block.title} data={block.data} />;
               case "card_grid":
                 return <RenderCardGrid key={i} title={block.title} cards={block.cards} />;
+              case "metric_cards":
+                return <RenderMetricCards key={i} title={block.title} metrics={block.metrics} />;
+              case "timeline":
+                return <RenderTimeline key={i} title={block.title} events={block.events} />;
+              case "kanban":
+                return <RenderKanban key={i} title={block.title} columns={block.columns} />;
+              case "layout":
+                return <RenderLayout key={i} title={block.title} direction={block.direction} blocks={block.blocks} />;
               default:
                 return null;
             }

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "cockpit": {
+      "type": "streamable-http",
+      "url": "http://localhost:3000/api/mcp"
+    }
+  }
+}
