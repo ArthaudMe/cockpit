@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { type Context, buildContextFromLiveData } from "@/lib/context-shared";
+import { type Context, buildContextFromLiveData } from "@/lib/context-client";
 import type { DatasourceData } from "@/lib/datasources/types";
 import { Header } from "@/components/layout/Header";
 import { ProjectsColumn } from "@/components/columns/ProjectsColumn";
@@ -34,6 +34,7 @@ const EMPTY_CONTEXT: Context = {
   competitor_updates: [],
   todos: [],
   company_feed: [],
+  connected: {},
 };
 
 export default function Home() {
@@ -45,6 +46,8 @@ export default function Home() {
     checking: boolean;
   }>({ connected: false, checking: true });
   const [contextData, setContextData] = useState<Context>(EMPTY_CONTEXT);
+  const [inferredProjects, setInferredProjects] = useState<any[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
 
   // Fetch live datasource data
   useEffect(() => {
@@ -64,6 +67,24 @@ export default function Home() {
 
     return () => clearInterval(interval);
   }, []);
+
+  // Fetch inferred projects (separate from data poll — cached on server for 5 min)
+  const fetchProjects = useCallback((force = false) => {
+    setProjectsLoading(true);
+    fetch("/api/projects/infer", force ? { method: "POST" } : {})
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.projects) {
+          setInferredProjects(data.projects);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setProjectsLoading(false));
+  }, []);
+
+  useEffect(() => {
+    fetchProjects();
+  }, [fetchProjects]);
 
   useEffect(() => {
     fetch("/api/status")
@@ -195,10 +216,19 @@ export default function Home() {
       />
       <div className="flex flex-1 overflow-hidden" style={{ padding: "0.5rem", gap: "0.5rem" }}>
         <div style={{ width: 280, minWidth: 240, flexShrink: 0 }} className="overflow-y-auto">
-          <ProjectsColumn onPrefill={handlePrefill} />
+          <ProjectsColumn
+            onPrefill={handlePrefill}
+            inferredProjects={inferredProjects}
+            inferLoading={projectsLoading}
+            onRefresh={() => fetchProjects(true)}
+            hasAnyDatasource={Object.values(contextData.connected).some(Boolean)}
+            onSettingsClick={handleSettingsClick}
+          />
           <FeedColumn
             feed={contextData.company_feed}
             onOpenFocus={handleOpenFocus}
+            hasAnyDatasource={Object.values(contextData.connected).some(Boolean)}
+            onSettingsClick={handleSettingsClick}
           />
         </div>
         <div className="flex-1 min-w-0">
@@ -228,6 +258,7 @@ export default function Home() {
             onSlackClick={handleSlackClick}
             onCompetitorClick={handleCompetitorClick}
             onTodoClick={handleTodoClick}
+            onSettingsClick={handleSettingsClick}
           />
         </div>
       </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Context } from "@/lib/context-shared";
+import type { Context } from "@/lib/context-client";
 import { usePersistedState } from "@/lib/use-persisted-state";
 
 function Panel({
@@ -31,6 +31,57 @@ function Panel({
   );
 }
 
+function ConnectPrompt({
+  service,
+  label,
+  onConnect,
+}: {
+  service: string;
+  label: string;
+  onConnect: () => void;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: "0.4rem",
+        padding: "0.75rem 0.5rem",
+        textAlign: "center",
+      }}
+    >
+      <span style={{ fontSize: "0.55rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
+        {label}
+      </span>
+      <button
+        onClick={onConnect}
+        style={{
+          background: "none",
+          border: "1px solid var(--accent)",
+          borderRadius: 4,
+          color: "var(--accent)",
+          cursor: "pointer",
+          fontFamily: "inherit",
+          fontSize: "0.5rem",
+          padding: "0.25rem 0.6rem",
+          transition: "all 0.15s",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "var(--accent)";
+          e.currentTarget.style.color = "var(--bg)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "none";
+          e.currentTarget.style.color = "var(--accent)";
+        }}
+      >
+        Connect {service}
+      </button>
+    </div>
+  );
+}
+
 export function ContextColumn({
   context,
   onPrefill,
@@ -39,6 +90,7 @@ export function ContextColumn({
   onSlackClick,
   onCompetitorClick,
   onTodoClick,
+  onSettingsClick,
 }: {
   context: Context;
   onPrefill: (text: string) => void;
@@ -47,6 +99,7 @@ export function ContextColumn({
   onSlackClick?: (index: number) => void;
   onCompetitorClick?: (index: number) => void;
   onTodoClick?: (index: number) => void;
+  onSettingsClick?: () => void;
 }) {
   const [todos, setTodos] = usePersistedState("cockpit-todos", context.todos);
 
@@ -62,7 +115,15 @@ export function ContextColumn({
       {/* Calendar */}
       <Panel title="Calendar" count={context.calendar.length} defaultOpen>
         {context.calendar.length === 0 ? (
-          <div className="empty-state">Connect Google to see your calendar</div>
+          context.connected.google ? (
+            <div className="empty-state">No upcoming events</div>
+          ) : (
+            <ConnectPrompt
+              service="Google"
+              label="Connect Google to see your calendar events"
+              onConnect={() => onSettingsClick?.()}
+            />
+          )
         ) : (() => {
           // Group events by date
           const groups: Record<string, typeof context.calendar> = {};
@@ -137,11 +198,10 @@ export function ContextColumn({
         })()}
       </Panel>
 
-      {/* Usage Analytics */}
+      {/* Usage Analytics — only shown when data exists */}
+      {Object.keys(context.usage_analytics).length > 0 && (
       <Panel title="Metrics" count={Object.keys(context.usage_analytics).length} defaultOpen>
-        {Object.keys(context.usage_analytics).length === 0 ? (
-          <div className="empty-state">No metrics available</div>
-        ) : (
+        {(
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.35rem" }}>
             {Object.entries(context.usage_analytics).map(([key, v]) => {
               const label = key.toUpperCase();
@@ -174,11 +234,20 @@ export function ContextColumn({
           </div>
         )}
       </Panel>
+      )}
 
       {/* Slack */}
       <Panel title="Slack" count={context.slack_highlights.length}>
         {context.slack_highlights.length === 0 ? (
-          <div className="empty-state">Connect Slack to see messages</div>
+          context.connected.slack ? (
+            <div className="empty-state">No recent messages</div>
+          ) : (
+            <ConnectPrompt
+              service="Slack"
+              label="Connect Slack to see your team's messages"
+              onConnect={() => onSettingsClick?.()}
+            />
+          )
         ) : context.slack_highlights.map((h, i) => (
           <div
             key={i}
@@ -194,11 +263,10 @@ export function ContextColumn({
         ))}
       </Panel>
 
-      {/* Competitors */}
+      {/* Competitors — only shown when data exists */}
+      {context.competitor_updates.length > 0 && (
       <Panel title="Competitors" count={context.competitor_updates.length}>
-        {context.competitor_updates.length === 0 ? (
-          <div className="empty-state">No competitor updates</div>
-        ) : context.competitor_updates.map((u, i) => (
+        {context.competitor_updates.map((u, i) => (
           <div
             key={i}
             className="feed-item"
@@ -217,6 +285,7 @@ export function ContextColumn({
           </div>
         ))}
       </Panel>
+      )}
 
       {/* Todo */}
       <Panel title="Todo" count={todos.length > 0 ? todos.filter((t) => !t.done).length + "/" + todos.length : 0}>

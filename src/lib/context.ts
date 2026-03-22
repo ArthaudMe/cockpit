@@ -3,10 +3,27 @@ import { join } from "path";
 import { homedir } from "os";
 import { buildSkillsPromptSection } from "./skills";
 import type { DatasourceData } from "./datasources/types";
-import type { Context } from "./context-shared";
 
-// Re-export client-safe types and functions
-export { type Context, EMPTY_CONTEXT, buildContextFromLiveData, getContextStats } from "./context-shared";
+// Re-export client-safe types and functions so server-side consumers
+// can keep importing from "@/lib/context" unchanged.
+export { type Context, buildContextFromLiveData, getContextStats } from "./context-client";
+import type { Context } from "./context-client";
+
+const EMPTY_CONTEXT: Context = {
+  user: "User",
+  projects: [],
+  calendar: [],
+  usage_analytics: {},
+  slack_highlights: [],
+  competitor_updates: [],
+  todos: [],
+  company_feed: [],
+  connected: {},
+};
+
+export function getContext(): Context {
+  return EMPTY_CONTEXT;
+}
 
 type Profile = {
   name: string;
@@ -24,38 +41,16 @@ function loadProfile(): Profile {
   }
 }
 
-export function getContext(): Context {
-  return {
-    user: "User",
-    projects: [],
-    calendar: [],
-    usage_analytics: {},
-    slack_highlights: [],
-    competitor_updates: [],
-    todos: [],
-    company_feed: [],
-  };
-}
-
 export function buildSystemPrompt(ctx?: Context, live?: DatasourceData): string {
   const profile = loadProfile();
-  const context: Context = ctx || {
-    user: "User",
-    projects: [],
-    calendar: [],
-    usage_analytics: {},
-    slack_highlights: [],
-    competitor_updates: [],
-    todos: [],
-    company_feed: [],
-  };
+  const context = ctx || EMPTY_CONTEXT;
 
   const userName = profile.name || context.user || "the user";
   const roleLine = profile.role ? ` Their role is ${profile.role}.` : "";
   const companyLine = profile.company ? ` They work at ${profile.company}.` : "";
 
   const projects = context.projects
-    .map((p: any) => {
+    .map((p) => {
       const activities = p.recent_activity
         ?.map((a: any) => `  - [${a.date}] ${a.event} (${a.source})`)
         .join("\n") || "";
@@ -216,3 +211,4 @@ When a task would benefit from specialized parallel work (e.g. research while yo
 
 The user will see a button to approve spawning this subagent. Only suggest this when the task is genuinely complex enough to benefit from parallel work. The subagent will appear as a new tab. Roles: general, research, writer, ops.${buildSkillsPromptSection()}`;
 }
+

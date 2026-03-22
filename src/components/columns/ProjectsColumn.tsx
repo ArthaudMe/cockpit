@@ -2,10 +2,18 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 
-type Project = {
+type ManualProject = {
   id: string;
   name: string;
   color: string;
+};
+
+type InferredProject = {
+  name: string;
+  category: string;
+  status: string;
+  tools: string[];
+  recent_activity: { date: string; event: string; source: string }[];
 };
 
 function Panel({
@@ -13,12 +21,14 @@ function Panel({
   count,
   defaultOpen = true,
   onAdd,
+  action,
   children,
 }: {
   title: string;
   count?: number;
   defaultOpen?: boolean;
   onAdd?: () => void;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -31,6 +41,7 @@ function Panel({
           {count !== undefined && <span className="panel-count">{count}</span>}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
+          {action && <span onClick={(e) => e.stopPropagation()}>{action}</span>}
           {onAdd && (
             <button
               onClick={(e) => {
@@ -52,7 +63,7 @@ function Panel({
               +
             </button>
           )}
-          <span className={`panel-toggle ${open ? "open" : ""}`}>▶</span>
+          <span className={`panel-toggle ${open ? "open" : ""}`}>&#9654;</span>
         </div>
       </div>
       {open && <div className="panel-content">{children}</div>}
@@ -62,14 +73,20 @@ function Panel({
 
 export function ProjectsColumn({
   onPrefill,
-  onProjectClick,
-  selectedId,
+  inferredProjects,
+  inferLoading,
+  onRefresh,
+  hasAnyDatasource,
+  onSettingsClick,
 }: {
   onPrefill: (text: string) => void;
-  onProjectClick?: (project: Project) => void;
-  selectedId?: string | null;
+  inferredProjects?: InferredProject[];
+  inferLoading?: boolean;
+  onRefresh?: () => void;
+  hasAnyDatasource?: boolean;
+  onSettingsClick?: () => void;
 }) {
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [manualProjects, setManualProjects] = useState<ManualProject[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [createName, setCreateName] = useState("");
   const createRef = useRef<HTMLInputElement>(null);
@@ -77,7 +94,7 @@ export function ProjectsColumn({
   useEffect(() => {
     fetch("/api/projects")
       .then((r) => r.json())
-      .then((data: Project[]) => setProjects(data))
+      .then((data: ManualProject[]) => setManualProjects(data))
       .catch(() => {});
   }, []);
 
@@ -94,8 +111,8 @@ export function ProjectsColumn({
         body: JSON.stringify({ name }),
       });
       if (res.ok) {
-        const project: Project = await res.json();
-        setProjects((prev) => [...prev, project]);
+        const project: ManualProject = await res.json();
+        setManualProjects((prev) => [...prev, project]);
       }
     } catch {}
     setCreateName("");
@@ -104,7 +121,7 @@ export function ProjectsColumn({
 
   const handleDelete = useCallback(async (id: string) => {
     await fetch(`/api/projects/${id}`, { method: "DELETE" });
-    setProjects((prev) => prev.filter((p) => p.id !== id));
+    setManualProjects((prev) => prev.filter((p) => p.id !== id));
   }, []);
 
   useEffect(() => {
@@ -113,14 +130,57 @@ export function ProjectsColumn({
     }
   }, [showCreate]);
 
+  const inferred = inferredProjects || [];
+  const totalCount = manualProjects.length + inferred.length;
+
+  const refreshBtn = onRefresh ? (
+    <button
+      onClick={onRefresh}
+      disabled={inferLoading}
+      style={{
+        background: "none",
+        border: "1px solid var(--border)",
+        borderRadius: 3,
+        color: "var(--text-muted)",
+        fontSize: "0.5rem",
+        padding: "0.1rem 0.35rem",
+        cursor: inferLoading ? "default" : "pointer",
+        opacity: inferLoading ? 0.5 : 1,
+        fontFamily: "inherit",
+      }}
+    >
+      {inferLoading ? "..." : "Refresh"}
+    </button>
+  ) : null;
+
   return (
     <div>
       <Panel
         title="Projects"
-        count={projects.length}
-        onAdd={projects.length < 5 ? () => setShowCreate(true) : undefined}
+        count={totalCount}
+        onAdd={manualProjects.length < 5 ? () => setShowCreate(true) : undefined}
+        action={refreshBtn}
       >
-        {projects.length === 0 && !showCreate && (
+        {/* Loading state for inference */}
+        {inferLoading && inferred.length === 0 && manualProjects.length === 0 && (
+          <div style={{ padding: "0.5rem 0", textAlign: "center" }}>
+            <span
+              className="dot"
+              style={{
+                background: "var(--accent)",
+                animation: "pulse 1.5s ease-in-out infinite",
+                display: "inline-block",
+                marginRight: "0.3rem",
+              }}
+            />
+            <span style={{ fontSize: "0.55rem", color: "var(--text-muted)" }}>
+              Inferring projects...
+            </span>
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!inferLoading && totalCount === 0 && !showCreate && (
           <div
             style={{
               padding: "0.75rem 0.25rem",
@@ -130,44 +190,116 @@ export function ProjectsColumn({
               lineHeight: 1.6,
             }}
           >
-            No projects yet.
-            <br />
-            <button
-              onClick={() => setShowCreate(true)}
-              style={{
-                background: "none",
-                border: "none",
-                color: "var(--accent)",
-                cursor: "pointer",
-                fontFamily: "inherit",
-                fontSize: "0.55rem",
-                padding: 0,
-                textDecoration: "underline",
-                textUnderlineOffset: "2px",
-              }}
-            >
-              Add a project
-            </button>{" "}
-            or connect a data source to auto-detect them.
+            {hasAnyDatasource ? (
+              <>No projects detected yet.</>
+            ) : (
+              <>
+                No projects yet.
+                <br />
+                <button
+                  onClick={() => setShowCreate(true)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "var(--accent)",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    fontSize: "0.55rem",
+                    padding: 0,
+                    textDecoration: "underline",
+                    textUnderlineOffset: "2px",
+                  }}
+                >
+                  Add a project
+                </button>{" "}
+                or{" "}
+                {onSettingsClick ? (
+                  <button
+                    onClick={onSettingsClick}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "var(--accent)",
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                      fontSize: "0.55rem",
+                      padding: 0,
+                      textDecoration: "underline",
+                      textUnderlineOffset: "2px",
+                    }}
+                  >
+                    connect a data source
+                  </button>
+                ) : (
+                  "connect a data source"
+                )}{" "}
+                to auto-detect them.
+              </>
+            )}
           </div>
         )}
 
-        {projects.map((p) => (
+        {/* Inferred projects (from datasources) */}
+        {inferred.map((p, i) => (
+          <div
+            key={`inferred-${i}`}
+            className="feed-item"
+            onClick={() => onPrefill(`What's the latest on ${p.name}?`)}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: "0.65rem",
+                  fontWeight: 600,
+                  color: "var(--text)",
+                }}
+              >
+                {p.name}
+              </span>
+              <span
+                className={`tag ${p.status === "Active" ? "tag-green" : "tag-yellow"}`}
+              >
+                {p.status}
+              </span>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.4rem",
+                marginTop: "0.15rem",
+              }}
+            >
+              <span className="tag tag-dim">{p.category}</span>
+              {p.tools.slice(0, 3).map((t) => (
+                <span
+                  key={t}
+                  style={{ fontSize: "0.5rem", color: "var(--text-muted)" }}
+                >
+                  {t}
+                </span>
+              ))}
+            </div>
+            {p.recent_activity?.[0] && (
+              <div className="feed-title" style={{ marginTop: "0.2rem" }}>
+                {p.recent_activity[0].event}
+              </div>
+            )}
+          </div>
+        ))}
+
+        {/* Manual projects */}
+        {manualProjects.map((p) => (
           <div
             key={p.id}
             className="feed-item"
-            onClick={() =>
-              onProjectClick
-                ? onProjectClick(p)
-                : onPrefill(`What's the latest on ${p.name}?`)
-            }
-            style={{
-              background: selectedId === p.id ? "var(--surface-hover)" : undefined,
-              margin: selectedId === p.id ? "0 -0.5rem" : undefined,
-              padding: selectedId === p.id ? "0.4rem 0.5rem" : undefined,
-              borderRadius: selectedId === p.id ? 4 : undefined,
-              borderLeft: selectedId === p.id ? "2px solid var(--accent)" : undefined,
-            }}
+            onClick={() => onPrefill(`What's the latest on ${p.name}?`)}
           >
             <div
               style={{
@@ -215,12 +347,13 @@ export function ProjectsColumn({
                 className="project-delete"
                 title="Remove project"
               >
-                ×
+                &times;
               </button>
             </div>
           </div>
         ))}
 
+        {/* Create project inline form */}
         {showCreate && (
           <div style={{ padding: "0.25rem 0" }}>
             <input

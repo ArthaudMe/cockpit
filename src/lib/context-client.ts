@@ -9,18 +9,8 @@ export interface Context {
   competitor_updates: { competitor: string; event: string; source: string; time: string }[];
   todos: { text: string; done: boolean }[];
   company_feed: { type: string; actor: string; event: string; project: string | null; time: string; icon: string; detail?: string }[];
+  connected: Record<string, boolean>;
 }
-
-export const EMPTY_CONTEXT: Context = {
-  user: "User",
-  projects: [],
-  calendar: [],
-  usage_analytics: {},
-  slack_highlights: [],
-  competitor_updates: [],
-  todos: [],
-  company_feed: [],
-};
 
 /** Parse relative time strings like "2h ago", "3d ago", "just now" to minutes for sorting */
 function parseRelativeTime(time: string): number {
@@ -53,8 +43,8 @@ function parseRelativeTime(time: string): number {
   return Infinity;
 }
 
-/** Build a Context from live datasource data (client-safe, no fs) */
-export function buildContextFromLiveData(live: DatasourceData, userName?: string): Context {
+/** Build a Context from live datasource data */
+export function buildContextFromLiveData(live: DatasourceData): Context {
   const calendar = (live.calendar || []).map((e) => ({
     title: e.title,
     time: e.time,
@@ -78,7 +68,7 @@ export function buildContextFromLiveData(live: DatasourceData, userName?: string
       event: e.title,
       project: null,
       time: e.time,
-      icon: "📅",
+      icon: "\u{1F4C5}",
     });
   }
 
@@ -89,7 +79,7 @@ export function buildContextFromLiveData(live: DatasourceData, userName?: string
       event: `${pr.status === "open" ? "Opened" : "Updated"} PR: ${pr.title}`,
       project: pr.repo,
       time: pr.time,
-      icon: pr.status === "open" ? "🔀" : "✅",
+      icon: pr.status === "open" ? "\u{1F500}" : "\u2705",
       detail: `PR: ${pr.title}\nRepo: ${pr.repo}\nAuthor: ${pr.author}\nStatus: ${pr.status}\nURL: ${pr.url}`,
     });
   }
@@ -101,7 +91,7 @@ export function buildContextFromLiveData(live: DatasourceData, userName?: string
       event: `${n.type}: ${n.title}`,
       project: n.repo,
       time: n.time,
-      icon: "🔔",
+      icon: "\u{1F514}",
       detail: `Notification: ${n.title}\nType: ${n.type}\nRepo: ${n.repo}`,
     });
   }
@@ -113,7 +103,7 @@ export function buildContextFromLiveData(live: DatasourceData, userName?: string
       event: `[${issue.state}] ${issue.title}`,
       project: issue.project || null,
       time: issue.updatedAt,
-      icon: "📋",
+      icon: "\u{1F4CB}",
       detail: `Issue: ${issue.id} — ${issue.title}\nState: ${issue.state}\nPriority: ${issue.priority}\nAssignee: ${issue.assignee}`,
     });
   }
@@ -125,7 +115,7 @@ export function buildContextFromLiveData(live: DatasourceData, userName?: string
       event: s.message,
       project: null,
       time: s.time,
-      icon: "💬",
+      icon: "\u{1F4AC}",
       detail: `Slack message in ${s.channel} from ${s.author}: ${s.message}`,
     });
   }
@@ -137,7 +127,7 @@ export function buildContextFromLiveData(live: DatasourceData, userName?: string
       event: m.title,
       project: null,
       time: m.time,
-      icon: "🎙️",
+      icon: "\u{1F399}\uFE0F",
       detail: `Meeting: ${m.title}\nAttendees: ${m.attendees.join(", ") || "none"}\n${m.summary ? `Summary: ${m.summary}` : ""}${m.notes ? `\nNotes: ${m.notes.slice(0, 500)}` : ""}`,
     });
   }
@@ -149,7 +139,7 @@ export function buildContextFromLiveData(live: DatasourceData, userName?: string
       event: `Updated: ${p.title}`,
       project: null,
       time: p.lastEdited,
-      icon: "📄",
+      icon: "\u{1F4C4}",
       detail: `Notion page: ${p.title}\nLast edited: ${p.lastEdited}\nURL: ${p.url}`,
     });
   }
@@ -161,7 +151,7 @@ export function buildContextFromLiveData(live: DatasourceData, userName?: string
       event: e.subject,
       project: null,
       time: e.time,
-      icon: "✉️",
+      icon: "\u2709\uFE0F",
       detail: `Email from: ${e.from}\nSubject: ${e.subject}\nPreview: ${e.snippet}${e.unread ? "\n(Unread)" : ""}`,
     });
   }
@@ -171,7 +161,7 @@ export function buildContextFromLiveData(live: DatasourceData, userName?: string
   });
 
   return {
-    user: userName || "User",
+    user: "Arthaud",
     projects: [],
     calendar,
     usage_analytics: {},
@@ -179,6 +169,7 @@ export function buildContextFromLiveData(live: DatasourceData, userName?: string
     competitor_updates: [],
     todos: [],
     company_feed,
+    connected: live._connected || {},
   };
 }
 
