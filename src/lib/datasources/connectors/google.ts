@@ -16,7 +16,7 @@ export const GOOGLE_OAUTH: OAuthConfig = {
 
 export function getGoogleAuthUrl(redirectUri: string, state: string): string {
   const params = new URLSearchParams({
-    client_id: process.env.GOOGLE_CLIENT_ID || "",
+    client_id: process.env.GOOGLE_CLIENT_ID || "621600015576-vssg97tmjun6v4tbkfbduno7pkptf8ko.apps.googleusercontent.com",
     redirect_uri: redirectUri,
     response_type: "code",
     scope: GOOGLE_OAUTH.scopes.join(" "),
@@ -36,8 +36,8 @@ export async function exchangeGoogleCode(
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       code,
-      client_id: process.env.GOOGLE_CLIENT_ID || "",
-      client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
+      client_id: process.env.GOOGLE_CLIENT_ID || "621600015576-vssg97tmjun6v4tbkfbduno7pkptf8ko.apps.googleusercontent.com",
+      client_secret: process.env.GOOGLE_CLIENT_SECRET || "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",
       redirect_uri: redirectUri,
       grant_type: "authorization_code",
     }),
@@ -60,8 +60,8 @@ async function refreshGoogleToken(refreshToken: string): Promise<TokenSet> {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       refresh_token: refreshToken,
-      client_id: process.env.GOOGLE_CLIENT_ID || "",
-      client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
+      client_id: process.env.GOOGLE_CLIENT_ID || "621600015576-vssg97tmjun6v4tbkfbduno7pkptf8ko.apps.googleusercontent.com",
+      client_secret: process.env.GOOGLE_CLIENT_SECRET || "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",
       grant_type: "refresh_token",
     }),
   });

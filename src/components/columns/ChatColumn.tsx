@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import type { Context } from "@/lib/context";
+import type { Context } from "@/lib/context-shared";
 import { ChatMessage } from "../ui/ChatMessage";
 import { usePersistedState } from "@/lib/use-persisted-state";
 import { SKILLS, expandSlashCommand } from "@/lib/skills-defs";
