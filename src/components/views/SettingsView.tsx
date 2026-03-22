@@ -63,6 +63,18 @@ type DatasourceInfo = {
   needsOAuth: boolean;
 };
 
+type McpServer = {
+  id: string;
+  name: string;
+  transport: "stdio" | "sse";
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  url?: string;
+  enabled: boolean;
+  addedAt: number;
+};
+
 export function SettingsView({ onBack }: { onBack: () => void }) {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [backends, setBackends] = useState<BackendStatus[]>([]);
@@ -74,6 +86,10 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
   const [editingField, setEditingField] = useState<string | null>(null);
   const [datasources, setDatasources] = useState<DatasourceInfo[]>([]);
   const [connecting, setConnecting] = useState<string | null>(null);
+  const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
+  const [showAddMcp, setShowAddMcp] = useState(false);
+  const [testingMcp, setTestingMcp] = useState<string | null>(null);
+  const [mcpTestResult, setMcpTestResult] = useState<{ id: string; success: boolean; message: string } | null>(null);
 
   const fetchDatasources = useCallback(() => {
     fetch("/api/datasources")
@@ -109,6 +125,11 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
       .catch(() => {});
 
     fetchDatasources();
+
+    fetch("/api/datasources/mcp")
+      .then((r) => r.json())
+      .then((data: McpServer[]) => setMcpServers(data))
+      .catch(() => {});
   }, [fetchDatasources]);
 
   // Poll for datasource status while connecting, with 2-minute timeout
@@ -162,6 +183,52 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
       fetchDatasources();
     } catch {}
   }, [fetchDatasources]);
+
+  const handleAddMcp = useCallback(async (server: Omit<McpServer, "id" | "enabled" | "addedAt">) => {
+    try {
+      const res = await fetch("/api/datasources/mcp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(server),
+      });
+      const created: McpServer = await res.json();
+      setMcpServers((prev) => [...prev, created]);
+      setShowAddMcp(false);
+    } catch {}
+  }, []);
+
+  const handleRemoveMcp = useCallback(async (id: string) => {
+    await fetch(`/api/datasources/mcp/${id}`, { method: "DELETE" });
+    setMcpServers((prev) => prev.filter((s) => s.id !== id));
+  }, []);
+
+  const handleToggleMcp = useCallback(async (id: string, enabled: boolean) => {
+    setMcpServers((prev) => prev.map((s) => (s.id === id ? { ...s, enabled } : s)));
+    await fetch(`/api/datasources/mcp/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+  }, []);
+
+  const handleTestMcp = useCallback(async (id: string) => {
+    setTestingMcp(id);
+    setMcpTestResult(null);
+    try {
+      const res = await fetch(`/api/datasources/mcp/${id}/test`, { method: "POST" });
+      const result = await res.json();
+      setMcpTestResult({
+        id,
+        success: result.success,
+        message: result.success
+          ? `Connected — ${result.resourceCount} resource${result.resourceCount === 1 ? "" : "s"}${result.serverName ? ` (${result.serverName})` : ""}`
+          : result.error || "Connection failed",
+      });
+    } catch {
+      setMcpTestResult({ id, success: false, message: "Test failed" });
+    }
+    setTestingMcp(null);
+  }, []);
 
   const handleRenameAgent = useCallback(
     async (id: string) => {
@@ -334,6 +401,16 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
 
         {/* ── Connected Tools ── */}
         <div style={{ ...sectionTitle, marginTop: "1.25rem" }}>Connected Tools</div>
+        <div
+          style={{
+            fontSize: "0.45rem",
+            color: "var(--text-muted)",
+            marginBottom: "0.5rem",
+            lineHeight: 1.5,
+          }}
+        >
+          All data stays on your machine. Tokens are stored locally and no one else, including us, can access your accounts.
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.4rem" }}>
           {datasources.map((ds) => {
             const isConnecting = connecting === ds.id;
@@ -422,6 +499,133 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
             );
           })}
         </div>
+
+        {/* ── MCP Servers ── */}
+        <div style={{ ...sectionTitle, marginTop: "1.25rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span>MCP Servers</span>
+          <button
+            onClick={() => setShowAddMcp(true)}
+            style={{
+              background: "none",
+              border: "1px solid var(--border)",
+              borderRadius: 4,
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              fontSize: "0.4rem",
+              padding: "0.1rem 0.4rem",
+              textTransform: "none",
+              letterSpacing: 0,
+              fontWeight: 400,
+            }}
+          >
+            + Add
+          </button>
+        </div>
+        <div
+          style={{
+            fontSize: "0.45rem",
+            color: "var(--text-muted)",
+            marginBottom: "0.5rem",
+            lineHeight: 1.5,
+          }}
+        >
+          Connect any MCP server to pull custom data into your feed and context.
+        </div>
+
+        {showAddMcp && <AddMcpForm onAdd={handleAddMcp} onCancel={() => setShowAddMcp(false)} card={card} />}
+
+        {mcpServers.map((server) => {
+          const isTesting = testingMcp === server.id;
+          const testResult = mcpTestResult?.id === server.id ? mcpTestResult : null;
+          return (
+            <div key={server.id} style={card}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                  <span style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>{"\u{1F50C}"}</span>
+                  <div>
+                    <div style={{ fontSize: "0.6rem", fontWeight: 600, color: "var(--text)" }}>
+                      {server.name}
+                    </div>
+                    <div style={{ fontSize: "0.45rem", color: "var(--text-muted)" }}>
+                      {server.transport === "stdio"
+                        ? `${server.command} ${(server.args || []).join(" ")}`
+                        : server.url}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleToggleMcp(server.id, !server.enabled)}
+                  style={{
+                    background: server.enabled ? "var(--accent)" : "var(--border)",
+                    border: "none",
+                    borderRadius: 8,
+                    width: 28,
+                    height: 16,
+                    position: "relative",
+                    cursor: "pointer",
+                    flexShrink: 0,
+                    transition: "background 0.15s",
+                  }}
+                >
+                  <span style={{ position: "absolute", top: 2, left: server.enabled ? 14 : 2, width: 12, height: 12, borderRadius: "50%", background: "var(--bg)", transition: "left 0.15s" }} />
+                </button>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginTop: "0.35rem" }}>
+                <button
+                  onClick={() => handleTestMcp(server.id)}
+                  disabled={isTesting}
+                  style={{
+                    background: "none",
+                    border: "1px solid var(--border)",
+                    borderRadius: 4,
+                    color: isTesting ? "var(--yellow)" : "var(--text)",
+                    cursor: isTesting ? "wait" : "pointer",
+                    fontFamily: "inherit",
+                    fontSize: "0.45rem",
+                    padding: "0.15rem 0.4rem",
+                  }}
+                >
+                  {isTesting ? "Testing..." : "Test"}
+                </button>
+                <button
+                  onClick={() => handleRemoveMcp(server.id)}
+                  style={{
+                    background: "none",
+                    border: "1px solid var(--border)",
+                    borderRadius: 4,
+                    color: "var(--text)",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    fontSize: "0.45rem",
+                    padding: "0.15rem 0.4rem",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = "var(--red)";
+                    e.currentTarget.style.color = "var(--red)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = "var(--border)";
+                    e.currentTarget.style.color = "var(--text)";
+                  }}
+                >
+                  Remove
+                </button>
+                {testResult && (
+                  <span style={{ fontSize: "0.4rem", color: testResult.success ? "var(--green)" : "var(--red)" }}>
+                    {testResult.message}
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {mcpServers.length === 0 && !showAddMcp && (
+          <div style={{ ...card, textAlign: "center", color: "var(--text-muted)", fontSize: "0.45rem", padding: "0.8rem" }}>
+            No MCP servers configured
+          </div>
+        )}
 
         {/* ── Skills ── */}
         <div style={{ ...sectionTitle, marginTop: "1.25rem" }}>
@@ -640,6 +844,160 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
 
         {/* Bottom spacer */}
         <div style={{ height: "2rem" }} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Add MCP Server Form ─────────────────────────────────────────────
+
+function AddMcpForm({
+  onAdd,
+  onCancel,
+  card,
+}: {
+  onAdd: (server: Omit<McpServer, "id" | "enabled" | "addedAt">) => void;
+  onCancel: () => void;
+  card: React.CSSProperties;
+}) {
+  const [name, setName] = useState("");
+  const [transport, setTransport] = useState<"stdio" | "sse">("stdio");
+  const [command, setCommand] = useState("");
+  const [args, setArgs] = useState("");
+  const [url, setUrl] = useState("");
+
+  const inputStyle: React.CSSProperties = {
+    background: "var(--bg)",
+    border: "1px solid var(--border)",
+    borderRadius: 4,
+    padding: "0.25rem 0.4rem",
+    fontSize: "0.5rem",
+    color: "var(--text)",
+    fontFamily: "inherit",
+    outline: "none",
+    width: "100%",
+  };
+
+  const labelStyle: React.CSSProperties = {
+    fontSize: "0.45rem",
+    color: "var(--text-muted)",
+    marginBottom: "0.2rem",
+    display: "block",
+  };
+
+  const canSubmit =
+    name.trim() &&
+    (transport === "stdio" ? command.trim() : url.trim());
+
+  return (
+    <div style={{ ...card, marginBottom: "0.6rem" }}>
+      <div style={{ fontSize: "0.55rem", fontWeight: 600, color: "var(--text)", marginBottom: "0.5rem" }}>
+        Add MCP Server
+      </div>
+
+      <div style={{ marginBottom: "0.4rem" }}>
+        <label style={labelStyle}>Name</label>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. My Data Source"
+          style={inputStyle}
+        />
+      </div>
+
+      <div style={{ marginBottom: "0.4rem" }}>
+        <label style={labelStyle}>Transport</label>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          {(["stdio", "sse"] as const).map((t) => (
+            <label key={t} style={{ fontSize: "0.45rem", color: "var(--text)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.2rem" }}>
+              <input
+                type="radio"
+                name="transport"
+                checked={transport === t}
+                onChange={() => setTransport(t)}
+                style={{ accentColor: "var(--accent)" }}
+              />
+              {t.toUpperCase()}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {transport === "stdio" ? (
+        <>
+          <div style={{ marginBottom: "0.4rem" }}>
+            <label style={labelStyle}>Command</label>
+            <input
+              value={command}
+              onChange={(e) => setCommand(e.target.value)}
+              placeholder="e.g. npx, node, uvx"
+              style={inputStyle}
+            />
+          </div>
+          <div style={{ marginBottom: "0.4rem" }}>
+            <label style={labelStyle}>Arguments (space-separated)</label>
+            <input
+              value={args}
+              onChange={(e) => setArgs(e.target.value)}
+              placeholder="e.g. -y @modelcontextprotocol/server-filesystem /tmp"
+              style={inputStyle}
+            />
+          </div>
+        </>
+      ) : (
+        <div style={{ marginBottom: "0.4rem" }}>
+          <label style={labelStyle}>URL</label>
+          <input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="e.g. http://localhost:8080/sse"
+            style={inputStyle}
+          />
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: "0.35rem", marginTop: "0.5rem" }}>
+        <button
+          onClick={() => {
+            if (!canSubmit) return;
+            onAdd({
+              name: name.trim(),
+              transport,
+              command: transport === "stdio" ? command.trim() : undefined,
+              args: transport === "stdio" && args.trim() ? args.trim().split(/\s+/) : undefined,
+              url: transport === "sse" ? url.trim() : undefined,
+            });
+          }}
+          disabled={!canSubmit}
+          style={{
+            background: canSubmit ? "var(--accent)" : "var(--border)",
+            border: "none",
+            borderRadius: 4,
+            color: "var(--bg)",
+            cursor: canSubmit ? "pointer" : "not-allowed",
+            fontFamily: "inherit",
+            fontSize: "0.45rem",
+            padding: "0.25rem 0.6rem",
+            fontWeight: 600,
+          }}
+        >
+          Add Server
+        </button>
+        <button
+          onClick={onCancel}
+          style={{
+            background: "none",
+            border: "1px solid var(--border)",
+            borderRadius: 4,
+            color: "var(--text-muted)",
+            cursor: "pointer",
+            fontFamily: "inherit",
+            fontSize: "0.45rem",
+            padding: "0.25rem 0.6rem",
+          }}
+        >
+          Cancel
+        </button>
       </div>
     </div>
   );

@@ -13,7 +13,7 @@ Command center for your company. Desktop AI co-pilot that connects to your live 
 - **Skills system** — 12 built-in skills (meeting prep, writer, research, PM, data analyst, builder, UX, feedback, eng manager, people manager, sales pipeline, content marketing) with slash commands, per-skill prompt injection, and enable/disable toggles
 - **Subagent spawning** — LLM can suggest spawning specialized subagents mid-conversation; user approves via inline button, subagent opens as a new tab
 
-### Data Integrations (7 OAuth connectors)
+### Data Integrations (7 OAuth connectors + MCP)
 - **Google Calendar** — next 7 days of events, auto token refresh with 5-min expiry buffer
 - **Gmail** — recent emails with unread status
 - **Linear** — assigned issues (excl. canceled/completed), priority mapping via GraphQL
@@ -21,6 +21,7 @@ Command center for your company. Desktop AI co-pilot that connects to your live 
 - **Notion** — recent pages by last edit, OAuth + internal token fallback
 - **Slack** — recent channel messages (past 24h), username caching
 - **Granola** — meeting notes from local macOS cache (last 7 days)
+- **Generic MCP client** — connect any MCP server (stdio or SSE) as a datasource. Add/test/toggle servers in Settings, resources auto-injected into AI context
 
 ### Context & Intelligence
 - **Dynamic system prompt builder** — assembles user profile, projects, calendar, metrics, Slack highlights, competitors, and todos into LLM context
@@ -51,7 +52,7 @@ Command center for your company. Desktop AI co-pilot that connects to your live 
 
 ### Settings & Onboarding
 - **4-step onboarding** — Welcome, Backend detection, Datasource connection (polls every 3s), Ready
-- **Settings page** — Profile (editable name/role/company), Connected Tools (status + connect/disconnect), AI Engines (version + install status), Agents (inline rename, delete, backend selector), Skills (toggle enable/disable per skill)
+- **Settings page** — Profile (editable name/role/company), Connected Tools (status + connect/disconnect), AI Engines (version + install status), Agents (inline rename, delete, backend selector), Skills (toggle enable/disable per skill), MCP Servers (add/test/toggle/remove)
 - **Persisted state** — debounced localStorage writes (500ms)
 
 ### Desktop App
@@ -61,9 +62,11 @@ Command center for your company. Desktop AI co-pilot that connects to your live 
 
 ## Prerequisites
 
-- Node.js 20+
-- Claude CLI installed and authenticated (`claude` command available)
-- pnpm
+- **Node.js 20+**
+- **pnpm**
+- **Claude CLI** installed and authenticated (`claude` command available in your terminal)
+
+Optional backends: [Codex](https://github.com/openai/codex), [Ollama](https://ollama.com) (detected automatically at startup)
 
 ## Setup
 
@@ -72,13 +75,26 @@ pnpm install
 pnpm dev
 ```
 
-Open http://localhost:3000
+Open http://localhost:3000. The onboarding flow will guide you through connecting your tools.
+
+### Connecting datasources
+
+Click "Connect" in Settings for each service you want to use. You'll be redirected to the service's OAuth page to authorize read access. Tokens are stored locally in `~/.cockpit/tokens.json`.
+
+Supported services:
+- **Google** - Calendar events (next 7 days) and recent emails
+- **GitHub** - Open PRs involving you and notifications
+- **Linear** - Issues assigned to you
+- **Slack** - Recent channel messages
+- **Notion** - Recently edited pages
+- **Granola** - Meeting notes from local macOS cache (no OAuth needed)
+- **MCP Servers** - Any MCP-compatible server (stdio or SSE transport)
 
 ### Electron (desktop)
 
 ```bash
-pnpm electron:dev    # development
-pnpm electron:build  # build DMG
+pnpm electron:dev     # Development (with hot reload)
+pnpm electron:build   # Build distributable DMG/installer
 ```
 
 ## Architecture
@@ -86,7 +102,7 @@ pnpm electron:build  # build DMG
 ```
 src/
   app/
-    api/              # Next.js API routes (agents, chat, datasources, projects, backends, profile, skills)
+    api/              # API routes (agents, chat, datasources, projects, backends, profile, skills)
     page.tsx          # Main dashboard with 30s live polling
   components/
     columns/          # ChatColumn, FeedColumn (activity feed)
@@ -97,8 +113,8 @@ src/
   lib/
     agent-manager.ts  # Multi-agent CRUD + role-specific prompts
     claude-pool.ts    # Warm process pool for Claude CLI
-    context.ts        # System prompt builder (356 lines)
-    datasources/      # 7 OAuth connectors + manager + token store
+    context.ts        # System prompt builder with live context
+    datasources/      # 7 OAuth connectors + MCP client + manager + token store
     focus.ts          # 17 context focus helpers
     parser.ts         # Streaming cockpit_render + cockpit_subagent JSON parser
     projects/         # Project store (file-based persistence)
@@ -107,3 +123,14 @@ src/
 electron/
   main.js            # Electron main process
 ```
+
+## Data storage
+
+All user data stays local:
+- `~/.cockpit/tokens.json` - OAuth tokens (mode 0o600)
+- `~/.cockpit/profile.json` - Name, role, company
+- `~/.cockpit/projects.json` - Project definitions
+- `~/.cockpit/agents.json` - Agent configurations
+- `~/.cockpit/skills.json` - Enabled/disabled skills
+- `~/.cockpit/mcp-servers.json` - MCP server configurations (mode 0o600)
+- `localStorage` - Chat history and UI state
