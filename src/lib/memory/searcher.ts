@@ -235,10 +235,12 @@ export function searchMemoriesFast(
     for (const word of queryWords) {
       if (text.includes(word)) score += 1;
     }
-    // Boost recent memories
-    const ageHours = (Date.now() - m.updatedAt) / (1000 * 60 * 60);
-    if (ageHours < 24) score += 0.5;
-    if (ageHours < 1) score += 0.5;
+    // Boost recent memories only if they have keyword matches
+    if (score > 0) {
+      const ageHours = (Date.now() - m.updatedAt) / (1000 * 60 * 60);
+      if (ageHours < 24) score += 0.5;
+      if (ageHours < 1) score += 0.5;
+    }
 
     return { memory: m, score };
   });
