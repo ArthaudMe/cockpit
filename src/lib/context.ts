@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { buildSkillsPromptSection } from "./skills";
+import { buildMemoryPromptSection } from "./memory";
 import type { DatasourceData } from "./datasources/types";
 
 // Re-export client-safe types and functions so server-side consumers
@@ -41,7 +42,7 @@ function loadProfile(): Profile {
   }
 }
 
-export function buildSystemPrompt(ctx?: Context, live?: DatasourceData): string {
+export function buildSystemPrompt(ctx?: Context, live?: DatasourceData, userMessage?: string): string {
   const profile = loadProfile();
   const context = ctx || EMPTY_CONTEXT;
 
@@ -166,7 +167,7 @@ ${analytics ? `\n## Key Metrics\n${analytics}` : ""}
 ## Recent Slack Activity
 ${slack}
 ${competitors ? `\n## Competitor Intel\n${competitors}` : ""}
-${todos ? `\n## Todo List\n${todos}` : ""}${liveLinear}${liveGitHub}${liveEmails}${liveNotion}${liveGranola}${liveMcp}
+${todos ? `\n## Todo List\n${todos}` : ""}${liveLinear}${liveGitHub}${liveEmails}${liveNotion}${liveGranola}${liveMcp}${buildMemoryPromptSection(userMessage)}
 
 When answering questions, use this context naturally. Don't say "based on the context I was given" — just answer as if you naturally know this information. Be concise and direct, like a sharp chief of staff. If you don't have information, say so clearly rather than making things up.
 
