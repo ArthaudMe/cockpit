@@ -1,86 +1,22 @@
 import { spawn, type ChildProcess } from "child_process";
 import { buildSystemPrompt } from "./context";
 import { randomBytes } from "crypto";
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync } from "fs";
 import { join } from "path";
-import { homedir } from "os";
+import { homedir, tmpdir } from "os";
+import { PROVIDERS, getProviderDefs, type ProviderDef } from "./provider-registry";
+import { buildAgentEnv } from "./agent-env";
+import { startEventServer, getEventServerInfo, onAgentEvent, removeAgentListeners } from "./agent-event-server";
+import { setupClaudeHooks, cleanupClaudeHooks } from "./claude-hooks";
 
-// ─── Backend Definitions ────────────────────────────────────────────
+// ─── Re-exports for backwards compat ────────────────────────────────
 
-export type AgentBackend = "claude" | "codex" | "ollama";
+export type AgentBackend = string;
 export type AgentRole = "general" | "research" | "writer" | "ops";
 
-export interface BackendModel {
-  id: string;
-  label: string;
-}
-
-interface BackendDef {
-  label: string;
-  binary: string;
-  models: BackendModel[];
-  defaultModel: string;
-  buildArgs: (model: string, systemPrompt: string) => string[];
-  supportsPrewarm: boolean;
-}
-
-const BACKENDS: Record<AgentBackend, BackendDef> = {
-  claude: {
-    label: "Claude",
-    binary: "claude",
-    models: [
-      { id: "claude-sonnet-4-6", label: "Sonnet (fast)" },
-      { id: "claude-opus-4-6", label: "Opus (smart)" },
-      { id: "claude-haiku-4-5-20251001", label: "Haiku (instant)" },
-    ],
-    defaultModel: "claude-sonnet-4-6",
-    buildArgs: (model, systemPrompt) => [
-      "-p",
-      "--output-format", "text",
-      "--model", model,
-      "--append-system-prompt", systemPrompt,
-    ],
-    supportsPrewarm: true,
-  },
-  codex: {
-    label: "Codex",
-    binary: "codex",
-    models: [
-      { id: "o4-mini", label: "o4-mini (fast)" },
-      { id: "o3", label: "o3 (smart)" },
-      { id: "gpt-4.1", label: "GPT-4.1" },
-    ],
-    defaultModel: "o4-mini",
-    buildArgs: (model, systemPrompt) => [
-      "-q",
-      "--model", model,
-      "--system-prompt", systemPrompt,
-    ],
-    supportsPrewarm: true,
-  },
-  ollama: {
-    label: "Ollama",
-    binary: "ollama",
-    models: [
-      { id: "llama3.3", label: "Llama 3.3" },
-      { id: "qwen3", label: "Qwen 3" },
-      { id: "deepseek-r1", label: "DeepSeek R1" },
-      { id: "gemma3", label: "Gemma 3" },
-    ],
-    defaultModel: "llama3.3",
-    buildArgs: (model, _systemPrompt) => ["run", model],
-    supportsPrewarm: false,
-  },
-};
-
-export function getBackendDefs() {
-  return Object.entries(BACKENDS).map(([key, def]) => ({
-    id: key as AgentBackend,
-    label: def.label,
-    models: def.models,
-    defaultModel: def.defaultModel,
-  }));
-}
+export { getProviderDefs as getBackendDefs };
+export type { ProviderDef };
+export type BackendModel = { id: string; label: string };
 
 // ─── Agent Types ────────────────────────────────────────────────────
 
@@ -147,12 +83,6 @@ function savePersistedAgents() {
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
-function cleanEnv() {
-  const env = { ...process.env };
-  delete env.CLAUDECODE;
-  return env;
-}
-
 const ROLE_PROMPTS: Record<AgentRole, string> = {
   general: `You are a sharp AI co-pilot for a founder. Be concise, direct, and actionable.`,
   research: `You are a research analyst. Dig deep into topics, find evidence, compare options, and present findings clearly. Be thorough but structured.`,
@@ -160,7 +90,6 @@ const ROLE_PROMPTS: Record<AgentRole, string> = {
   ops: `You are an operations assistant. Help with planning, scheduling, tracking, and process. Think in systems and checklists.`,
 };
 
-// Build fresh each time an agent is created so it picks up profile changes
 function getBaseContext() {
   return buildSystemPrompt();
 }
@@ -168,6 +97,7 @@ function getBaseContext() {
 interface AgentStateExt extends AgentState {
   customPrompt?: string | null;
   activeRequests?: number;
+  hookDir?: string;
 }
 
 const agents = new Map<string, AgentStateExt>();
@@ -181,13 +111,26 @@ function buildAgentSystemPrompt(role: AgentRole, customPrompt?: string | null): 
   return `${rolePrompt}\n\n${getBaseContext()}`;
 }
 
-function spawnForBackend(backend: AgentBackend, model: string, systemPrompt: string): ChildProcess {
-  const def = BACKENDS[backend];
+function getProviderOrThrow(backend: string): ProviderDef {
+  const provider = PROVIDERS[backend];
+  if (!provider) throw new Error(`Unknown backend: ${backend}`);
+  return provider;
+}
+
+function spawnForBackend(
+  backend: string,
+  model: string,
+  systemPrompt: string,
+  extraEnv?: Record<string, string>,
+  cwd?: string
+): ChildProcess {
+  const def = getProviderOrThrow(backend);
   const args = def.buildArgs(model, systemPrompt);
 
   const proc = spawn(def.binary, args, {
     stdio: ["pipe", "pipe", "pipe"],
-    env: cleanEnv(),
+    env: buildAgentEnv(extraEnv),
+    cwd,
   });
 
   proc.stderr?.on("data", (chunk: Buffer) => {
@@ -199,7 +142,7 @@ function spawnForBackend(backend: AgentBackend, model: string, systemPrompt: str
 
 function warmAgent(state: AgentStateExt) {
   const { backend, model, systemPrompt } = state.info;
-  const def = BACKENDS[backend];
+  const def = getProviderOrThrow(backend);
 
   if (state.warmProc) {
     state.warmProc.kill();
@@ -207,7 +150,25 @@ function warmAgent(state: AgentStateExt) {
   }
 
   if (def.supportsPrewarm) {
-    const proc = spawnForBackend(backend, model, systemPrompt);
+    // Set up hooks for Claude
+    let cwd: string | undefined;
+    const extraEnv: Record<string, string> = {};
+    const eventInfo = getEventServerInfo();
+
+    if (def.supportsHooks && eventInfo) {
+      const hookDir = setupClaudeHooks({
+        port: eventInfo.port,
+        token: eventInfo.token,
+        agentId: state.info.id,
+      });
+      state.hookDir = hookDir;
+      cwd = hookDir;
+      extraEnv.COCKPIT_HOOK_PORT = String(eventInfo.port);
+      extraEnv.COCKPIT_HOOK_TOKEN = eventInfo.token;
+      extraEnv.COCKPIT_AGENT_ID = state.info.id;
+    }
+
+    const proc = spawnForBackend(backend, model, systemPrompt, extraEnv, cwd);
     proc.on("error", () => {
       if (state.warmProc === proc) state.warmProc = null;
     });
@@ -232,7 +193,7 @@ export function createAgent(
   id?: string
 ): AgentInfo {
   const agentId = id || genId();
-  const def = BACKENDS[backend];
+  const def = getProviderOrThrow(backend);
   const resolvedModel = model || def.defaultModel;
   const systemPrompt = buildAgentSystemPrompt(role, customPrompt);
 
@@ -249,6 +210,13 @@ export function createAgent(
 
   const state: AgentStateExt = { info, warmProc: null, customPrompt: customPrompt ?? null };
   agents.set(agentId, state);
+
+  // Listen for hook events from this agent
+  onAgentEvent(agentId, (event) => {
+    if (event.type === "stop") {
+      state.info.busy = false;
+    }
+  });
 
   const proc = warmAgent(state);
   if (proc) {
@@ -289,13 +257,14 @@ export function updateAgent(
   if (updates.backend) state.info.backend = updates.backend;
   if (updates.model) state.info.model = updates.model;
 
-  // If backend changed without a model, use the new backend's default
   if (updates.backend && !updates.model) {
-    state.info.model = BACKENDS[updates.backend].defaultModel;
+    const def = getProviderOrThrow(updates.backend);
+    state.info.model = def.defaultModel;
   }
 
   if (needsRespawn) {
     state.info.systemPrompt = buildAgentSystemPrompt(state.info.role, state.customPrompt);
+    cleanupClaudeHooks(id);
     warmAgent(state);
     console.log("[agent-manager] re-warmed agent %s (backend=%s model=%s)", id, state.info.backend, state.info.model);
   }
@@ -311,30 +280,96 @@ export function deleteAgent(id: string): boolean {
   if (state.warmProc) {
     state.warmProc.kill();
   }
+  cleanupClaudeHooks(id);
+  removeAgentListeners(id);
   agents.delete(id);
   console.log("[agent-manager] deleted agent %s", id);
   savePersistedAgents();
   return true;
 }
 
+function writeImageToTemp(dataUrl: string): string {
+  const match = dataUrl.match(/^data:image\/(\w+);base64,(.+)$/);
+  if (!match) throw new Error("Invalid image data URL");
+  const ext = match[1] === "jpeg" ? "jpg" : match[1];
+  const buffer = Buffer.from(match[2], "base64");
+  const filePath = join(tmpdir(), `cockpit-img-${randomBytes(6).toString("hex")}.${ext}`);
+  writeFileSync(filePath, buffer);
+  return filePath;
+}
+
 export function sendToAgent(
   id: string,
   message: string,
-  focusContext?: string
+  focusContext?: string,
+  images?: string[]
 ): ChildProcess {
   const state = agents.get(id);
   if (!state) throw new Error(`Agent ${id} not found`);
 
   const { backend, model, systemPrompt } = state.info;
+  const def = getProviderOrThrow(backend);
+  const hasImages = images && images.length > 0;
+  const tempImagePaths: string[] = [];
+
   let proc: ChildProcess;
 
-  if (state.warmProc && state.warmProc.stdin?.writable) {
+  const extraEnv: Record<string, string> = {};
+  const eventInfo = getEventServerInfo();
+  if (eventInfo) {
+    extraEnv.COCKPIT_HOOK_PORT = String(eventInfo.port);
+    extraEnv.COCKPIT_HOOK_TOKEN = eventInfo.token;
+    extraEnv.COCKPIT_AGENT_ID = id;
+  }
+
+  if (hasImages && backend === "claude") {
+    for (const img of images) {
+      try {
+        tempImagePaths.push(writeImageToTemp(img));
+      } catch (err) {
+        console.error("[agent-manager] failed to write image:", err);
+      }
+    }
+
+    const args = def.buildArgs(model, systemPrompt, { images: tempImagePaths });
+    let cwd: string | undefined;
+    if (def.supportsHooks && eventInfo) {
+      const hookDir = setupClaudeHooks({
+        port: eventInfo.port,
+        token: eventInfo.token,
+        agentId: id,
+      });
+      cwd = hookDir;
+    }
+
+    proc = spawn(def.binary, args, {
+      stdio: ["pipe", "pipe", "pipe"],
+      env: buildAgentEnv(extraEnv),
+      cwd,
+    });
+    proc.stderr?.on("data", (chunk: Buffer) => {
+      console.error(`[agent:${backend}:stderr]`, chunk.toString());
+    });
+
+    console.log("[agent-manager] spawned with %d images for %s", tempImagePaths.length, id);
+  } else if (state.warmProc && state.warmProc.stdin?.writable) {
     proc = state.warmProc;
     state.warmProc = null;
     console.log("[agent-manager] using warm process for %s (pid %d)", id, proc.pid);
   } else {
     console.log("[agent-manager] cold start for %s (backend=%s)", id, backend);
-    proc = spawnForBackend(backend, model, systemPrompt);
+
+    let cwd: string | undefined;
+    if (def.supportsHooks && eventInfo) {
+      const hookDir = setupClaudeHooks({
+        port: eventInfo.port,
+        token: eventInfo.token,
+        agentId: id,
+      });
+      cwd = hookDir;
+    }
+
+    proc = spawnForBackend(backend, model, systemPrompt, extraEnv, cwd);
   }
 
   state.activeRequests = (state.activeRequests || 0) + 1;
@@ -344,15 +379,21 @@ export function sendToAgent(
   if (focusContext) {
     prompt = `[Context:\n${focusContext}]\n\n${message}`;
   }
+  if (hasImages && backend !== "claude") {
+    prompt = `[${images!.length} image(s) attached]\n\n${prompt}`;
+  }
 
   proc.stdin!.write(prompt);
   proc.stdin!.end();
 
-  const def = BACKENDS[backend];
   proc.on("close", () => {
     state.activeRequests = Math.max(0, (state.activeRequests || 1) - 1);
     state.info.busy = state.activeRequests > 0;
-    // Pre-warm a fresh process for the next request
+
+    for (const p of tempImagePaths) {
+      try { unlinkSync(p); } catch { /* ignore */ }
+    }
+
     if (agents.has(id) && def.supportsPrewarm && !state.warmProc) {
       warmAgent(state);
     }
@@ -361,14 +402,29 @@ export function sendToAgent(
   return proc;
 }
 
-// ─── Boot: restore persisted agents or create default ───────────────
+// ─── Boot ───────────────────────────────────────────────────────────
 
-const saved = loadPersistedAgents();
-if (saved.length > 0) {
-  for (const a of saved) {
-    createAgent(a.name, a.role, a.customPrompt, a.backend, a.model, a.id);
-  }
-  console.log("[agent-manager] restored %d agents from disk", saved.length);
-} else {
-  createAgent("Pilot", "general");
-}
+// Start the event server, then restore agents
+startEventServer()
+  .then(() => {
+    const saved = loadPersistedAgents();
+    if (saved.length > 0) {
+      for (const a of saved) {
+        createAgent(a.name, a.role, a.customPrompt, a.backend, a.model, a.id);
+      }
+      console.log("[agent-manager] restored %d agents from disk", saved.length);
+    } else {
+      createAgent("Pilot", "general");
+    }
+  })
+  .catch((err) => {
+    console.error("[agent-manager] event server failed, booting without hooks:", err);
+    const saved = loadPersistedAgents();
+    if (saved.length > 0) {
+      for (const a of saved) {
+        createAgent(a.name, a.role, a.customPrompt, a.backend, a.model, a.id);
+      }
+    } else {
+      createAgent("Pilot", "general");
+    }
+  });
