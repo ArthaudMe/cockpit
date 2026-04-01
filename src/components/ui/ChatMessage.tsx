@@ -10,6 +10,7 @@ import type { SubagentSuggestion } from "@/lib/parser";
 type Message = {
   role: "user" | "assistant";
   content: string;
+  images?: string[];
 };
 
 function SimpleMarkdown({ content }: { content: string }) {
@@ -130,6 +131,31 @@ export function ChatMessage({
             lineHeight: 1.4,
           }}
         >
+          {message.images && message.images.length > 0 && (
+            <div
+              style={{
+                display: "flex",
+                gap: "0.3rem",
+                flexWrap: "wrap",
+                marginBottom: message.content ? "0.35rem" : 0,
+              }}
+            >
+              {message.images.map((img, i) => (
+                <img
+                  key={i}
+                  src={img}
+                  alt=""
+                  style={{
+                    maxWidth: 180,
+                    maxHeight: 140,
+                    borderRadius: 3,
+                    objectFit: "cover",
+                    border: "1px solid rgba(0,0,0,0.15)",
+                  }}
+                />
+              ))}
+            </div>
+          )}
           {message.content}
         </div>
       </div>

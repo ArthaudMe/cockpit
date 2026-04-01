@@ -14,15 +14,15 @@ export async function POST(
     return new Response("Agent not found", { status: 404 });
   }
 
-  const { message, focusContext } = await req.json();
-  if (!message || typeof message !== "string") {
+  const { message, focusContext, images } = await req.json();
+  if ((!message || typeof message !== "string") && (!images || !Array.isArray(images) || images.length === 0)) {
     return new Response("Missing message", { status: 400 });
   }
 
   const encoder = new TextEncoder();
 
   try {
-    const proc = sendToAgent(id, message, focusContext);
+    const proc = sendToAgent(id, message || "", focusContext, images);
 
     let responseText = "";
 

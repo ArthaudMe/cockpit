@@ -9,7 +9,7 @@ let mainWindow;
 let nextServer;
 
 const isDev = process.env.NODE_ENV === "development";
-const PORT = isDev ? 3000 : 3123;
+const PORT = isDev ? 3939 : 3123;
 const PROTOCOL = "cockpit";
 
 const APP_ROOT = app.isPackaged
@@ -189,6 +189,19 @@ function createMainWindow() {
     mainWindow = null;
   });
 
+  // If the renderer crashes, reload instead of showing a blank window
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    console.error("[electron] renderer crashed:", details.reason);
+    if (!app.isQuitting) {
+      mainWindow.loadURL(`http://localhost:${PORT}`);
+    }
+  });
+
+  mainWindow.webContents.on("unresponsive", () => {
+    console.warn("[electron] window unresponsive, reloading...");
+    mainWindow.webContents.reload();
+  });
+
   return mainWindow;
 }
 
@@ -358,9 +371,12 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => {
-  app.isQuitting = true;
-  if (nextServer) nextServer.kill();
-  app.quit();
+  // macOS: keep app alive when windows close (dock click re-opens)
+  if (process.platform !== "darwin") {
+    app.isQuitting = true;
+    if (nextServer) nextServer.kill();
+    app.quit();
+  }
 });
 
 app.on("before-quit", () => {
@@ -369,8 +385,11 @@ app.on("before-quit", () => {
 });
 
 app.on("activate", () => {
-  if (mainWindow === null) {
+  if (mainWindow === null || mainWindow.isDestroyed()) {
     createMainWindow();
     mainWindow.show();
+  } else {
+    mainWindow.show();
+    mainWindow.focus();
   }
 });
