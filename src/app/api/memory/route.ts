@@ -1,30 +1,57 @@
 import { NextRequest } from "next/server";
-import {
-  getAllMemories,
-  getMemoryStats,
-  deleteMemory,
-  clearAllMemories,
-} from "@/lib/memory";
+import { getMemoryStore, type MemoryTarget, type MemoryAction } from "@/lib/memory";
 
-/** GET /api/memory — list all memories + stats */
+/** GET /api/memory — list all entries */
 export async function GET() {
-  const memories = getAllMemories();
-  const stats = getMemoryStats();
-  return Response.json({ memories, stats });
+  const store = getMemoryStore();
+  return Response.json({
+    memory: store.getEntries("memory"),
+    user: store.getEntries("user"),
+  });
 }
 
-/** DELETE /api/memory — delete a specific memory or clear all */
-export async function DELETE(req: NextRequest) {
-  const { id } = await req.json();
+/** POST /api/memory — add, replace, or remove an entry */
+export async function POST(req: NextRequest) {
+  const body = await req.json();
+  const { action, target, content, old_text } = body as {
+    action: MemoryAction;
+    target: MemoryTarget;
+    content?: string;
+    old_text?: string;
+  };
 
-  if (id === "*") {
-    clearAllMemories();
-    return Response.json({ ok: true, cleared: true });
+  if (!action || !target) {
+    return Response.json({ error: "Missing action or target" }, { status: 400 });
+  }
+  if (!["add", "replace", "remove"].includes(action)) {
+    return Response.json({ error: "Invalid action" }, { status: 400 });
+  }
+  if (!["memory", "user"].includes(target)) {
+    return Response.json({ error: "Invalid target" }, { status: 400 });
   }
 
-  const deleted = deleteMemory(id);
-  if (!deleted) {
-    return new Response("Memory not found", { status: 404 });
+  const store = getMemoryStore();
+  let result: { ok: boolean; error?: string };
+
+  switch (action) {
+    case "add":
+      result = store.add(target, content || "");
+      break;
+    case "replace":
+      result = store.replace(target, old_text || "", content || "");
+      break;
+    case "remove":
+      result = store.remove(target, old_text || "");
+      break;
   }
-  return Response.json({ ok: true, deleted: id });
+
+  if (!result.ok) {
+    return Response.json({ error: result.error }, { status: 400 });
+  }
+
+  return Response.json({
+    ok: true,
+    memory: store.getEntries("memory"),
+    user: store.getEntries("user"),
+  });
 }

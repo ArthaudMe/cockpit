@@ -167,7 +167,9 @@ ${analytics ? `\n## Key Metrics\n${analytics}` : ""}
 ## Recent Slack Activity
 ${slack}
 ${competitors ? `\n## Competitor Intel\n${competitors}` : ""}
-${todos ? `\n## Todo List\n${todos}` : ""}${liveLinear}${liveGitHub}${liveEmails}${liveNotion}${liveGranola}${liveMcp}${buildMemoryPromptSection(userMessage)}
+${todos ? `\n## Todo List\n${todos}` : ""}${liveLinear}${liveGitHub}${liveEmails}${liveNotion}${liveGranola}${liveMcp}
+
+${buildMemoryPromptSection()}
 
 When answering questions, use this context naturally. Don't say "based on the context I was given" — just answer as if you naturally know this information. Be concise and direct, like a sharp chief of staff. If you don't have information, say so clearly rather than making things up.
 

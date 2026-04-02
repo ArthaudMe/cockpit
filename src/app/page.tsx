@@ -11,6 +11,7 @@ import { ChatColumn } from "@/components/columns/ChatColumn";
 import { ContextualChatView, type ContextFocus } from "@/components/views/ContextualChatView";
 import { OnboardingView } from "@/components/views/OnboardingView";
 import { SettingsView } from "@/components/views/SettingsView";
+import { initAnalytics, track } from "@/lib/analytics";
 import { EditorPanel, type OpenFile } from "@/components/views/EditorPanel";
 import { QuickOpen } from "@/components/ui/QuickOpen";
 import {
@@ -50,10 +51,21 @@ export default function Home() {
   const [contextData, setContextData] = useState<Context>(EMPTY_CONTEXT);
   const [inferredProjects, setInferredProjects] = useState<any[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
+  const [userName, setUserName] = useState<string | undefined>();
   const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [showQuickOpen, setShowQuickOpen] = useState(false);
   const [projectCwd, setProjectCwd] = useState("");
+
+  // Fetch user profile name (for filtering attendees)
+  useEffect(() => {
+    fetch("/api/profile")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.name) setUserName(data.name);
+      })
+      .catch(() => {});
+  }, []);
 
   // Fetch live datasource data
   useEffect(() => {
@@ -63,7 +75,7 @@ export default function Home() {
       fetch("/api/datasources/data")
         .then((r) => r.json())
         .then((data: DatasourceData) => {
-          setContextData(buildContextFromLiveData(data));
+          setContextData(buildContextFromLiveData(data, userName));
         })
         .catch(() => {});
     };
@@ -72,7 +84,7 @@ export default function Home() {
     interval = setInterval(fetchLiveData, 30_000); // refresh every 30s
 
     return () => clearInterval(interval);
-  }, []);
+  }, [userName]);
 
   // Fetch inferred projects (separate from data poll — cached on server for 5 min)
   const fetchProjects = useCallback((force = false) => {
@@ -86,6 +98,12 @@ export default function Home() {
       })
       .catch(() => {})
       .finally(() => setProjectsLoading(false));
+  }, []);
+
+  // Init analytics on mount
+  useEffect(() => {
+    initAnalytics();
+    track("app_opened");
   }, []);
 
   useEffect(() => {

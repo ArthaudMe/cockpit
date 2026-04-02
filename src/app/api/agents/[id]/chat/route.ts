@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { sendToAgent, getAgent } from "@/lib/agent-manager";
-import { extractMemories } from "@/lib/memory";
+import { extractAndProcessMemories } from "@/lib/memory";
 
 export const maxDuration = 300;
 
@@ -46,20 +46,16 @@ export async function POST(
           }
           controller.close();
 
-          // Fire-and-forget: extract memories from this conversation
-          if (responseText.length > 20) {
-            extractMemories({
-              sessionId: `${id}_${Date.now()}`,
-              agentId: id,
-              agentName: agent!.name,
-              turns: [
-                { role: "user", content: message },
-                { role: "assistant", content: responseText },
-              ],
-              timestamp: Date.now(),
-            }).catch((err) =>
-              console.error("[memory] background extraction failed:", err)
-            );
+          // Fire-and-forget: extract and process memory commands
+          if (responseText) {
+            try {
+              const { processed } = extractAndProcessMemories(responseText);
+              if (processed.length > 0) {
+                console.log("[agent:%s] processed %d memory commands", id, processed.length);
+              }
+            } catch (err) {
+              console.error("[agent:%s] memory extraction error:", id, err);
+            }
           }
         });
 

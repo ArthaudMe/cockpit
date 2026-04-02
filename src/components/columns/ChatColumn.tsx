@@ -5,6 +5,7 @@ import type { Context } from "@/lib/context-client";
 import { ChatMessage } from "../ui/ChatMessage";
 import { usePersistedState } from "@/lib/use-persisted-state";
 import { SKILLS, expandSlashCommand } from "@/lib/skills-defs";
+import { track } from "@/lib/analytics";
 import type { SubagentSuggestion } from "@/lib/parser";
 
 type Message = {
@@ -173,6 +174,7 @@ export function ChatColumn({
 
     const targetAgentId = activeAgentId;
     onInputChange("");
+    track("chat_message_sent");
     setPendingImages([]);
     setMessagesFor(targetAgentId, (prev) => [
       ...prev,
