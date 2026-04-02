@@ -40,11 +40,13 @@ export function ChatColumn({
   inputValue,
   onInputChange,
   claudeConnected,
+  onOpenFile,
 }: {
   context: Context;
   inputValue: string;
   onInputChange: (v: string) => void;
   claudeConnected: boolean;
+  onOpenFile?: (path: string) => void;
 }) {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [backends, setBackends] = useState<BackendDef[]>([]);
@@ -593,7 +595,7 @@ export function ChatColumn({
         )}
 
         {messages.map((msg, i) => (
-          <ChatMessage key={i} message={msg} onApproveSubagent={handleApproveSubagent} />
+          <ChatMessage key={i} message={msg} onApproveSubagent={handleApproveSubagent} onOpenFile={onOpenFile} />
         ))}
 
         {streaming && (

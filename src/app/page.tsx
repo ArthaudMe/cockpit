@@ -11,6 +11,8 @@ import { ChatColumn } from "@/components/columns/ChatColumn";
 import { ContextualChatView, type ContextFocus } from "@/components/views/ContextualChatView";
 import { OnboardingView } from "@/components/views/OnboardingView";
 import { SettingsView } from "@/components/views/SettingsView";
+import { EditorPanel, type OpenFile } from "@/components/views/EditorPanel";
+import { QuickOpen } from "@/components/ui/QuickOpen";
 import {
   focusCalendarEvent,
   focusMetric,
@@ -48,6 +50,10 @@ export default function Home() {
   const [contextData, setContextData] = useState<Context>(EMPTY_CONTEXT);
   const [inferredProjects, setInferredProjects] = useState<any[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
+  const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
+  const [activeFileIndex, setActiveFileIndex] = useState(0);
+  const [showQuickOpen, setShowQuickOpen] = useState(false);
+  const [projectCwd, setProjectCwd] = useState("");
 
   // Fetch live datasource data
   useEffect(() => {
@@ -95,6 +101,7 @@ export default function Home() {
           version: data.version,
           checking: false,
         });
+        if (data.cwd) setProjectCwd(data.cwd);
       })
       .catch(() => {
         setClaudeStatus({ connected: false, checking: false });
@@ -116,6 +123,7 @@ export default function Home() {
           version: data.version,
           checking: false,
         });
+        if (data.cwd) setProjectCwd(data.cwd);
       })
       .catch(() => {
         setClaudeStatus({ connected: false, checking: false });
@@ -155,6 +163,73 @@ export default function Home() {
   const handleTodoClick = useCallback((index: number) => {
     handleOpenFocus(focusTodo(contextData.todos[index]));
   }, [handleOpenFocus, contextData.todos]);
+
+  // ─── File editor callbacks ──────────────────────────────────────────
+
+  const handleOpenFile = useCallback(async (filePath: string) => {
+    // If already open, just switch to it
+    const existing = openFiles.findIndex((f) => f.path === filePath);
+    if (existing >= 0) {
+      setActiveFileIndex(existing);
+      return;
+    }
+
+    try {
+      const params = new URLSearchParams({ path: filePath });
+      const res = await fetch(`/api/files?${params}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setOpenFiles((prev) => [
+        ...prev,
+        { path: data.path, content: data.content, language: data.language, dirty: false },
+      ]);
+      setActiveFileIndex(openFiles.length); // new tab index
+    } catch {
+      // silently fail
+    }
+  }, [openFiles]);
+
+  const handleCloseFile = useCallback((index: number) => {
+    setOpenFiles((prev) => prev.filter((_, i) => i !== index));
+    setActiveFileIndex((prev) => {
+      if (index < prev) return prev - 1;
+      if (index === prev) return Math.max(0, prev - 1);
+      return prev;
+    });
+  }, []);
+
+  const handleCloseAllFiles = useCallback(() => {
+    setOpenFiles([]);
+    setActiveFileIndex(0);
+  }, []);
+
+  const handleFileChange = useCallback((index: number, content: string) => {
+    setOpenFiles((prev) =>
+      prev.map((f, i) =>
+        i === index ? { ...f, content, dirty: true } : f
+      )
+    );
+  }, []);
+
+  const handleFileSaved = useCallback((index: number) => {
+    setOpenFiles((prev) =>
+      prev.map((f, i) =>
+        i === index ? { ...f, dirty: false } : f
+      )
+    );
+  }, []);
+
+  // Cmd+P global shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "p") {
+        e.preventDefault();
+        setShowQuickOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   // Show onboarding if no backends are connected (and we're done checking)
   if (!claudeStatus.checking && !claudeStatus.connected) {
@@ -246,22 +321,44 @@ export default function Home() {
               inputValue={chatInput}
               onInputChange={setChatInput}
               claudeConnected={claudeStatus.connected}
+              onOpenFile={handleOpenFile}
             />
           )}
         </div>
-        <div style={{ width: 300, minWidth: 260, flexShrink: 0 }} className="overflow-y-auto">
-          <ContextColumn
-            context={contextData}
-            onPrefill={handlePrefill}
-            onCalendarClick={handleCalendarClick}
-            onMetricClick={handleMetricClick}
-            onSlackClick={handleSlackClick}
-            onCompetitorClick={handleCompetitorClick}
-            onTodoClick={handleTodoClick}
-            onSettingsClick={handleSettingsClick}
-          />
+        <div style={{ width: openFiles.length > 0 ? 500 : 300, minWidth: openFiles.length > 0 ? 400 : 260, flexShrink: 0, transition: "width 0.2s" }} className="overflow-y-auto">
+          {openFiles.length > 0 ? (
+            <EditorPanel
+              files={openFiles}
+              activeIndex={activeFileIndex}
+              onActivate={setActiveFileIndex}
+              onClose={handleCloseFile}
+              onCloseAll={handleCloseAllFiles}
+              onChange={handleFileChange}
+              onSaved={handleFileSaved}
+            />
+          ) : (
+            <ContextColumn
+              context={contextData}
+              onPrefill={handlePrefill}
+              onCalendarClick={handleCalendarClick}
+              onMetricClick={handleMetricClick}
+              onSlackClick={handleSlackClick}
+              onCompetitorClick={handleCompetitorClick}
+              onTodoClick={handleTodoClick}
+              onSettingsClick={handleSettingsClick}
+            />
+          )}
         </div>
       </div>
+
+      {/* Quick Open modal (Cmd+P) */}
+      {showQuickOpen && (
+        <QuickOpen
+          cwd={projectCwd}
+          onOpenFile={handleOpenFile}
+          onClose={() => setShowQuickOpen(false)}
+        />
+      )}
     </div>
   );
 }
