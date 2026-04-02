@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { track, isAnalyticsEnabled, setAnalyticsEnabled } from "@/lib/analytics";
 
 type SkillInfo = {
   id: string;
@@ -90,6 +91,11 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
   const [showAddMcp, setShowAddMcp] = useState(false);
   const [testingMcp, setTestingMcp] = useState<string | null>(null);
   const [mcpTestResult, setMcpTestResult] = useState<{ id: string; success: boolean; message: string } | null>(null);
+  const [analyticsOn, setAnalyticsOn] = useState(false);
+
+  useEffect(() => {
+    setAnalyticsOn(isAnalyticsEnabled());
+  }, []);
 
   const fetchDatasources = useCallback(() => {
     fetch("/api/datasources")
@@ -143,6 +149,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
   // Clear connecting state when the service becomes connected
   useEffect(() => {
     if (connecting && datasources.find((d) => d.id === connecting)?.connected) {
+      track("datasource_connected", { service: connecting });
       setConnecting(null);
     }
   }, [connecting, datasources]);
@@ -841,6 +848,42 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
             </div>
           );
         })}
+
+        {/* ── Analytics ── */}
+        <div style={{ ...sectionTitle, marginTop: "1.25rem" }}>Analytics</div>
+        <div style={card}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <div style={{ fontSize: "0.6rem", fontWeight: 600, color: "var(--text)" }}>
+                Usage analytics
+              </div>
+              <div style={{ fontSize: "0.45rem", color: "var(--text-muted)", marginTop: "0.15rem", lineHeight: 1.4 }}>
+                Help improve Cockpit by sharing anonymous usage data (features used, session count). No personal data or chat content is ever sent.
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                const next = !analyticsOn;
+                setAnalyticsOn(next);
+                setAnalyticsEnabled(next);
+              }}
+              style={{
+                background: analyticsOn ? "var(--accent)" : "var(--border)",
+                border: "none",
+                borderRadius: 8,
+                width: 28,
+                height: 16,
+                position: "relative",
+                cursor: "pointer",
+                flexShrink: 0,
+                transition: "background 0.15s",
+                marginLeft: "0.75rem",
+              }}
+            >
+              <span style={{ position: "absolute", top: 2, left: analyticsOn ? 14 : 2, width: 12, height: 12, borderRadius: "50%", background: "var(--bg)", transition: "left 0.15s" }} />
+            </button>
+          </div>
+        </div>
 
         {/* Bottom spacer */}
         <div style={{ height: "2rem" }} />

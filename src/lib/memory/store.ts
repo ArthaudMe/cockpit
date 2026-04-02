@@ -1,165 +1,259 @@
-/**
- * File-based memory store — no vector DB, no embeddings.
- *
- * All memories persisted as JSON in ~/.cockpit/memory/.
- * Simple, fast, embeddable — inspired by ASMR's "completely in-memory" approach.
- */
-
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
-import { join } from "path";
+import {
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  existsSync,
+  renameSync,
+} from "fs";
+import { join, dirname } from "path";
 import { homedir } from "os";
 import { randomBytes } from "crypto";
-import type { Memory, MemoryCategory, MemoryStats, ExtractedMemory } from "./types";
 
-const COCKPIT_DIR = join(homedir(), ".cockpit");
-const MEMORY_DIR = join(COCKPIT_DIR, "memory");
-const MEMORIES_FILE = join(MEMORY_DIR, "memories.json");
+// ─── Constants ──────────────────────────────────────────────────────
 
-// ─── In-memory cache ────────────────────────────────────────────────
+const MEMORIES_DIR = join(homedir(), ".cockpit", "memories");
+const DELIMITER = "§";
 
-let memories: Memory[] = [];
-let loaded = false;
+/** Max characters per file (Hermes defaults) */
+const LIMITS = {
+  memory: 2200,
+  user: 1375,
+} as const;
 
-function ensureDir() {
-  mkdirSync(MEMORY_DIR, { recursive: true });
+/** Patterns that suggest prompt injection or data exfiltration */
+const DANGEROUS_PATTERNS = [
+  /ignore\s+(all\s+)?previous\s+instructions/i,
+  /disregard\s+(all\s+)?prior/i,
+  /system\s*prompt/i,
+  /\bAPIKEY\b/i,
+  /\bpassword\b/i,
+  /\bsecret\b/i,
+  /https?:\/\/[^\s]*\.(ru|cn|tk|pw)\b/i,
+  /<script\b/i,
+  /data:text\/html/i,
+];
+
+// ─── Types ──────────────────────────────────────────────────────────
+
+export type MemoryTarget = "memory" | "user";
+export type MemoryAction = "add" | "replace" | "remove";
+
+export interface MemoryCommand {
+  action: MemoryAction;
+  target: MemoryTarget;
+  content?: string;
+  old_text?: string;
 }
 
-function load(): Memory[] {
-  if (loaded) return memories;
-  try {
-    ensureDir();
-    if (!existsSync(MEMORIES_FILE)) {
-      memories = [];
-      loaded = true;
-      return memories;
+// ─── Store ──────────────────────────────────────────────────────────
+
+export class MemoryStore {
+  private memory: string[] = [];
+  private user: string[] = [];
+
+  /** Frozen snapshot captured at load time — injected into system prompt */
+  private frozenMemory: string[] = [];
+  private frozenUser: string[] = [];
+
+  constructor() {
+    this.loadFromDisk();
+  }
+
+  // ── Disk I/O ────────────────────────────────────────────────────
+
+  private filePath(target: MemoryTarget): string {
+    return join(MEMORIES_DIR, target === "memory" ? "MEMORY.md" : "USER.md");
+  }
+
+  private parseFile(content: string): string[] {
+    return content
+      .split(DELIMITER)
+      .map((e) => e.trim())
+      .filter(Boolean);
+  }
+
+  private serializeEntries(entries: string[]): string {
+    if (entries.length === 0) return "";
+    return entries.map((e) => `${DELIMITER} ${e}`).join("\n");
+  }
+
+  private loadFromDisk() {
+    mkdirSync(MEMORIES_DIR, { recursive: true, mode: 0o700 });
+
+    for (const target of ["memory", "user"] as const) {
+      const p = this.filePath(target);
+      if (existsSync(p)) {
+        try {
+          const raw = readFileSync(p, "utf-8");
+          this[target] = this.parseFile(raw);
+        } catch {
+          this[target] = [];
+        }
+      }
     }
-    const raw = readFileSync(MEMORIES_FILE, "utf-8");
-    memories = JSON.parse(raw);
-    loaded = true;
-    return memories;
-  } catch {
-    memories = [];
-    loaded = true;
-    return memories;
+
+    // Freeze snapshot for system prompt injection
+    this.frozenMemory = [...this.memory];
+    this.frozenUser = [...this.user];
   }
-}
 
-function persist() {
-  try {
-    ensureDir();
-    writeFileSync(MEMORIES_FILE, JSON.stringify(memories, null, 2));
-  } catch (err) {
-    console.error("[memory-store] failed to persist:", err);
+  /** Atomic write: write to temp, rename into place */
+  private writeToDisk(target: MemoryTarget) {
+    const p = this.filePath(target);
+    mkdirSync(dirname(p), { recursive: true, mode: 0o700 });
+    const tmp = `${p}.${randomBytes(4).toString("hex")}.tmp`;
+    const data = this.serializeEntries(this[target]);
+    writeFileSync(tmp, data, { mode: 0o600 });
+    renameSync(tmp, p);
   }
-}
 
-// ─── Public API ─────────────────────────────────────────────────────
+  // ── Content Scanning ────────────────────────────────────────────
 
-export function genMemoryId(): string {
-  return "mem_" + randomBytes(6).toString("hex");
-}
+  private scanContent(text: string): boolean {
+    return DANGEROUS_PATTERNS.some((p) => p.test(text));
+  }
 
-export function getAllMemories(): Memory[] {
-  return load();
-}
+  // ── Actions ─────────────────────────────────────────────────────
 
-export function getMemoriesByCategory(category: MemoryCategory): Memory[] {
-  return load().filter((m) => m.category === category);
-}
+  add(target: MemoryTarget, content: string): { ok: boolean; error?: string } {
+    if (!content?.trim()) return { ok: false, error: "Empty content" };
+    if (this.scanContent(content))
+      return { ok: false, error: "Content flagged as potentially unsafe" };
 
-export function getActiveMemories(): Memory[] {
-  const all = load();
-  // Exclude superseded memories (ones that have been replaced by newer facts)
-  const supersededIds = new Set(
-    all.filter((m) => m.supersedes).map((m) => m.supersedes!)
-  );
-  return all.filter((m) => !supersededIds.has(m.id));
-}
+    const entries = this[target];
+    const limit = LIMITS[target];
 
-export function addMemory(extracted: ExtractedMemory, sourceSession: string): Memory {
-  load();
+    // Dedup: skip if already exists
+    if (entries.some((e) => e === content.trim())) {
+      return { ok: true }; // Silently succeed
+    }
 
-  // Check if this supersedes an existing memory
-  let supersedesId: string | undefined;
-  if (extracted.supersedes_content) {
-    const existing = memories.find(
-      (m) =>
-        m.category === extracted.category &&
-        m.content.toLowerCase().includes(extracted.supersedes_content!.toLowerCase().slice(0, 50))
+    // Check capacity
+    const current = this.serializeEntries(entries).length;
+    const newLen = current + DELIMITER.length + 1 + content.trim().length + 1;
+    if (newLen > limit) {
+      return {
+        ok: false,
+        error: `Would exceed ${target} limit (${limit} chars). Current: ${current}. Try replacing or removing an old entry first.`,
+      };
+    }
+
+    entries.push(content.trim());
+    this.writeToDisk(target);
+    return { ok: true };
+  }
+
+  replace(
+    target: MemoryTarget,
+    oldText: string,
+    content: string
+  ): { ok: boolean; error?: string } {
+    if (!oldText?.trim()) return { ok: false, error: "Missing old_text" };
+    if (!content?.trim()) return { ok: false, error: "Empty content" };
+    if (this.scanContent(content))
+      return { ok: false, error: "Content flagged as potentially unsafe" };
+
+    const entries = this[target];
+    const idx = entries.findIndex((e) =>
+      e.toLowerCase().includes(oldText.trim().toLowerCase())
     );
-    if (existing) {
-      supersedesId = existing.id;
+    if (idx === -1) {
+      return { ok: false, error: `No entry matching "${oldText}" found` };
     }
+
+    entries[idx] = content.trim();
+    this.writeToDisk(target);
+    return { ok: true };
   }
 
-  const memory: Memory = {
-    id: genMemoryId(),
-    category: extracted.category,
-    content: extracted.content,
-    context: extracted.context,
-    sourceSession,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    confidence: extracted.confidence,
-    supersedes: supersedesId,
-    tags: extracted.tags,
-  };
+  remove(
+    target: MemoryTarget,
+    oldText: string
+  ): { ok: boolean; error?: string } {
+    if (!oldText?.trim()) return { ok: false, error: "Missing old_text" };
 
-  memories.push(memory);
-  persist();
-  return memory;
-}
+    const entries = this[target];
+    const idx = entries.findIndex((e) =>
+      e.toLowerCase().includes(oldText.trim().toLowerCase())
+    );
+    if (idx === -1) {
+      return { ok: false, error: `No entry matching "${oldText}" found` };
+    }
 
-export function addMemories(extracted: ExtractedMemory[], sourceSession: string): Memory[] {
-  return extracted.map((e) => addMemory(e, sourceSession));
-}
-
-export function deleteMemory(id: string): boolean {
-  load();
-  const idx = memories.findIndex((m) => m.id === id);
-  if (idx === -1) return false;
-  memories.splice(idx, 1);
-  persist();
-  return true;
-}
-
-export function clearAllMemories(): void {
-  memories = [];
-  loaded = true;
-  persist();
-}
-
-export function getMemoryStats(): MemoryStats {
-  const all = load();
-  const byCategory = {} as Record<MemoryCategory, number>;
-  const categories: MemoryCategory[] = [
-    "personal", "projects", "decisions", "people",
-    "preferences", "temporal", "knowledge",
-  ];
-  for (const c of categories) {
-    byCategory[c] = all.filter((m) => m.category === c).length;
+    entries.splice(idx, 1);
+    this.writeToDisk(target);
+    return { ok: true };
   }
 
-  return {
-    total: all.length,
-    byCategory,
-    oldestMemory: all.length > 0 ? Math.min(...all.map((m) => m.createdAt)) : null,
-    newestMemory: all.length > 0 ? Math.max(...all.map((m) => m.createdAt)) : null,
-  };
+  // ── Read ────────────────────────────────────────────────────────
+
+  getEntries(target: MemoryTarget): string[] {
+    return [...this[target]];
+  }
+
+  /** Returns the frozen snapshot for system prompt injection */
+  formatForSystemPrompt(): string {
+    const memBlock =
+      this.frozenMemory.length > 0
+        ? this.frozenMemory.map((e) => `${DELIMITER} ${e}`).join("\n")
+        : "(empty)";
+    const userBlock =
+      this.frozenUser.length > 0
+        ? this.frozenUser.map((e) => `${DELIMITER} ${e}`).join("\n")
+        : "(empty)";
+
+    return `## Your Memory
+
+You have persistent memory across conversations. Use it to remember important context about the user and their work.
+
+### Notes (MEMORY.md)
+${memBlock}
+
+### User Profile (USER.md)
+${userBlock}
+
+### Memory Commands
+To manage your memory, include a JSON code block in your response:
+
+\`\`\`json
+{
+  "cockpit_memory": true,
+  "action": "add",
+  "target": "memory",
+  "content": "New entry to remember"
+}
+\`\`\`
+
+Actions:
+- **add**: Add a new entry. Requires \`content\`.
+- **replace**: Update an existing entry. Requires \`old_text\` (substring match) and \`content\`.
+- **remove**: Delete an entry. Requires \`old_text\` (substring match).
+
+Targets: \`memory\` (your working notes) or \`user\` (user profile facts).
+
+Guidelines:
+- Proactively save important facts, preferences, decisions, and context
+- Keep entries concise — one fact per entry
+- Update stale entries with \`replace\` rather than adding duplicates
+- Remove entries that are no longer relevant
+- The user profile should contain stable facts (name, role, company, preferences)
+- Notes should contain working context (project state, decisions, blockers)
+- Memory commands are processed silently — don't mention them to the user`;
+  }
 }
 
-/**
- * Get all memories as a flat text for agentic search.
- * Each memory is formatted with its metadata for the search agent to reason over.
- */
-export function getMemoriesAsText(): string {
-  const active = getActiveMemories();
-  if (active.length === 0) return "";
+// ─── Singleton ──────────────────────────────────────────────────────
 
-  return active
-    .map((m) => {
-      const date = new Date(m.createdAt).toISOString().split("T")[0];
-      return `[${m.id}] (${m.category}) [${date}] ${m.content} — context: ${m.context} — tags: ${m.tags.join(", ")}`;
-    })
-    .join("\n");
+let _store: MemoryStore | null = null;
+
+export function getMemoryStore(): MemoryStore {
+  if (!_store) {
+    _store = new MemoryStore();
+  }
+  return _store;
+}
+
+/** Force reload from disk (e.g. after external changes) */
+export function resetMemoryStore() {
+  _store = null;
 }

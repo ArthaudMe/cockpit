@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import type { Context } from "@/lib/context-client";
 import { usePersistedState } from "@/lib/use-persisted-state";
-import type { Memory, MemoryStats } from "@/lib/memory/types";
+import { track } from "@/lib/analytics";
 
 function Panel({
   title,
@@ -20,7 +20,7 @@ function Panel({
 
   return (
     <div className="panel">
-      <div className="panel-header" onClick={() => setOpen(!open)}>
+      <div className="panel-header" onClick={() => { setOpen(!open); track("panel_clicked", { panel: title }); }}>
         <div className="panel-title-row">
           <span className="panel-title">{title}</span>
           {count !== undefined && <span className="panel-count">{count}</span>}
@@ -103,57 +103,12 @@ export function ContextColumn({
   onSettingsClick?: () => void;
 }) {
   const [todos, setTodos] = usePersistedState("cockpit-todos", context.todos);
-  const [memories, setMemories] = useState<Memory[]>([]);
-  const [memoryStats, setMemoryStats] = useState<MemoryStats | null>(null);
 
   const toggleTodo = (e: React.MouseEvent, index: number) => {
     e.stopPropagation();
     setTodos((prev) =>
       prev.map((t, i) => (i === index ? { ...t, done: !t.done } : t))
     );
-  };
-
-  // Fetch memories periodically
-  useEffect(() => {
-    const fetchMemories = async () => {
-      try {
-        const res = await fetch("/api/memory");
-        if (res.ok) {
-          const data = await res.json();
-          setMemories(data.memories || []);
-          setMemoryStats(data.stats || null);
-        }
-      } catch {
-        // silently fail
-      }
-    };
-    fetchMemories();
-    const interval = setInterval(fetchMemories, 30_000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const deleteMemory = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    try {
-      await fetch("/api/memory", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      });
-      setMemories((prev) => prev.filter((m) => m.id !== id));
-    } catch {
-      // silently fail
-    }
-  };
-
-  const CATEGORY_COLORS: Record<string, string> = {
-    personal: "var(--accent)",
-    projects: "var(--green)",
-    decisions: "var(--yellow)",
-    people: "#a78bfa",
-    preferences: "#f472b6",
-    temporal: "#60a5fa",
-    knowledge: "#f97316",
   };
 
   return (
@@ -369,63 +324,6 @@ export function ContextColumn({
         ))}
       </Panel>
 
-      {/* Memory — ASMR-powered long-term memory */}
-      <Panel title="Memory" count={memories.length} defaultOpen={false}>
-        {memories.length === 0 ? (
-          <div className="empty-state">
-            No memories yet — they build up as you chat
-          </div>
-        ) : (
-          <>
-            {memories.slice(-10).reverse().map((m) => (
-              <div
-                key={m.id}
-                className="feed-item"
-                onClick={() => onPrefill(`Based on what you remember about me, ${m.content.toLowerCase().startsWith("i") ? "" : "regarding "}${m.content.slice(0, 60).toLowerCase()}...`)}
-                style={{ position: "relative" }}
-              >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <span
-                    className="tag"
-                    style={{
-                      fontSize: "0.4rem",
-                      color: CATEGORY_COLORS[m.category] || "var(--text-muted)",
-                      borderColor: CATEGORY_COLORS[m.category] || "var(--text-muted)",
-                    }}
-                  >
-                    {m.category}
-                  </span>
-                  <button
-                    onClick={(e) => deleteMemory(e, m.id)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "var(--text-muted)",
-                      cursor: "pointer",
-                      fontSize: "0.5rem",
-                      padding: "0 0.2rem",
-                      opacity: 0.5,
-                    }}
-                    onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.color = "var(--red, #ef4444)"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.5"; e.currentTarget.style.color = "var(--text-muted)"; }}
-                    title="Forget this memory"
-                  >
-                    x
-                  </button>
-                </div>
-                <div className="feed-title" style={{ fontSize: "0.55rem" }}>
-                  {m.content}
-                </div>
-              </div>
-            ))}
-            {memoryStats && (
-              <div style={{ fontSize: "0.4rem", color: "var(--text-muted)", padding: "0.3rem 0", textAlign: "center" }}>
-                {memoryStats.total} memories across {Object.entries(memoryStats.byCategory).filter(([, v]) => v > 0).length} categories
-              </div>
-            )}
-          </>
-        )}
-      </Panel>
     </div>
   );
 }

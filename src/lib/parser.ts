@@ -129,6 +129,13 @@ export function parseResponse(text: string): ParsedSegment[] {
             lastIndex = fenceEnd;
             continue;
           }
+          if (parsed.cockpit_memory) {
+            // Memory commands are processed server-side — strip from display
+            const before = text.slice(lastIndex, match.index).trim();
+            if (before) segments.push({ type: "text", content: before });
+            lastIndex = fenceEnd;
+            continue;
+          }
           if (parsed.cockpit_subagent && parsed.name && parsed.task) {
             const before = text.slice(lastIndex, match.index).trim();
             if (before) segments.push({ type: "text", content: before });
