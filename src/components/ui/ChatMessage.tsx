@@ -5,11 +5,16 @@ import { SKILLS } from "@/lib/skills-defs";
 import { RenderTable } from "../renderers/Table";
 import { RenderBarChart } from "../renderers/BarChart";
 import { RenderCardGrid } from "../renderers/CardGrid";
+import { FileChip } from "./FileChip";
 import type { SubagentSuggestion } from "@/lib/parser";
+
+// Match file paths like src/lib/foo.ts, ./bar/baz.tsx, /abs/path.js, with optional :lineNumber
+const FILE_PATH_RE = /(?:^|\s)((?:\/|\.\/|\.\.\/|[a-zA-Z][\w-]*\/)[^\s:,;'")\]}>]+\.[a-zA-Z]{1,10}(?::(\d+))?)(?=[\s,;:'")\]}>]|$)/g;
 
 type Message = {
   role: "user" | "assistant";
   content: string;
+  images?: string[];
 };
 
 function SimpleMarkdown({ content }: { content: string }) {
@@ -109,12 +114,41 @@ function SimpleMarkdown({ content }: { content: string }) {
   return <>{elements}</>;
 }
 
+function extractFileRefs(text: string): { path: string; line?: number }[] {
+  const refs: { path: string; line?: number }[] = [];
+  const seen = new Set<string>();
+  let match;
+  const re = new RegExp(FILE_PATH_RE.source, "g");
+  while ((match = re.exec(text)) !== null) {
+    const raw = match[1].trim();
+    // Split off optional :lineNumber
+    const colonIdx = raw.lastIndexOf(":");
+    let filePath = raw;
+    let line: number | undefined;
+    if (colonIdx > 0) {
+      const afterColon = raw.slice(colonIdx + 1);
+      if (/^\d+$/.test(afterColon)) {
+        filePath = raw.slice(0, colonIdx);
+        line = parseInt(afterColon, 10);
+      }
+    }
+    const key = filePath + (line ? `:${line}` : "");
+    if (!seen.has(key)) {
+      seen.add(key);
+      refs.push({ path: filePath, line });
+    }
+  }
+  return refs;
+}
+
 export function ChatMessage({
   message,
   onApproveSubagent,
+  onOpenFile,
 }: {
   message: Message;
   onApproveSubagent?: (suggestion: SubagentSuggestion) => void;
+  onOpenFile?: (path: string) => void;
 }) {
   if (message.role === "user") {
     return (
@@ -130,6 +164,31 @@ export function ChatMessage({
             lineHeight: 1.4,
           }}
         >
+          {message.images && message.images.length > 0 && (
+            <div
+              style={{
+                display: "flex",
+                gap: "0.3rem",
+                flexWrap: "wrap",
+                marginBottom: message.content ? "0.35rem" : 0,
+              }}
+            >
+              {message.images.map((img, i) => (
+                <img
+                  key={i}
+                  src={img}
+                  alt=""
+                  style={{
+                    maxWidth: 180,
+                    maxHeight: 140,
+                    borderRadius: 3,
+                    objectFit: "cover",
+                    border: "1px solid rgba(0,0,0,0.15)",
+                  }}
+                />
+              ))}
+            </div>
+          )}
           {message.content}
         </div>
       </div>
@@ -137,6 +196,7 @@ export function ChatMessage({
   }
 
   const segments = parseResponse(message.content);
+  const fileRefs = onOpenFile ? extractFileRefs(message.content) : [];
 
   return (
     <div style={{ marginBottom: "0.5rem" }}>
@@ -227,6 +287,27 @@ export function ChatMessage({
             </div>
           );
         })}
+
+        {/* File reference chips */}
+        {fileRefs.length > 0 && onOpenFile && (
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "0.2rem",
+              marginTop: "0.3rem",
+            }}
+          >
+            {fileRefs.map((ref, i) => (
+              <FileChip
+                key={i}
+                path={ref.path}
+                line={ref.line}
+                onOpenFile={onOpenFile}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -18,7 +18,7 @@ function getRedirectUri(origin: string, service: ServiceId): string {
   if (isDev) {
     // Slack requires HTTPS redirect URIs
     if (service === "slack") {
-      return `https://localhost:3000/api/datasources/callback`;
+      return `https://localhost:3939/api/datasources/callback`;
     }
     return `${origin}/api/datasources/callback`;
   }

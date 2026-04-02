@@ -11,6 +11,7 @@ import type { SubagentSuggestion } from "@/lib/parser";
 type Message = {
   role: "user" | "assistant";
   content: string;
+  images?: string[]; // base64 data URLs
 };
 
 type AgentInfo = {
@@ -40,11 +41,13 @@ export function ChatColumn({
   inputValue,
   onInputChange,
   claudeConnected,
+  onOpenFile,
 }: {
   context: Context;
   inputValue: string;
   onInputChange: (v: string) => void;
   claudeConnected: boolean;
+  onOpenFile?: (path: string) => void;
 }) {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [backends, setBackends] = useState<BackendDef[]>([]);
@@ -60,7 +63,9 @@ export function ChatColumn({
   const [showNewAgent, setShowNewAgent] = useState(false);
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [slashSelected, setSlashSelected] = useState(0);
+  const [pendingImages, setPendingImages] = useState<string[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Slash command autocomplete
   const slashMatches = useMemo(() => {
@@ -138,17 +143,43 @@ export function ChatColumn({
     [activeAgentId, setMessagesFor]
   );
 
+  const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    Array.from(files).forEach((file) => {
+      if (!file.type.startsWith("image/")) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        setPendingImages((prev) => [...prev, reader.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Reset so the same file can be selected again
+    e.target.value = "";
+  }, []);
+
+  const removePendingImage = useCallback((index: number) => {
+    setPendingImages((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
   const sendMessage = useCallback(async () => {
     const text = inputValue.trim();
-    if (!text || streaming || !activeAgentId) return;
+    const images = pendingImages;
+    if ((!text && images.length === 0) || streaming || !activeAgentId) return;
 
-    const expansion = expandSlashCommand(text);
+    const expansion = text ? expandSlashCommand(text) : null;
     const messageToSend = expansion ? expansion.expandedMessage : text;
 
     const targetAgentId = activeAgentId;
     onInputChange("");
     track("chat_message_sent");
-    setMessagesFor(targetAgentId, (prev) => [...prev, { role: "user", content: text }]);
+    setPendingImages([]);
+    setMessagesFor(targetAgentId, (prev) => [
+      ...prev,
+      { role: "user", content: text, ...(images.length > 0 ? { images } : {}) },
+    ]);
     setStreamingAgents((prev) => new Set(prev).add(targetAgentId));
     setMessagesFor(targetAgentId, (prev) => [...prev, { role: "assistant", content: "" }]);
 
@@ -156,7 +187,10 @@ export function ChatColumn({
       const res = await fetch(`/api/agents/${targetAgentId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: messageToSend }),
+        body: JSON.stringify({
+          message: messageToSend,
+          ...(images.length > 0 ? { images } : {}),
+        }),
       });
 
       if (!res.ok || !res.body) {
@@ -210,7 +244,43 @@ export function ChatColumn({
     if (activeAgentIdRef.current !== targetAgentId) {
       setNotifiedAgents((prev) => new Set(prev).add(targetAgentId));
     }
-  }, [inputValue, streaming, activeAgentId, onInputChange, setMessagesFor]);
+  }, [inputValue, pendingImages, streaming, activeAgentId, onInputChange, setMessagesFor]);
+
+  const handleDrop = useCallback((e: React.DragEvent<HTMLTextAreaElement>) => {
+    const files = e.dataTransfer?.files;
+    if (!files) return;
+
+    const hasImages = Array.from(files).some((f) => f.type.startsWith("image/"));
+    if (!hasImages) return;
+
+    e.preventDefault();
+    Array.from(files).forEach((file) => {
+      if (!file.type.startsWith("image/")) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        setPendingImages((prev) => [...prev, reader.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+  }, []);
+
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith("image/")) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+        const reader = new FileReader();
+        reader.onload = () => {
+          setPendingImages((prev) => [...prev, reader.result as string]);
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+  }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Slash command autocomplete navigation
@@ -527,7 +597,7 @@ export function ChatColumn({
         )}
 
         {messages.map((msg, i) => (
-          <ChatMessage key={i} message={msg} onApproveSubagent={handleApproveSubagent} />
+          <ChatMessage key={i} message={msg} onApproveSubagent={handleApproveSubagent} onOpenFile={onOpenFile} />
         ))}
 
         {streaming && (
@@ -601,6 +671,70 @@ export function ChatColumn({
           />
         )}
 
+        {/* Image previews */}
+        {pendingImages.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              gap: "0.35rem",
+              padding: "0.4rem 0.5rem 0",
+              flexWrap: "wrap",
+            }}
+          >
+            {pendingImages.map((img, i) => (
+              <div
+                key={i}
+                style={{
+                  position: "relative",
+                  width: 48,
+                  height: 48,
+                  borderRadius: 4,
+                  overflow: "hidden",
+                  border: "1px solid var(--border)",
+                  flexShrink: 0,
+                }}
+              >
+                <img
+                  src={img}
+                  alt=""
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+                <button
+                  onClick={() => removePendingImage(i)}
+                  style={{
+                    position: "absolute",
+                    top: 1,
+                    right: 1,
+                    width: 14,
+                    height: 14,
+                    borderRadius: "50%",
+                    background: "rgba(0,0,0,0.7)",
+                    color: "#fff",
+                    border: "none",
+                    fontSize: "0.45rem",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleImageSelect}
+          style={{ display: "none" }}
+        />
+
         <div
           style={{
             display: "flex",
@@ -638,6 +772,28 @@ export function ChatColumn({
             </button>
           )}
 
+          {/* Image attach button */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={!claudeConnected || !activeAgent}
+            style={{
+              background: "transparent",
+              border: "1px solid var(--border)",
+              borderRadius: 3,
+              padding: "0.15rem 0.35rem",
+              fontSize: "0.6rem",
+              color: "var(--text-dim)",
+              cursor: claudeConnected && activeAgent ? "pointer" : "default",
+              fontFamily: "inherit",
+              flexShrink: 0,
+              opacity: claudeConnected && activeAgent ? 1 : 0.4,
+              transition: "all 0.1s",
+            }}
+            title="Attach image"
+          >
+            +
+          </button>
+
           <textarea
             ref={inputRef}
             value={inputValue}
@@ -649,6 +805,9 @@ export function ChatColumn({
               ta.style.height = Math.min(ta.scrollHeight, 180) + "px";
             }}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            onDrop={handleDrop}
+            onDragOver={(e) => e.preventDefault()}
             placeholder={
               !claudeConnected
                 ? "No agents connected..."
@@ -674,14 +833,14 @@ export function ChatColumn({
           />
           <button
             onClick={sendMessage}
-            disabled={!inputValue.trim() || streaming || !claudeConnected || !activeAgent}
+            disabled={(!inputValue.trim() && pendingImages.length === 0) || streaming || !claudeConnected || !activeAgent}
             style={{
               background:
-                inputValue.trim() && claudeConnected && activeAgent
+                (inputValue.trim() || pendingImages.length > 0) && claudeConnected && activeAgent
                   ? "var(--accent)"
                   : "var(--border)",
               color:
-                inputValue.trim() && claudeConnected && activeAgent
+                (inputValue.trim() || pendingImages.length > 0) && claudeConnected && activeAgent
                   ? "var(--bg)"
                   : "var(--text-muted)",
               border: "none",
@@ -692,7 +851,7 @@ export function ChatColumn({
               alignItems: "center",
               justifyContent: "center",
               cursor:
-                inputValue.trim() && !streaming && claudeConnected && activeAgent
+                (inputValue.trim() || pendingImages.length > 0) && !streaming && claudeConnected && activeAgent
                   ? "pointer"
                   : "default",
               fontSize: "0.6rem",

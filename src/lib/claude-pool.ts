@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "child_process";
 import { getContext, buildSystemPrompt } from "./context";
 import { fetchAllData } from "./datasources/manager";
 import type { DatasourceData } from "./datasources/types";
+import { buildAgentEnv } from "./agent-env";
 
 /**
  * Pre-warms a `claude -p` process with the system prompt baked in.
@@ -12,12 +13,6 @@ import type { DatasourceData } from "./datasources/types";
  * When a request arrives, we just write the user message and close stdin —
  * response starts immediately.
  */
-
-function cleanEnv() {
-  const env = { ...process.env };
-  delete env.CLAUDECODE;
-  return env;
-}
 
 // Cache live datasource data with TTL
 let cachedLiveData: DatasourceData | undefined;
@@ -53,7 +48,7 @@ function spawnWarm(): ChildProcess {
     ["-p", "--output-format", "text", "--append-system-prompt", currentSystemPrompt],
     {
       stdio: ["pipe", "pipe", "pipe"],
-      env: cleanEnv(),
+      env: buildAgentEnv(),
     }
   );
 

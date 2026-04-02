@@ -31,6 +31,7 @@ export async function GET() {
   return NextResponse.json({
     connected,
     version: claude.version || codex.version || ollama.version,
+    cwd: process.cwd(),
     backends: {
       claude: { connected: claude.ok, version: claude.version },
       codex: { connected: codex.ok, version: codex.version },
