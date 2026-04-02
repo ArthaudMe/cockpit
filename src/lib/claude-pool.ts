@@ -38,8 +38,8 @@ async function getLiveData(): Promise<DatasourceData | undefined> {
   }
 }
 
-function getSystemPrompt(liveData?: DatasourceData): string {
-  return buildSystemPrompt(getContext(), liveData);
+function getSystemPrompt(liveData?: DatasourceData, userMessage?: string): string {
+  return buildSystemPrompt(getContext(), liveData, userMessage);
 }
 
 // Initial system prompt (without live data for fast startup)
