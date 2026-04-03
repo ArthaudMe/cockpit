@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { fetchAllData, getDatasourceStatuses } from "@/lib/datasources/manager";
 import { getMcpServers } from "@/lib/datasources/mcp-store";
+import { writeDatasourceCache, readDatasourceCache } from "@/lib/datasources/cache";
 
 export async function GET() {
   try {
@@ -14,8 +15,24 @@ export async function GET() {
     for (const mcp of getMcpServers()) {
       connected[`mcp:${mcp.id}`] = mcp.enabled;
     }
-    return NextResponse.json({ ...data, _connected: connected });
+
+    const response = { ...data, _connected: connected };
+
+    // Cache successful response to disk for offline resilience
+    writeDatasourceCache(response);
+
+    return NextResponse.json(response);
   } catch (err: any) {
+    // On failure, try to return cached data with offline flag
+    const cached = readDatasourceCache();
+    if (cached) {
+      return NextResponse.json({
+        ...cached.data,
+        _offline: true,
+        _cachedAt: cached.cachedAt,
+      });
+    }
+
     return NextResponse.json(
       { error: err.message || "Failed to fetch data" },
       { status: 500 }

@@ -3,8 +3,9 @@
 import { parseResponse } from "@/lib/parser";
 import { SKILLS } from "@/lib/skills-defs";
 import { RenderBlockRenderer } from "../renderers/RenderBlockRenderer";
+import { ActionCard } from "./ActionCard";
 import { FileChip } from "./FileChip";
-import type { SubagentSuggestion } from "@/lib/parser";
+import type { SubagentSuggestion, ActionBlock } from "@/lib/parser";
 import type { ContextFocus } from "../views/ContextualChatView";
 
 // Match file paths like src/lib/foo.ts, ./bar/baz.tsx, /abs/path.js, with optional :lineNumber
@@ -138,6 +139,18 @@ function extractFileRefs(text: string): { path: string; line?: number }[] {
     }
   }
   return refs;
+}
+
+async function executeActionRequest(action: ActionBlock) {
+  const res = await fetch("/api/actions/execute", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      cockpit_action: action.cockpit_action,
+      params: action.params,
+    }),
+  });
+  return res.json();
 }
 
 export function ChatMessage({
@@ -307,6 +320,17 @@ export function ChatMessage({
                       }
                     : undefined
                 }
+              />
+            );
+          }
+
+          if (seg.type === "action") {
+            return (
+              <ActionCard
+                key={i}
+                action={seg.action}
+                onExecute={() => executeActionRequest(seg.action)}
+                onCancel={() => {}}
               />
             );
           }
