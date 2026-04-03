@@ -59,6 +59,8 @@ export default function Home() {
   const [projectCwd, setProjectCwd] = useState("");
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [offlineInfo, setOfflineInfo] = useState<{ offline: boolean; cachedAt?: number }>({ offline: false });
+  const [showRightColumn, setShowRightColumn] = useState(true);
 
   // Fetch user profile name (for filtering attendees)
   useEffect(() => {
@@ -79,6 +81,10 @@ export default function Home() {
         .then((r) => r.json())
         .then((data: DatasourceData) => {
           setContextData(buildContextFromLiveData(data, userName));
+          setOfflineInfo({
+            offline: !!data._offline,
+            cachedAt: data._cachedAt,
+          });
         })
         .catch(() => {});
     };
@@ -286,17 +292,87 @@ export default function Home() {
     );
   }, []);
 
-  // Cmd+P global shortcut
+  // ─── Global keyboard shortcuts ─────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "p") {
+      // Esc → Close any modal/overlay (no modifier needed)
+      if (e.key === "Escape") {
+        if (showQuickOpen) {
+          e.preventDefault();
+          setShowQuickOpen(false);
+        } else if (centerView.type === "focus") {
+          e.preventDefault();
+          setCenterView({ type: "chat" });
+        } else if (centerView.type === "settings") {
+          e.preventDefault();
+          setCenterView({ type: "chat" });
+        }
+        return;
+      }
+
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+
+      // Cmd+P → Quick Open
+      if (e.key === "p") {
         e.preventDefault();
         setShowQuickOpen((prev) => !prev);
+        return;
+      }
+
+      // Cmd+K → Reserved for future universal search
+      if (e.key === "k") {
+        e.preventDefault();
+        console.log("Cmd+K pressed");
+        return;
+      }
+
+      // Cmd+N → New agent / project (open create form via settings)
+      if (e.key === "n") {
+        e.preventDefault();
+        setCenterView({ type: "settings" });
+        return;
+      }
+
+      // Cmd+, → Open settings
+      if (e.key === ",") {
+        e.preventDefault();
+        setCenterView({ type: "settings" });
+        return;
+      }
+
+      // Cmd+. → Toggle right column visibility
+      if (e.key === ".") {
+        e.preventDefault();
+        setShowRightColumn((prev) => !prev);
+        return;
+      }
+
+      // Cmd+W → Close current editor tab (if any open)
+      if (e.key === "w") {
+        if (openFiles.length > 0) {
+          e.preventDefault();
+          handleCloseFile(activeFileIndex);
+        }
+        return;
+      }
+
+      // Cmd+1..9 → Switch agent/editor tabs by index
+      const digit = parseInt(e.key, 10);
+      if (digit >= 1 && digit <= 9) {
+        if (openFiles.length > 0) {
+          e.preventDefault();
+          const tabIndex = digit - 1;
+          if (tabIndex < openFiles.length) {
+            setActiveFileIndex(tabIndex);
+          }
+        }
+        return;
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [openFiles, activeFileIndex, handleCloseFile, showQuickOpen, centerView]);
 
   // Show onboarding if no backends are connected (and we're done checking)
   if (!claudeStatus.checking && !claudeStatus.connected) {
@@ -358,6 +434,7 @@ export default function Home() {
         notifications={notifications}
         unreadCount={unreadCount}
         onMarkAllRead={handleMarkAllRead}
+        offlineInfo={offlineInfo}
       />
       <div className="flex flex-1 overflow-hidden" style={{ padding: "0.5rem", gap: "0.5rem" }}>
         <div style={{ width: 280, minWidth: 240, flexShrink: 0 }} className="overflow-y-auto">
@@ -395,30 +472,32 @@ export default function Home() {
             />
           )}
         </div>
-        <div style={{ width: openFiles.length > 0 ? 500 : 300, minWidth: openFiles.length > 0 ? 400 : 260, flexShrink: 0, transition: "width 0.2s" }} className="overflow-y-auto">
-          {openFiles.length > 0 ? (
-            <EditorPanel
-              files={openFiles}
-              activeIndex={activeFileIndex}
-              onActivate={setActiveFileIndex}
-              onClose={handleCloseFile}
-              onCloseAll={handleCloseAllFiles}
-              onChange={handleFileChange}
-              onSaved={handleFileSaved}
-            />
-          ) : (
-            <ContextColumn
-              context={contextData}
-              onPrefill={handlePrefill}
-              onCalendarClick={handleCalendarClick}
-              onMetricClick={handleMetricClick}
-              onSlackClick={handleSlackClick}
-              onCompetitorClick={handleCompetitorClick}
-              onTodoClick={handleTodoClick}
-              onSettingsClick={handleSettingsClick}
-            />
-          )}
-        </div>
+        {showRightColumn && (
+          <div style={{ width: openFiles.length > 0 ? 500 : 300, minWidth: openFiles.length > 0 ? 400 : 260, flexShrink: 0, transition: "width 0.2s" }} className="overflow-y-auto">
+            {openFiles.length > 0 ? (
+              <EditorPanel
+                files={openFiles}
+                activeIndex={activeFileIndex}
+                onActivate={setActiveFileIndex}
+                onClose={handleCloseFile}
+                onCloseAll={handleCloseAllFiles}
+                onChange={handleFileChange}
+                onSaved={handleFileSaved}
+              />
+            ) : (
+              <ContextColumn
+                context={contextData}
+                onPrefill={handlePrefill}
+                onCalendarClick={handleCalendarClick}
+                onMetricClick={handleMetricClick}
+                onSlackClick={handleSlackClick}
+                onCompetitorClick={handleCompetitorClick}
+                onTodoClick={handleTodoClick}
+                onSettingsClick={handleSettingsClick}
+              />
+            )}
+          </div>
+        )}
       </div>
 
       {/* Quick Open modal (Cmd+P) */}

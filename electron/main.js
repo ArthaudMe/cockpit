@@ -3,10 +3,13 @@ const { spawn, execFileSync } = require("child_process");
 const path = require("path");
 const net = require("net");
 const http = require("http");
+const fs = require("fs");
+const os = require("os");
 
 // ─── Config ────────────────────────────────────────────────────────
 let mainWindow;
 let nextServer;
+let tray;
 
 const isDev = process.env.NODE_ENV === "development";
 const PORT = isDev ? 3939 : 3123;
@@ -15,6 +18,113 @@ const PROTOCOL = "cockpit";
 const APP_ROOT = app.isPackaged
   ? path.join(process.resourcesPath, "app")
   : path.join(__dirname, "..");
+
+const COCKPIT_DIR = path.join(os.homedir(), ".cockpit");
+const WINDOW_STATE_PATH = path.join(COCKPIT_DIR, "window-state.json");
+
+// ─── Window State Persistence ─────────────────────────────────────
+function ensureCockpitDir() {
+  if (!fs.existsSync(COCKPIT_DIR)) {
+    fs.mkdirSync(COCKPIT_DIR, { recursive: true, mode: 0o700 });
+  }
+}
+
+function loadWindowState() {
+  try {
+    if (!fs.existsSync(WINDOW_STATE_PATH)) return null;
+    const raw = fs.readFileSync(WINDOW_STATE_PATH, "utf-8");
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function saveWindowState(state) {
+  try {
+    ensureCockpitDir();
+    fs.writeFileSync(WINDOW_STATE_PATH, JSON.stringify(state, null, 2));
+  } catch (err) {
+    console.error("[electron] Failed to save window state:", err.message);
+  }
+}
+
+let saveStateTimeout;
+function debouncedSaveWindowState() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  clearTimeout(saveStateTimeout);
+  saveStateTimeout = setTimeout(() => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const isMaximized = mainWindow.isMaximized();
+    const bounds = isMaximized ? loadWindowState() : mainWindow.getBounds();
+    saveWindowState({
+      x: bounds?.x,
+      y: bounds?.y,
+      width: bounds?.width || 1280,
+      height: bounds?.height || 820,
+      isMaximized,
+    });
+  }, 500);
+}
+
+// ─── Tray Icon ────────────────────────────────────────────────────
+function createTray() {
+  // Create a simple 16x16 template icon (white diamond on transparent bg)
+  const size = 16;
+  const buf = Buffer.alloc(size * size * 4);
+  // Draw a filled diamond in the center (matches the Cockpit brand mark)
+  const cx = 7.5, cy = 7.5, r = 5.5;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = Math.abs(x - cx), dy = Math.abs(y - cy);
+      const idx = (y * size + x) * 4;
+      // Diamond = Manhattan distance <= radius
+      if (dx + dy <= r) {
+        buf[idx] = 255;     // R
+        buf[idx + 1] = 255; // G
+        buf[idx + 2] = 255; // B
+        buf[idx + 3] = 255; // A
+      }
+    }
+  }
+  const trayIcon = nativeImage.createFromBuffer(buf, { width: size, height: size });
+  trayIcon.setTemplateImage(true); // macOS will auto-adapt to light/dark
+
+  tray = new Tray(trayIcon);
+  tray.setToolTip("Cockpit");
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: "Show Cockpit",
+      click: () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.show();
+          mainWindow.focus();
+        }
+      },
+    },
+    { type: "separator" },
+    {
+      label: "Quit",
+      click: () => {
+        app.isQuitting = true;
+        app.quit();
+      },
+    },
+  ]);
+
+  tray.setContextMenu(contextMenu);
+
+  // Click tray icon → toggle window visibility
+  tray.on("click", () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (mainWindow.isVisible()) {
+      mainWindow.hide();
+    } else {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
 
 // ─── Next.js Server ────────────────────────────────────────────────
 function startNextServer() {
@@ -159,9 +269,13 @@ function createSplash() {
 }
 
 function createMainWindow() {
+  const savedState = loadWindowState();
+
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 820,
+    width: savedState?.width || 1280,
+    height: savedState?.height || 820,
+    x: savedState?.x,
+    y: savedState?.y,
     minWidth: 900,
     minHeight: 600,
     titleBarStyle: "hiddenInset",
@@ -174,6 +288,10 @@ function createMainWindow() {
     },
   });
 
+  if (savedState?.isMaximized) {
+    mainWindow.maximize();
+  }
+
   mainWindow.loadURL(`http://localhost:${PORT}`);
 
   // Open external links in default browser
@@ -183,6 +301,18 @@ function createMainWindow() {
       return { action: "deny" };
     }
     return { action: "allow" };
+  });
+
+  // Save window state on resize/move (debounced)
+  mainWindow.on("resize", debouncedSaveWindowState);
+  mainWindow.on("move", debouncedSaveWindowState);
+
+  // Hide instead of close — keep app alive in tray
+  mainWindow.on("close", (e) => {
+    if (!app.isQuitting) {
+      e.preventDefault();
+      mainWindow.hide();
+    }
   });
 
   mainWindow.on("closed", () => {
@@ -388,6 +518,7 @@ app.isQuitting = false;
 
 app.whenReady().then(async () => {
   buildMenu();
+  createTray();
 
   if (isDev) {
     // Dev mode: Next.js dev server should already be running on :3000
@@ -431,12 +562,8 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => {
-  // macOS: keep app alive when windows close (dock click re-opens)
-  if (process.platform !== "darwin") {
-    app.isQuitting = true;
-    if (nextServer) nextServer.kill();
-    app.quit();
-  }
+  // Keep app alive in tray on all platforms
+  // Quit is handled explicitly via tray menu or Cmd+Q
 });
 
 app.on("before-quit", () => {
