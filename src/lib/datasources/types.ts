@@ -119,4 +119,6 @@ export interface DatasourceData {
   granolaMeetings?: GranolaMeeting[];
   mcpResources?: McpResourceItem[];
   _connected?: Record<string, boolean>;
+  _offline?: boolean;
+  _cachedAt?: number;
 }
