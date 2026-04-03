@@ -5,8 +5,9 @@ import { SKILLS } from "@/lib/skills-defs";
 import { RenderTable } from "../renderers/Table";
 import { RenderBarChart } from "../renderers/BarChart";
 import { RenderCardGrid } from "../renderers/CardGrid";
+import { ActionCard } from "./ActionCard";
 import { FileChip } from "./FileChip";
-import type { SubagentSuggestion } from "@/lib/parser";
+import type { SubagentSuggestion, ActionBlock } from "@/lib/parser";
 
 // Match file paths like src/lib/foo.ts, ./bar/baz.tsx, /abs/path.js, with optional :lineNumber
 const FILE_PATH_RE = /(?:^|\s)((?:\/|\.\/|\.\.\/|[a-zA-Z][\w-]*\/)[^\s:,;'")\]}>]+\.[a-zA-Z]{1,10}(?::(\d+))?)(?=[\s,;:'")\]}>]|$)/g;
@@ -139,6 +140,18 @@ function extractFileRefs(text: string): { path: string; line?: number }[] {
     }
   }
   return refs;
+}
+
+async function executeActionRequest(action: ActionBlock) {
+  const res = await fetch("/api/actions/execute", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      cockpit_action: action.cockpit_action,
+      params: action.params,
+    }),
+  });
+  return res.json();
 }
 
 export function ChatMessage({
@@ -279,6 +292,17 @@ export function ChatMessage({
               default:
                 return null;
             }
+          }
+
+          if (seg.type === "action") {
+            return (
+              <ActionCard
+                key={i}
+                action={seg.action}
+                onExecute={() => executeActionRequest(seg.action)}
+                onCancel={() => {}}
+              />
+            );
           }
 
           return (
