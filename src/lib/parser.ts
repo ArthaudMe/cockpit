@@ -28,7 +28,7 @@ export type SubagentSuggestion = {
 };
 
 export type ActionBlock = {
-  cockpit_action: string;
+  cockpit_action: import("./actions/types").ActionType;
   params: Record<string, unknown>;
   confirm: boolean;
 };
