@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, dialog, Menu, Tray, nativeImage } = require("electron");
+const { app, BrowserWindow, shell, dialog, Menu, Tray, nativeImage, Notification: ElectronNotification } = require("electron");
 const { spawn, execFileSync } = require("child_process");
 const path = require("path");
 const net = require("net");
@@ -325,6 +325,64 @@ if (!gotLock) {
   });
 }
 
+// ─── Background Intelligence ────────────────────────────────────────
+let backgroundInterval;
+
+function startBackgroundTick() {
+  // Don't start until server is ready
+  if (backgroundInterval) return;
+
+  backgroundInterval = setInterval(() => {
+    if (app.isQuitting) {
+      clearInterval(backgroundInterval);
+      return;
+    }
+
+    const tickUrl = `http://localhost:${PORT}/api/background/tick`;
+    http.get(tickUrl, (res) => {
+      let body = "";
+      res.on("data", (chunk) => { body += chunk; });
+      res.on("end", () => {
+        try {
+          const data = JSON.parse(body);
+          if (data.newNotifications && data.newNotifications.length > 0) {
+            // Only show native notifications when the window is not focused
+            const windowFocused = mainWindow && mainWindow.isFocused();
+            if (!windowFocused && ElectronNotification.isSupported()) {
+              for (const notif of data.newNotifications) {
+                const native = new ElectronNotification({
+                  title: notif.title,
+                  body: notif.body,
+                  silent: false,
+                });
+                native.on("click", () => {
+                  if (mainWindow) {
+                    if (mainWindow.isMinimized()) mainWindow.restore();
+                    mainWindow.show();
+                    mainWindow.focus();
+                  }
+                });
+                native.show();
+              }
+            }
+          }
+        } catch {
+          // ignore parse errors
+        }
+      });
+    }).on("error", () => {
+      // Server might not be ready yet, ignore
+    });
+  }, 60_000); // Every 60 seconds
+}
+
+function stopBackgroundTick() {
+  if (backgroundInterval) {
+    clearInterval(backgroundInterval);
+    backgroundInterval = null;
+  }
+}
+
 // ─── Startup ───────────────────────────────────────────────────────
 app.isQuitting = false;
 
@@ -335,6 +393,7 @@ app.whenReady().then(async () => {
     // Dev mode: Next.js dev server should already be running on :3000
     createMainWindow();
     mainWindow.show();
+    startBackgroundTick();
     return;
   }
 
@@ -349,6 +408,7 @@ app.whenReady().then(async () => {
     mainWindow.once("ready-to-show", () => {
       splash.close();
       mainWindow.show();
+      startBackgroundTick();
     });
 
     // Fallback: if ready-to-show doesn't fire within 10s, show anyway
@@ -381,6 +441,7 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   app.isQuitting = true;
+  stopBackgroundTick();
   if (nextServer) nextServer.kill();
 });
 

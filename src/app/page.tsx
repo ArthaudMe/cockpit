@@ -22,6 +22,7 @@ import {
   focusTodo,
   focusMeeting,
 } from "@/lib/focus";
+import type { NotificationItem } from "@/components/layout/NotificationBell";
 
 type CenterView =
   | { type: "chat" }
@@ -56,6 +57,8 @@ export default function Home() {
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [showQuickOpen, setShowQuickOpen] = useState(false);
   const [projectCwd, setProjectCwd] = useState("");
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   // Fetch user profile name (for filtering attendees)
   useEffect(() => {
@@ -85,6 +88,52 @@ export default function Home() {
 
     return () => clearInterval(interval);
   }, [userName]);
+
+  // Background intelligence tick — polls every 60s for notifications
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+
+    const tick = () => {
+      fetch("/api/background/tick")
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.newCount > 0) {
+            // Fetch full notification list when new ones arrive
+            fetch("/api/background/notifications")
+              .then((r) => r.json())
+              .then((result) => {
+                setNotifications(result.notifications || []);
+                setUnreadCount(result.unreadCount || 0);
+              })
+              .catch(() => {});
+          }
+        })
+        .catch(() => {});
+    };
+
+    // Initial tick after a short delay (let datasources load first)
+    const initialTimeout = setTimeout(tick, 5_000);
+    interval = setInterval(tick, 60_000);
+
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(interval);
+    };
+  }, []);
+
+  const handleMarkAllRead = useCallback(() => {
+    fetch("/api/background/notifications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ markAllRead: true }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        setUnreadCount(data.unreadCount || 0);
+        setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      })
+      .catch(() => {});
+  }, []);
 
   // Fetch inferred projects (separate from data poll — cached on server for 5 min)
   const fetchProjects = useCallback((force = false) => {
@@ -306,6 +355,9 @@ export default function Home() {
         claudeStatus={claudeStatus}
         onRetryConnection={handleRetryConnection}
         onSettingsClick={handleSettingsClick}
+        notifications={notifications}
+        unreadCount={unreadCount}
+        onMarkAllRead={handleMarkAllRead}
       />
       <div className="flex flex-1 overflow-hidden" style={{ padding: "0.5rem", gap: "0.5rem" }}>
         <div style={{ width: 280, minWidth: 240, flexShrink: 0 }} className="overflow-y-auto">
