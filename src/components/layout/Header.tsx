@@ -1,13 +1,23 @@
 "use client";
 
+function formatCachedTime(cachedAt?: number): string {
+  if (!cachedAt) return "";
+  const diff = Math.round((Date.now() - cachedAt) / 1000);
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.round(diff / 60)}m ago`;
+  return `${Math.round(diff / 3600)}h ago`;
+}
+
 export function Header({
   claudeStatus,
   onRetryConnection,
   onSettingsClick,
+  offlineInfo,
 }: {
   claudeStatus: { connected: boolean; version?: string; checking: boolean };
   onRetryConnection: () => void;
   onSettingsClick?: () => void;
+  offlineInfo?: { offline: boolean; cachedAt?: number };
 }) {
   return (
     <header
@@ -43,6 +53,24 @@ export function Header({
         >
           pilot your company
         </span>
+        {offlineInfo?.offline && (
+          <span
+            style={{
+              fontSize: "0.45rem",
+              color: "var(--yellow, #e5a100)",
+              background: "rgba(229, 161, 0, 0.1)",
+              border: "1px solid rgba(229, 161, 0, 0.3)",
+              borderRadius: 3,
+              padding: "0.1rem 0.35rem",
+              letterSpacing: "0.05em",
+              fontWeight: 600,
+              textTransform: "uppercase",
+            }}
+            title={offlineInfo.cachedAt ? `Cached ${formatCachedTime(offlineInfo.cachedAt)}` : "Using cached data"}
+          >
+            OFFLINE {offlineInfo.cachedAt ? `(${formatCachedTime(offlineInfo.cachedAt)})` : ""}
+          </span>
+        )}
       </div>
 
       <div className="cockpit-header-actions" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
