@@ -1,5 +1,7 @@
 "use client";
 
+import { NotificationBell, type NotificationItem } from "./NotificationBell";
+
 function formatCachedTime(cachedAt?: number): string {
   if (!cachedAt) return "";
   const diff = Math.round((Date.now() - cachedAt) / 1000);
@@ -12,11 +14,17 @@ export function Header({
   claudeStatus,
   onRetryConnection,
   onSettingsClick,
+  notifications = [],
+  unreadCount = 0,
+  onMarkAllRead,
   offlineInfo,
 }: {
   claudeStatus: { connected: boolean; version?: string; checking: boolean };
   onRetryConnection: () => void;
   onSettingsClick?: () => void;
+  notifications?: NotificationItem[];
+  unreadCount?: number;
+  onMarkAllRead?: () => void;
   offlineInfo?: { offline: boolean; cachedAt?: number };
 }) {
   return (
@@ -107,6 +115,11 @@ export function Header({
               ? `CLAUDE CLI ${claudeStatus.version || ""}`
               : "CLAUDE DISCONNECTED"}
         </button>
+        <NotificationBell
+          notifications={notifications}
+          unreadCount={unreadCount}
+          onMarkAllRead={onMarkAllRead || (() => {})}
+        />
         {onSettingsClick && (
           <button
             onClick={onSettingsClick}
@@ -124,7 +137,7 @@ export function Header({
             }}
             title="Settings"
           >
-            ⚙
+            &#9881;
           </button>
         )}
       </div>
