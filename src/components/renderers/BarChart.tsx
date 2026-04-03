@@ -3,9 +3,11 @@
 export function RenderBarChart({
   title,
   data,
+  onBarClick,
 }: {
   title?: string;
   data: { label: string; value: number }[];
+  onBarClick?: (barIndex: number, item: { label: string; value: number }) => void;
 }) {
   const maxValue = Math.max(...data.map((d) => d.value));
 
@@ -36,7 +38,18 @@ export function RenderBarChart({
       )}
       <div style={{ padding: "0.5rem", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
         {data.map((d, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <div
+            key={i}
+            onClick={() => onBarClick?.(i, d)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              ...(onBarClick ? { cursor: "pointer", borderRadius: 3 } : {}),
+            }}
+            onMouseEnter={(e) => { if (onBarClick) e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+            onMouseLeave={(e) => { if (onBarClick) e.currentTarget.style.background = "transparent"; }}
+          >
             <span
               style={{
                 width: 60,

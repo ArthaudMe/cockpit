@@ -19,6 +19,16 @@ export type RenderBlock =
         subtitle?: string;
         items?: string[];
       }[];
+    }
+  | {
+      cockpit_render: "layout";
+      direction: "row" | "column";
+      children: RenderBlock[];
+    }
+  | {
+      cockpit_render: "mermaid";
+      code: string;
+      title?: string;
     };
 
 export type SubagentSuggestion = {

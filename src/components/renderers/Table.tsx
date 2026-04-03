@@ -4,10 +4,12 @@ export function RenderTable({
   title,
   columns,
   rows,
+  onRowClick,
 }: {
   title?: string;
   columns: string[];
   rows: string[][];
+  onRowClick?: (rowIndex: number, row: string[]) => void;
 }) {
   return (
     <div
@@ -59,10 +61,14 @@ export function RenderTable({
             {rows.map((row, ri) => (
               <tr
                 key={ri}
+                onClick={() => onRowClick?.(ri, row)}
                 style={{
                   borderTop: "1px solid var(--border)",
                   background: ri % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)",
+                  ...(onRowClick ? { cursor: "pointer" } : {}),
                 }}
+                onMouseEnter={(e) => { if (onRowClick) e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+                onMouseLeave={(e) => { if (onRowClick) e.currentTarget.style.background = ri % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)"; }}
               >
                 {row.map((cell, ci) => (
                   <td

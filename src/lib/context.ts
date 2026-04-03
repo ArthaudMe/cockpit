@@ -203,6 +203,27 @@ IMPORTANT: When your response contains structured data that would benefit from v
 }
 \`\`\`
 
+**layout** — for side-by-side comparisons:
+\`\`\`json
+{
+  "cockpit_render": "layout",
+  "direction": "row",
+  "children": [
+    { "cockpit_render": "bar_chart", "title": "Revenue", "data": [{"label": "Q1", "value": 100}] },
+    { "cockpit_render": "table", "title": "Details", "columns": ["Quarter", "Revenue"], "rows": [["Q1", "100"]] }
+  ]
+}
+\`\`\`
+
+**mermaid** — for diagrams and flowcharts:
+\`\`\`json
+{
+  "cockpit_render": "mermaid",
+  "title": "Auth Flow",
+  "code": "graph TD\\n  A[User] --> B[Login]\\n  B --> C[Dashboard]"
+}
+\`\`\`
+
 Use these render types when the data would look better visually than as plain text. Mix them with regular markdown text naturally.
 
 ## Subagent Delegation
