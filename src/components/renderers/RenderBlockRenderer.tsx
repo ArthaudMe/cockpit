@@ -60,9 +60,9 @@ export function RenderBlockRenderer({
             onItemClick
               ? (cardIndex, card) =>
                   onItemClick("card_grid", {
-                    title: block.title,
                     cardIndex,
                     ...card,
+                    title: block.title,
                   })
               : undefined
           }
