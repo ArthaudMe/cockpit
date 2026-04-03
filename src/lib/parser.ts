@@ -27,12 +27,19 @@ export type SubagentSuggestion = {
   task: string;
 };
 
+export type ActionBlock = {
+  cockpit_action: string;
+  params: Record<string, unknown>;
+  confirm: boolean;
+};
+
 export type ParsedSegment =
   | { type: "text"; content: string }
   | { type: "render"; block: RenderBlock }
   | { type: "loading" }
   | { type: "skill_active"; skillSlash: string }
-  | { type: "subagent_suggestion"; suggestion: SubagentSuggestion };
+  | { type: "subagent_suggestion"; suggestion: SubagentSuggestion }
+  | { type: "action"; action: ActionBlock };
 
 /**
  * Find the matching closing brace for an opening brace at `start`.
@@ -142,6 +149,20 @@ export function parseResponse(text: string): ParsedSegment[] {
             segments.push({
               type: "subagent_suggestion",
               suggestion: { name: parsed.name, role: parsed.role || "general", task: parsed.task },
+            });
+            lastIndex = fenceEnd;
+            continue;
+          }
+          if (parsed.cockpit_action && typeof parsed.cockpit_action === "string") {
+            const before = text.slice(lastIndex, match.index).trim();
+            if (before) segments.push({ type: "text", content: before });
+            segments.push({
+              type: "action",
+              action: {
+                cockpit_action: parsed.cockpit_action,
+                params: parsed.params || {},
+                confirm: parsed.confirm !== false, // default to true
+              },
             });
             lastIndex = fenceEnd;
             continue;
