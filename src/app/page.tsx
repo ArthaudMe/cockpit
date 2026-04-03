@@ -14,6 +14,8 @@ import { SettingsView } from "@/components/views/SettingsView";
 import { initAnalytics, track } from "@/lib/analytics";
 import { EditorPanel, type OpenFile } from "@/components/views/EditorPanel";
 import { QuickOpen } from "@/components/ui/QuickOpen";
+import { CommandPalette } from "@/components/ui/CommandPalette";
+import type { SearchResult } from "@/lib/search/types";
 import {
   focusCalendarEvent,
   focusMetric,
@@ -50,12 +52,14 @@ export default function Home() {
     checking: boolean;
   }>({ connected: false, checking: true });
   const [contextData, setContextData] = useState<Context>(EMPTY_CONTEXT);
+  const [rawDatasourceData, setRawDatasourceData] = useState<DatasourceData>({});
   const [inferredProjects, setInferredProjects] = useState<any[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [userName, setUserName] = useState<string | undefined>();
   const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [showQuickOpen, setShowQuickOpen] = useState(false);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [projectCwd, setProjectCwd] = useState("");
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -80,6 +84,7 @@ export default function Home() {
       fetch("/api/datasources/data")
         .then((r) => r.json())
         .then((data: DatasourceData) => {
+          setRawDatasourceData(data);
           setContextData(buildContextFromLiveData(data, userName));
           setOfflineInfo({
             offline: !!data._offline,
@@ -320,10 +325,10 @@ export default function Home() {
         return;
       }
 
-      // Cmd+K → Reserved for future universal search
+      // Cmd+K → Universal search
       if (e.key === "k") {
         e.preventDefault();
-        console.log("Cmd+K pressed");
+        setShowCommandPalette((prev) => !prev);
         return;
       }
 
@@ -373,6 +378,58 @@ export default function Home() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [openFiles, activeFileIndex, handleCloseFile, showQuickOpen, centerView]);
+
+  // Handle search result selection from CommandPalette
+  const handleSearchResultSelect = useCallback(
+    (result: SearchResult) => {
+      const focusForResult = (r: SearchResult): ContextFocus => {
+        const sourceLabel: Record<string, string> = {
+          google_calendar: "Calendar",
+          gmail: "Gmail",
+          slack: "Slack",
+          linear: "Linear",
+          github: "GitHub",
+          notion: "Notion",
+          granola: "Granola",
+        };
+        const sourceIcon: Record<string, string> = {
+          google_calendar: "\u{1F4C5}",
+          gmail: "\u{2709}\uFE0F",
+          slack: "\u{1F4AC}",
+          linear: "\u{1F4CB}",
+          github: "\u{1F419}",
+          notion: "\u{1F4D3}",
+          granola: "\u{1F4DD}",
+        };
+
+        return {
+          title: r.title,
+          subtitle: r.snippet,
+          source: sourceLabel[r.source] || r.source,
+          icon: sourceIcon[r.source] || "\u{1F50D}",
+          data: [
+            {
+              Source: sourceLabel[r.source] || r.source,
+              ...(r.url ? { URL: r.url } : {}),
+              ...(r.timestamp
+                ? { Time: new Date(r.timestamp).toLocaleString() }
+                : {}),
+            },
+          ],
+          suggestedQuestions: [
+            "Tell me more about this",
+            "What's the context behind this?",
+            "What should I do about this?",
+            "Summarize the key points",
+          ],
+          systemContext: `The user searched for and selected: "${r.title}" from ${sourceLabel[r.source] || r.source}. Details: ${r.snippet}${r.url ? `. URL: ${r.url}` : ""}${r.timestamp ? `. Time: ${new Date(r.timestamp).toLocaleString()}` : ""}. Help them understand and take action on this item.`,
+        };
+      };
+
+      handleOpenFocus(focusForResult(result));
+    },
+    [handleOpenFocus],
+  );
 
   // Show onboarding if no backends are connected (and we're done checking)
   if (!claudeStatus.checking && !claudeStatus.connected) {
@@ -506,6 +563,15 @@ export default function Home() {
           cwd={projectCwd}
           onOpenFile={handleOpenFile}
           onClose={() => setShowQuickOpen(false)}
+        />
+      )}
+
+      {/* Command Palette modal (Cmd+K) */}
+      {showCommandPalette && (
+        <CommandPalette
+          data={rawDatasourceData}
+          onSelect={handleSearchResultSelect}
+          onClose={() => setShowCommandPalette(false)}
         />
       )}
     </div>
