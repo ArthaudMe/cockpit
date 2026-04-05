@@ -156,3 +156,50 @@ export async function fetchNotionPages(): Promise<NotionPage[]> {
     return [];
   }
 }
+
+// ─── Write Actions ────────────────────────────────────────────────
+
+export async function appendToNotionPage(params: {
+  pageId: string;
+  content: string;
+}): Promise<{ success: boolean; message: string; url?: string }> {
+  const tokens = getNotionTokens();
+  if (!tokens) return { success: false, message: "Notion not connected. Please connect Notion in Settings." };
+
+  // Split content into paragraphs and create block children
+  const blocks = params.content.split("\n").filter(Boolean).map((text) => ({
+    object: "block" as const,
+    type: "paragraph" as const,
+    paragraph: {
+      rich_text: [{ type: "text" as const, text: { content: text } }],
+    },
+  }));
+
+  try {
+    const res = await fetch(
+      `https://api.notion.com/v1/blocks/${params.pageId}/children`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${tokens.access_token}`,
+          "Content-Type": "application/json",
+          "Notion-Version": "2022-06-28",
+        },
+        body: JSON.stringify({ children: blocks }),
+      }
+    );
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      return { success: false, message: `Notion API error: ${res.status} ${(err as any).message || res.statusText}` };
+    }
+
+    return {
+      success: true,
+      message: `Content appended to Notion page`,
+      url: `https://notion.so/${params.pageId.replace(/-/g, "")}`,
+    };
+  } catch (err) {
+    return { success: false, message: `Notion request failed: ${(err as Error).message}` };
+  }
+}

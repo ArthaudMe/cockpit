@@ -5,7 +5,8 @@ export const GOOGLE_OAUTH: OAuthConfig = {
   authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
   tokenUrl: "https://oauth2.googleapis.com/token",
   scopes: [
-    "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/gmail.compose",
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
@@ -297,5 +298,111 @@ export async function fetchRecentEmails(): Promise<EmailThread[]> {
     return threads;
   } catch {
     return [];
+  }
+}
+
+// ─── Write Actions ────────────────────────────────────────────────
+
+export async function createCalendarEvent(params: {
+  summary: string;
+  start: string;
+  end: string;
+  description?: string;
+  attendees?: string[];
+}): Promise<{ success: boolean; message: string; url?: string }> {
+  const tokens = await getValidGoogleTokens();
+  if (!tokens) return { success: false, message: "Google not connected. Please reconnect Google in Settings." };
+
+  const body: Record<string, unknown> = {
+    summary: params.summary,
+    start: { dateTime: params.start },
+    end: { dateTime: params.end },
+  };
+  if (params.description) body.description = params.description;
+  if (params.attendees?.length) {
+    body.attendees = params.attendees.map((email) => ({ email }));
+  }
+
+  try {
+    const res = await fetch(
+      "https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=all",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${tokens.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      }
+    );
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      return { success: false, message: `Google Calendar API error: ${res.status} ${(err as any).error?.message || res.statusText}` };
+    }
+
+    const data = await res.json();
+    return {
+      success: true,
+      message: `Created event: ${data.summary}`,
+      url: data.htmlLink,
+    };
+  } catch (err) {
+    return { success: false, message: `Google Calendar request failed: ${(err as Error).message}` };
+  }
+}
+
+export async function createGmailDraft(params: {
+  to: string;
+  subject: string;
+  body: string;
+}): Promise<{ success: boolean; message: string; url?: string }> {
+  const tokens = await getValidGoogleTokens();
+  if (!tokens) return { success: false, message: "Google not connected. Please reconnect Google in Settings." };
+
+  // Build RFC 2822 message
+  const rawMessage = [
+    `To: ${params.to}`,
+    `Subject: ${params.subject}`,
+    "Content-Type: text/plain; charset=utf-8",
+    "",
+    params.body,
+  ].join("\r\n");
+
+  // Base64url encode
+  const encoded = Buffer.from(rawMessage)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+
+  try {
+    const res = await fetch(
+      "https://www.googleapis.com/gmail/v1/users/me/drafts",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${tokens.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: { raw: encoded },
+        }),
+      }
+    );
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      return { success: false, message: `Gmail API error: ${res.status} ${(err as any).error?.message || res.statusText}` };
+    }
+
+    const data = await res.json();
+    return {
+      success: true,
+      message: `Draft created: "${params.subject}" to ${params.to}`,
+      url: `https://mail.google.com/mail/#drafts/${data.message?.id || ""}`,
+    };
+  } catch (err) {
+    return { success: false, message: `Gmail request failed: ${(err as Error).message}` };
   }
 }

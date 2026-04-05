@@ -275,6 +275,9 @@ Available actions:
 - **linear_create_issue** — Create a Linear issue. Params: title (required), description, teamId (required), priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)
 - **github_comment_pr** — Comment on a GitHub pull request. Params: owner (required), repo (required), pull_number (required), body (required)
 - **slack_send_message** — Send a Slack message. Params: channel (required, channel name or ID), text (required)
+- **calendar_create_event** — Create a Google Calendar event. Params: summary (required), start (required, ISO datetime), end (required, ISO datetime), description, attendees (array of emails)
+- **gmail_draft** — Create a Gmail draft. Params: to (required, email), subject (required), body (required)
+- **notion_update_page** — Append content to a Notion page. Params: pageId (required), content (required, text with newlines for paragraphs)
 
 Always set \`confirm: true\` so the user can review and approve the action before it executes. The action will render as a card with Execute/Cancel buttons.${buildSkillsPromptSection()}`;
 }
