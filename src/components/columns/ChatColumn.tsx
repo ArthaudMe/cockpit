@@ -7,6 +7,7 @@ import { usePersistedState } from "@/lib/use-persisted-state";
 import { SKILLS, expandSlashCommand } from "@/lib/skills-defs";
 import { track } from "@/lib/analytics";
 import type { SubagentSuggestion } from "@/lib/parser";
+import type { ContextFocus } from "../views/ContextualChatView";
 
 type Message = {
   role: "user" | "assistant";
@@ -42,12 +43,14 @@ export function ChatColumn({
   onInputChange,
   claudeConnected,
   onOpenFile,
+  onOpenFocus,
 }: {
   context: Context;
   inputValue: string;
   onInputChange: (v: string) => void;
   claudeConnected: boolean;
   onOpenFile?: (path: string) => void;
+  onOpenFocus?: (focus: ContextFocus) => void;
 }) {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [backends, setBackends] = useState<BackendDef[]>([]);
@@ -597,7 +600,7 @@ export function ChatColumn({
         )}
 
         {messages.map((msg, i) => (
-          <ChatMessage key={i} message={msg} onApproveSubagent={handleApproveSubagent} onOpenFile={onOpenFile} />
+          <ChatMessage key={i} message={msg} onApproveSubagent={handleApproveSubagent} onOpenFile={onOpenFile} onOpenFocus={onOpenFocus} />
         ))}
 
         {streaming && (

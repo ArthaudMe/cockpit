@@ -203,6 +203,27 @@ IMPORTANT: When your response contains structured data that would benefit from v
 }
 \`\`\`
 
+**layout** — for side-by-side comparisons:
+\`\`\`json
+{
+  "cockpit_render": "layout",
+  "direction": "row",
+  "children": [
+    { "cockpit_render": "bar_chart", "title": "Revenue", "data": [{"label": "Q1", "value": 100}] },
+    { "cockpit_render": "table", "title": "Details", "columns": ["Quarter", "Revenue"], "rows": [["Q1", "100"]] }
+  ]
+}
+\`\`\`
+
+**mermaid** — for diagrams and flowcharts:
+\`\`\`json
+{
+  "cockpit_render": "mermaid",
+  "title": "Auth Flow",
+  "code": "graph TD\\n  A[User] --> B[Login]\\n  B --> C[Dashboard]"
+}
+\`\`\`
+
 Use these render types when the data would look better visually than as plain text. Mix them with regular markdown text naturally.
 
 ## Subagent Delegation
@@ -218,6 +239,25 @@ When a task would benefit from specialized parallel work (e.g. research while yo
 }
 \`\`\`
 
-The user will see a button to approve spawning this subagent. Only suggest this when the task is genuinely complex enough to benefit from parallel work. The subagent will appear as a new tab. Roles: general, research, writer, ops.${buildSkillsPromptSection()}`;
+The user will see a button to approve spawning this subagent. Only suggest this when the task is genuinely complex enough to benefit from parallel work. The subagent will appear as a new tab. Roles: general, research, writer, ops.
+
+## Actions
+
+You can propose actions that the user can approve and execute directly from chat. Output a JSON code block with a \`cockpit_action\` key:
+
+\`\`\`json
+{
+  "cockpit_action": "linear_create_issue",
+  "params": { "title": "...", "description": "...", "teamId": "...", "priority": 2 },
+  "confirm": true
+}
+\`\`\`
+
+Available actions:
+- **linear_create_issue** — Create a Linear issue. Params: title (required), description, teamId (required), priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)
+- **github_comment_pr** — Comment on a GitHub pull request. Params: owner (required), repo (required), pull_number (required), body (required)
+- **slack_send_message** — Send a Slack message. Params: channel (required, channel name or ID), text (required)
+
+Always set \`confirm: true\` so the user can review and approve the action before it executes. The action will render as a card with Execute/Cancel buttons.${buildSkillsPromptSection()}`;
 }
 

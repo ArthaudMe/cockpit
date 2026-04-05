@@ -2,11 +2,11 @@
 
 import { parseResponse } from "@/lib/parser";
 import { SKILLS } from "@/lib/skills-defs";
-import { RenderTable } from "../renderers/Table";
-import { RenderBarChart } from "../renderers/BarChart";
-import { RenderCardGrid } from "../renderers/CardGrid";
+import { RenderBlockRenderer } from "../renderers/RenderBlockRenderer";
+import { ActionCard } from "./ActionCard";
 import { FileChip } from "./FileChip";
-import type { SubagentSuggestion } from "@/lib/parser";
+import type { SubagentSuggestion, ActionBlock } from "@/lib/parser";
+import type { ContextFocus } from "../views/ContextualChatView";
 
 // Match file paths like src/lib/foo.ts, ./bar/baz.tsx, /abs/path.js, with optional :lineNumber
 const FILE_PATH_RE = /(?:^|\s)((?:\/|\.\/|\.\.\/|[a-zA-Z][\w-]*\/)[^\s:,;'")\]}>]+\.[a-zA-Z]{1,10}(?::(\d+))?)(?=[\s,;:'")\]}>]|$)/g;
@@ -141,14 +141,28 @@ function extractFileRefs(text: string): { path: string; line?: number }[] {
   return refs;
 }
 
+async function executeActionRequest(action: ActionBlock) {
+  const res = await fetch("/api/actions/execute", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      cockpit_action: action.cockpit_action,
+      params: action.params,
+    }),
+  });
+  return res.json();
+}
+
 export function ChatMessage({
   message,
   onApproveSubagent,
   onOpenFile,
+  onOpenFocus,
 }: {
   message: Message;
   onApproveSubagent?: (suggestion: SubagentSuggestion) => void;
   onOpenFile?: (path: string) => void;
+  onOpenFocus?: (focus: ContextFocus) => void;
 }) {
   if (message.role === "user") {
     return (
@@ -268,17 +282,57 @@ export function ChatMessage({
           }
 
           if (seg.type === "render") {
-            const block = seg.block;
-            switch (block.cockpit_render) {
-              case "table":
-                return <RenderTable key={i} title={block.title} columns={block.columns} rows={block.rows} />;
-              case "bar_chart":
-                return <RenderBarChart key={i} title={block.title} data={block.data} />;
-              case "card_grid":
-                return <RenderCardGrid key={i} title={block.title} cards={block.cards} />;
-              default:
-                return null;
-            }
+            return (
+              <RenderBlockRenderer
+                key={i}
+                block={seg.block}
+                onItemClick={
+                  onOpenFocus
+                    ? (source, data) => {
+                        const title = data.title || data.label || `${source} item`;
+                        const subtitle = data.subtitle || data.status;
+                        const focusData: Record<string, string | number | boolean | null>[] = [];
+                        const row = data.row as string[] | undefined;
+                        const columns = data.columns as string[] | undefined;
+                        if (row && columns) {
+                          const record: Record<string, string | number | boolean | null> = {};
+                          columns.forEach((col: string, ci: number) => {
+                            record[col] = row[ci] ?? null;
+                          });
+                          focusData.push(record);
+                        } else {
+                          const { rowIndex, barIndex, cardIndex, columns: _c, row: _r, ...rest } = data;
+                          focusData.push(rest as Record<string, string | number | boolean | null>);
+                        }
+                        onOpenFocus({
+                          title: String(title),
+                          subtitle: subtitle ? String(subtitle) : undefined,
+                          source,
+                          icon: source === "table" ? "▦" : source === "bar_chart" ? "▥" : "◫",
+                          data: focusData,
+                          suggestedQuestions: [
+                            `Tell me more about ${title}`,
+                            `What are the key details?`,
+                            `How does this compare to others?`,
+                          ],
+                          systemContext: `The user clicked on a ${source} item: ${JSON.stringify(data)}. Focus your answers on this specific item.`,
+                        });
+                      }
+                    : undefined
+                }
+              />
+            );
+          }
+
+          if (seg.type === "action") {
+            return (
+              <ActionCard
+                key={i}
+                action={seg.action}
+                onExecute={() => executeActionRequest(seg.action)}
+                onCancel={() => {}}
+              />
+            );
           }
 
           return (
