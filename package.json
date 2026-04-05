@@ -9,15 +9,18 @@
     "dev": "next dev --port 3939",
     "build": "next build",
     "start": "next start",
-    "electron:dev": "NODE_ENV=development electron .",
+    "electron:dev": "cross-env NODE_ENV=development electron .",
     "electron:build": "next build && electron-builder",
-    "electron:start": "electron ."
+    "electron:start": "electron .",
+    "electron:publish": "next build && electron-builder --publish always"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.25.2",
     "@monaco-editor/react": "^4.7.0",
+    "electron-updater": "^6.8.3",
     "fast-glob": "^3.3.3",
     "next": "^15.3.3",
+    "posthog-js": "^1.364.6",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
@@ -26,6 +29,7 @@
     "@types/node": "^22.15.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
+    "cross-env": "^10.1.0",
     "electron": "^41.0.4",
     "electron-builder": "^26.8.1",
     "postcss": "^8.5.0",
@@ -52,11 +56,19 @@
       "category": "public.app-category.productivity",
       "icon": "public/icon.icns"
     },
+    "publish": {
+      "provider": "github",
+      "owner": "ArthaudMe",
+      "repo": "cockpit"
+    },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "build/icon.ico"
     },
     "linux": {
-      "target": "AppImage"
+      "target": "AppImage",
+      "icon": "build/icon.png",
+      "category": "Utility"
     }
   }
 }

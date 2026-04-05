@@ -1,13 +1,19 @@
-const { app, BrowserWindow, shell, dialog, Menu, Tray, nativeImage } = require("electron");
+const { app, BrowserWindow, shell, dialog, Menu, Tray, nativeImage, Notification: ElectronNotification } = require("electron");
+const { autoUpdater } = require("electron-updater");
 const { spawn, execFileSync } = require("child_process");
 const path = require("path");
 const net = require("net");
 const http = require("http");
+const fs = require("fs");
+const os = require("os");
 
 // ─── Config ────────────────────────────────────────────────────────
 let mainWindow;
 let nextServer;
+let tray;
 
+const isMac = process.platform === "darwin";
+const isWin = process.platform === "win32";
 const isDev = process.env.NODE_ENV === "development";
 const PORT = isDev ? 3939 : 3123;
 const PROTOCOL = "cockpit";
@@ -16,10 +22,154 @@ const APP_ROOT = app.isPackaged
   ? path.join(process.resourcesPath, "app")
   : path.join(__dirname, "..");
 
+const COCKPIT_DIR = path.join(os.homedir(), ".cockpit");
+const WINDOW_STATE_PATH = path.join(COCKPIT_DIR, "window-state.json");
+
+// ─── Window State Persistence ─────────────────────────────────────
+function ensureCockpitDir() {
+  if (!fs.existsSync(COCKPIT_DIR)) {
+    fs.mkdirSync(COCKPIT_DIR, { recursive: true, mode: 0o700 });
+  }
+}
+
+function loadWindowState() {
+  try {
+    if (!fs.existsSync(WINDOW_STATE_PATH)) return null;
+    const raw = fs.readFileSync(WINDOW_STATE_PATH, "utf-8");
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function saveWindowState(state) {
+  try {
+    ensureCockpitDir();
+    fs.writeFileSync(WINDOW_STATE_PATH, JSON.stringify(state, null, 2));
+  } catch (err) {
+    console.error("[electron] Failed to save window state:", err.message);
+  }
+}
+
+let saveStateTimeout;
+function debouncedSaveWindowState() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  clearTimeout(saveStateTimeout);
+  saveStateTimeout = setTimeout(() => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const isMaximized = mainWindow.isMaximized();
+    const bounds = isMaximized ? loadWindowState() : mainWindow.getBounds();
+    saveWindowState({
+      x: bounds?.x,
+      y: bounds?.y,
+      width: bounds?.width || 1280,
+      height: bounds?.height || 820,
+      isMaximized,
+    });
+  }, 500);
+}
+
+// ─── Auto-Update ──────────────────────────────────────────────────
+function setupAutoUpdate() {
+  if (isDev || !app.isPackaged) return;
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on("update-available", (info) => {
+    console.log("[updater] update available:", info.version);
+  });
+
+  autoUpdater.on("update-downloaded", (info) => {
+    console.log("[updater] update downloaded:", info.version);
+    const response = dialog.showMessageBoxSync(mainWindow, {
+      type: "info",
+      title: "Update Ready",
+      message: `Cockpit ${info.version} is ready to install.`,
+      detail: "The update will be applied when you restart.",
+      buttons: ["Restart Now", "Later"],
+      defaultId: 0,
+    });
+    if (response === 0) {
+      autoUpdater.quitAndInstall();
+    }
+  });
+
+  autoUpdater.on("error", (err) => {
+    console.error("[updater] error:", err.message);
+  });
+
+  // Check for updates after a short delay, then every 4 hours
+  setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), 5000);
+  setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 4 * 60 * 60 * 1000);
+}
+
+// ─── Tray Icon ────────────────────────────────────────────────────
+function createTray() {
+  // Create a simple 16x16 template icon (white diamond on transparent bg)
+  const size = 16;
+  const buf = Buffer.alloc(size * size * 4);
+  // Draw a filled diamond in the center (matches the Cockpit brand mark)
+  const cx = 7.5, cy = 7.5, r = 5.5;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = Math.abs(x - cx), dy = Math.abs(y - cy);
+      const idx = (y * size + x) * 4;
+      // Diamond = Manhattan distance <= radius
+      if (dx + dy <= r) {
+        buf[idx] = 255;     // R
+        buf[idx + 1] = 255; // G
+        buf[idx + 2] = 255; // B
+        buf[idx + 3] = 255; // A
+      }
+    }
+  }
+  const trayIcon = nativeImage.createFromBuffer(buf, { width: size, height: size });
+  trayIcon.setTemplateImage(true); // macOS will auto-adapt to light/dark
+
+  tray = new Tray(trayIcon);
+  tray.setToolTip("Cockpit");
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: "Show Cockpit",
+      click: () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.show();
+          mainWindow.focus();
+        }
+      },
+    },
+    { type: "separator" },
+    {
+      label: "Quit",
+      click: () => {
+        app.isQuitting = true;
+        app.quit();
+      },
+    },
+  ]);
+
+  tray.setContextMenu(contextMenu);
+
+  // Click tray icon → toggle window visibility
+  tray.on("click", () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (mainWindow.isVisible()) {
+      mainWindow.hide();
+    } else {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
+
 // ─── Next.js Server ────────────────────────────────────────────────
 function startNextServer() {
   return new Promise((resolve, reject) => {
-    const nextBin = path.join(APP_ROOT, "node_modules", ".bin", "next");
+    const nextBin = isWin
+      ? path.join(APP_ROOT, "node_modules", ".bin", "next.cmd")
+      : path.join(APP_ROOT, "node_modules", ".bin", "next");
 
     nextServer = spawn(nextBin, ["start", "--port", String(PORT)], {
       cwd: APP_ROOT,
@@ -29,6 +179,8 @@ function startNextServer() {
         NODE_ENV: "production",
       },
       stdio: ["ignore", "pipe", "pipe"],
+      // Windows needs shell for .cmd scripts
+      shell: isWin,
     });
 
     nextServer.stdout.on("data", (data) => {
@@ -46,7 +198,6 @@ function startNextServer() {
 
     nextServer.on("exit", (code) => {
       console.log("[electron] Next.js exited with code", code);
-      // If Next.js crashes while app is running, show error
       if (mainWindow && !app.isQuitting) {
         dialog.showErrorBox(
           "Cockpit Error",
@@ -85,6 +236,22 @@ function startNextServer() {
   });
 }
 
+// ─── Graceful Server Shutdown ─────────────────────────────────────
+function stopNextServer() {
+  if (!nextServer) return;
+
+  // Try SIGTERM first, force-kill after 3s
+  if (isWin) {
+    // Windows: kill process tree
+    spawn("taskkill", ["/pid", String(nextServer.pid), "/T", "/F"]);
+  } else {
+    nextServer.kill("SIGTERM");
+    setTimeout(() => {
+      try { nextServer.kill("SIGKILL"); } catch {}
+    }, 3000);
+  }
+}
+
 // ─── Window ────────────────────────────────────────────────────────
 function createSplash() {
   const splash = new BrowserWindow({
@@ -105,7 +272,7 @@ function createSplash() {
     <head><style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body {
-        font-family: "SF Mono", Monaco, Inconsolata, monospace;
+        font-family: -apple-system, "Segoe UI", Ubuntu, sans-serif;
         background: #0a0a0a;
         color: #e8e8e8;
         display: flex;
@@ -159,20 +326,37 @@ function createSplash() {
 }
 
 function createMainWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 820,
+  const savedState = loadWindowState();
+
+  const windowOpts = {
+    width: savedState?.width || 1280,
+    height: savedState?.height || 820,
+    x: savedState?.x,
+    y: savedState?.y,
     minWidth: 900,
     minHeight: 600,
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 16 },
     backgroundColor: "#0a0a0a",
     show: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
     },
-  });
+  };
+
+  // Platform-specific title bar
+  if (isMac) {
+    windowOpts.titleBarStyle = "hiddenInset";
+    windowOpts.trafficLightPosition = { x: 16, y: 16 };
+  } else {
+    // Windows/Linux: use default frame with dark background
+    windowOpts.autoHideMenuBar = true;
+  }
+
+  mainWindow = new BrowserWindow(windowOpts);
+
+  if (savedState?.isMaximized) {
+    mainWindow.maximize();
+  }
 
   mainWindow.loadURL(`http://localhost:${PORT}`);
 
@@ -185,11 +369,22 @@ function createMainWindow() {
     return { action: "allow" };
   });
 
+  // Save window state on resize/move (debounced)
+  mainWindow.on("resize", debouncedSaveWindowState);
+  mainWindow.on("move", debouncedSaveWindowState);
+
+  // Hide instead of close — keep app alive in tray
+  mainWindow.on("close", (e) => {
+    if (!app.isQuitting) {
+      e.preventDefault();
+      mainWindow.hide();
+    }
+  });
+
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
 
-  // If the renderer crashes, reload instead of showing a blank window
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
     console.error("[electron] renderer crashed:", details.reason);
     if (!app.isQuitting) {
@@ -207,11 +402,18 @@ function createMainWindow() {
 
 // ─── App Menu ──────────────────────────────────────────────────────
 function buildMenu() {
-  const template = [
-    {
+  const template = [];
+
+  if (isMac) {
+    template.push({
       label: app.name,
       submenu: [
         { role: "about" },
+        { type: "separator" },
+        {
+          label: "Check for Updates...",
+          click: () => autoUpdater.checkForUpdates().catch(() => {}),
+        },
         { type: "separator" },
         { role: "hide" },
         { role: "hideOthers" },
@@ -219,7 +421,10 @@ function buildMenu() {
         { type: "separator" },
         { role: "quit" },
       ],
-    },
+    });
+  }
+
+  template.push(
     {
       label: "Edit",
       submenu: [
@@ -250,20 +455,43 @@ function buildMenu() {
       label: "Window",
       submenu: [
         { role: "minimize" },
-        { role: "zoom" },
+        ...(isMac ? [{ role: "zoom" }] : [{ role: "maximize" }]),
         { type: "separator" },
-        { role: "front" },
+        ...(isMac ? [{ role: "front" }] : [{ role: "close" }]),
       ],
-    },
-  ];
+    }
+  );
+
+  // Windows/Linux: add Help menu with update check
+  if (!isMac) {
+    template.push({
+      label: "Help",
+      submenu: [
+        {
+          label: "Check for Updates...",
+          click: () => autoUpdater.checkForUpdates().catch(() => {}),
+        },
+        { type: "separator" },
+        {
+          label: `About ${app.name}`,
+          click: () => {
+            dialog.showMessageBox(mainWindow, {
+              type: "info",
+              title: `About ${app.name}`,
+              message: `${app.name} v${app.getVersion()}`,
+              detail: "Pilot your company — desktop cockpit with AI co-pilot.",
+            });
+          },
+        },
+      ],
+    });
+  }
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
 // ─── Deep Link Protocol (cockpit://) ────────────────────────────────
-// Register as default handler for cockpit:// URLs
 if (process.defaultApp) {
-  // Dev: register with full path to electron binary
   if (process.argv.length >= 2) {
     app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [
       path.resolve(process.argv[1]),
@@ -273,22 +501,17 @@ if (process.defaultApp) {
   app.setAsDefaultProtocolClient(PROTOCOL);
 }
 
-// Handle the deep link URL — forward OAuth callback to Next.js server
 function handleDeepLink(url) {
   if (!url) return;
   console.log("[electron] deep link:", url);
 
-  // cockpit://oauth/callback?code=xxx&state=yyy
-  // → forward to http://localhost:{PORT}/api/datasources/callback?code=xxx&state=yyy
   try {
     const parsed = new URL(url);
     if (parsed.hostname === "oauth" && parsed.pathname.startsWith("/callback")) {
       const forwardUrl = `http://localhost:${PORT}/api/datasources/callback${parsed.search}`;
 
-      // Hit the local Next.js callback endpoint
       http.get(forwardUrl, (res) => {
         console.log("[electron] OAuth callback forwarded, status:", res.statusCode);
-        // Bring Cockpit window to front
         if (mainWindow) {
           if (mainWindow.isMinimized()) mainWindow.restore();
           mainWindow.focus();
@@ -302,19 +525,18 @@ function handleDeepLink(url) {
   }
 }
 
-// macOS: open-url event fires when app is already running
+// macOS: open-url event
 app.on("open-url", (event, url) => {
   event.preventDefault();
   handleDeepLink(url);
 });
 
-// Windows/Linux: deep link URL comes as process argument
+// Windows/Linux: deep link as process argument
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
   app.on("second-instance", (_event, argv) => {
-    // On Windows, the deep link URL is the last argument
     const url = argv.find((arg) => arg.startsWith(`${PROTOCOL}://`));
     if (url) handleDeepLink(url);
 
@@ -325,20 +547,79 @@ if (!gotLock) {
   });
 }
 
+// ─── Background Intelligence ────────────────────────────────────────
+let backgroundInterval;
+
+function startBackgroundTick() {
+  // Don't start until server is ready
+  if (backgroundInterval) return;
+
+  backgroundInterval = setInterval(() => {
+    if (app.isQuitting) {
+      clearInterval(backgroundInterval);
+      return;
+    }
+
+    const tickUrl = `http://localhost:${PORT}/api/background/tick`;
+    http.get(tickUrl, (res) => {
+      let body = "";
+      res.on("data", (chunk) => { body += chunk; });
+      res.on("end", () => {
+        try {
+          const data = JSON.parse(body);
+          if (data.newNotifications && data.newNotifications.length > 0) {
+            // Only show native notifications when the window is not focused
+            const windowFocused = mainWindow && mainWindow.isFocused();
+            if (!windowFocused && ElectronNotification.isSupported()) {
+              for (const notif of data.newNotifications) {
+                const native = new ElectronNotification({
+                  title: notif.title,
+                  body: notif.body,
+                  silent: false,
+                });
+                native.on("click", () => {
+                  if (mainWindow) {
+                    if (mainWindow.isMinimized()) mainWindow.restore();
+                    mainWindow.show();
+                    mainWindow.focus();
+                  }
+                });
+                native.show();
+              }
+            }
+          }
+        } catch {
+          // ignore parse errors
+        }
+      });
+    }).on("error", () => {
+      // Server might not be ready yet, ignore
+    });
+  }, 60_000); // Every 60 seconds
+}
+
+function stopBackgroundTick() {
+  if (backgroundInterval) {
+    clearInterval(backgroundInterval);
+    backgroundInterval = null;
+  }
+}
+
 // ─── Startup ───────────────────────────────────────────────────────
 app.isQuitting = false;
 
 app.whenReady().then(async () => {
   buildMenu();
+  setupAutoUpdate();
+  createTray();
 
   if (isDev) {
-    // Dev mode: Next.js dev server should already be running on :3000
     createMainWindow();
     mainWindow.show();
+    startBackgroundTick();
     return;
   }
 
-  // Production: show splash, start server, then show main window
   const splash = createSplash();
 
   try {
@@ -349,9 +630,9 @@ app.whenReady().then(async () => {
     mainWindow.once("ready-to-show", () => {
       splash.close();
       mainWindow.show();
+      startBackgroundTick();
     });
 
-    // Fallback: if ready-to-show doesn't fire within 10s, show anyway
     setTimeout(() => {
       if (splash && !splash.isDestroyed()) {
         splash.close();
@@ -371,17 +652,14 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => {
-  // macOS: keep app alive when windows close (dock click re-opens)
-  if (process.platform !== "darwin") {
-    app.isQuitting = true;
-    if (nextServer) nextServer.kill();
-    app.quit();
-  }
+  // Keep app alive in tray on all platforms
+  // Quit is handled explicitly via tray menu or Cmd+Q
 });
 
 app.on("before-quit", () => {
   app.isQuitting = true;
-  if (nextServer) nextServer.kill();
+  stopBackgroundTick();
+  stopNextServer();
 });
 
 app.on("activate", () => {

@@ -43,8 +43,19 @@ function parseRelativeTime(time: string): number {
   return Infinity;
 }
 
+/** Pick the best "actor" from an attendees list, skipping the current user */
+function pickActor(attendees: string[], userName?: string): string {
+  if (!attendees.length) return "Meeting";
+  if (!userName) return attendees[0];
+  const lower = userName.toLowerCase();
+  const other = attendees.find(
+    (a) => !a.toLowerCase().includes(lower) && !lower.includes(a.toLowerCase())
+  );
+  return other || (attendees.length > 1 ? attendees[1] : "Meeting");
+}
+
 /** Build a Context from live datasource data */
-export function buildContextFromLiveData(live: DatasourceData): Context {
+export function buildContextFromLiveData(live: DatasourceData, userName?: string): Context {
   const calendar = (live.calendar || []).map((e) => ({
     title: e.title,
     time: e.time,
@@ -64,7 +75,7 @@ export function buildContextFromLiveData(live: DatasourceData): Context {
   for (const e of live.calendar || []) {
     company_feed.push({
       type: "meeting",
-      actor: e.attendees[0] || "You",
+      actor: pickActor(e.attendees, userName),
       event: e.title,
       project: null,
       time: e.time,
@@ -123,7 +134,7 @@ export function buildContextFromLiveData(live: DatasourceData): Context {
   for (const m of live.granolaMeetings || []) {
     company_feed.push({
       type: "meeting",
-      actor: m.attendees[0] || "You",
+      actor: pickActor(m.attendees, userName),
       event: m.title,
       project: null,
       time: m.time,

@@ -10,9 +10,11 @@ type Card = {
 export function RenderCardGrid({
   title,
   cards,
+  onCardClick,
 }: {
   title?: string;
   cards: Card[];
+  onCardClick?: (cardIndex: number, card: Card) => void;
 }) {
   return (
     <div style={{ margin: "0.4rem 0" }}>
@@ -34,12 +36,16 @@ export function RenderCardGrid({
         {cards.map((card, i) => (
           <div
             key={i}
+            onClick={() => onCardClick?.(i, card)}
             style={{
               border: "1px solid var(--border)",
               borderRadius: 4,
               padding: "0.5rem",
               background: "var(--surface)",
+              ...(onCardClick ? { cursor: "pointer", transition: "background 0.1s" } : {}),
             }}
+            onMouseEnter={(e) => { if (onCardClick) e.currentTarget.style.background = "var(--surface-hover)"; }}
+            onMouseLeave={(e) => { if (onCardClick) e.currentTarget.style.background = "var(--surface)"; }}
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)" }}>
