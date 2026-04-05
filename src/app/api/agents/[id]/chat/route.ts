@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { sendToAgent, getAgent } from "@/lib/agent-manager";
 import { extractAndProcessMemories } from "@/lib/memory";
+import { persistMessage } from "@/lib/knowledge/conversations";
 
 export const maxDuration = 300;
 
@@ -56,6 +57,19 @@ export async function POST(
             } catch (err) {
               console.error("[agent:%s] memory extraction error:", id, err);
             }
+          }
+
+          // Fire-and-forget: persist conversation to history
+          try {
+            const ts = new Date().toISOString();
+            if (message) {
+              persistMessage({ role: "user", content: message, timestamp: ts, agentId: id });
+            }
+            if (responseText) {
+              persistMessage({ role: "assistant", content: responseText, timestamp: ts, agentId: id });
+            }
+          } catch {
+            // Never let persistence failures affect the stream
           }
         });
 
