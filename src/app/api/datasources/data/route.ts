@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { fetchAllData, getDatasourceStatuses } from "@/lib/datasources/manager";
 import { getMcpServers } from "@/lib/datasources/mcp-store";
+import { writeHistory } from "@/lib/knowledge/writer";
 
 export async function GET() {
   try {
@@ -14,6 +15,13 @@ export async function GET() {
     for (const mcp of getMcpServers()) {
       connected[`mcp:${mcp.id}`] = mcp.enabled;
     }
+    // Fire-and-forget: persist to filesystem history
+    try {
+      writeHistory(data);
+    } catch {
+      // Never let history writes affect the response
+    }
+
     return NextResponse.json({ ...data, _connected: connected });
   } catch (err: any) {
     return NextResponse.json(
