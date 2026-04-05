@@ -63,6 +63,27 @@ function SourceBadge({ source }: { source: SearchSource }) {
   );
 }
 
+function LiveBadge() {
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        padding: "1px 4px",
+        borderRadius: 3,
+        fontSize: "0.38rem",
+        fontWeight: 600,
+        color: "#a3e635",
+        background: "rgba(163,230,53,0.12)",
+        border: "1px solid rgba(163,230,53,0.25)",
+        flexShrink: 0,
+        lineHeight: "1.4",
+      }}
+    >
+      LIVE
+    </span>
+  );
+}
+
 export function CommandPalette({
   data,
   onSelect,
@@ -75,8 +96,12 @@ export function CommandPalette({
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selected, setSelected] = useState(0);
+  const [liveResults, setLiveResults] = useState<SearchResult[]>([]);
+  const [liveLoading, setLiveLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const liveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const liveAbortRef = useRef<AbortController | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -96,7 +121,7 @@ export function CommandPalette({
     return () => window.removeEventListener("keydown", handler, true);
   }, [onClose]);
 
-  // Debounce query at 200ms
+  // Debounce query at 200ms for client-side
   const updateDebouncedQuery = useCallback((q: string) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!q.trim()) {
@@ -108,23 +133,85 @@ export function CommandPalette({
     }, 200);
   }, []);
 
-  // Clean up debounce on unmount
+  // Live search: debounce at 500ms, then hit the API
+  const triggerLiveSearch = useCallback((q: string) => {
+    if (liveDebounceRef.current) clearTimeout(liveDebounceRef.current);
+    if (liveAbortRef.current) liveAbortRef.current.abort();
+
+    if (!q.trim()) {
+      setLiveResults([]);
+      setLiveLoading(false);
+      return;
+    }
+
+    setLiveLoading(true);
+    liveDebounceRef.current = setTimeout(async () => {
+      const controller = new AbortController();
+      liveAbortRef.current = controller;
+
+      try {
+        const res = await fetch(
+          `/api/search?q=${encodeURIComponent(q)}&live=1`,
+          { signal: controller.signal },
+        );
+        if (!res.ok) throw new Error("Search failed");
+        const data = await res.json();
+        if (!controller.signal.aborted) {
+          setLiveResults(data.results || []);
+        }
+      } catch {
+        // Aborted or failed — ignore
+      } finally {
+        if (!controller.signal.aborted) {
+          setLiveLoading(false);
+        }
+      }
+    }, 500);
+  }, []);
+
+  // Clean up on unmount
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (liveDebounceRef.current) clearTimeout(liveDebounceRef.current);
+      if (liveAbortRef.current) liveAbortRef.current.abort();
     };
   }, []);
 
   // Client-side search — runs synchronously on debounced query
-  const results = useMemo(() => {
+  const cachedResults = useMemo(() => {
     if (!debouncedQuery.trim()) return [];
     return unifiedSearch(debouncedQuery, data);
   }, [debouncedQuery, data]);
 
+  // Merge: cached first, then live results that aren't already shown
+  const results = useMemo(() => {
+    const seen = new Set(
+      cachedResults.map((r) => `${r.source}:${r.title.toLowerCase().trim()}`),
+    );
+    const newLive = liveResults.filter((r) => {
+      const key = `${r.source}:${r.title.toLowerCase().trim()}`;
+      return !seen.has(key);
+    });
+    return [...cachedResults, ...newLive];
+  }, [cachedResults, liveResults]);
+
+  // Track which IDs are live-only for badge display
+  const liveOnlyIds = useMemo(() => {
+    const cachedKeys = new Set(
+      cachedResults.map((r) => `${r.source}:${r.title.toLowerCase().trim()}`),
+    );
+    return new Set(
+      liveResults
+        .filter((r) => !cachedKeys.has(`${r.source}:${r.title.toLowerCase().trim()}`))
+        .map((r) => r.id),
+    );
+  }, [cachedResults, liveResults]);
+
   // Reset selection when results change
   useEffect(() => {
     setSelected(0);
-  }, [results]);
+  }, [results.length]);
 
   // Scroll selected item into view
   useEffect(() => {
@@ -140,6 +227,7 @@ export function CommandPalette({
     const val = e.target.value;
     setQuery(val);
     updateDebouncedQuery(val);
+    triggerLiveSearch(val);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -244,6 +332,18 @@ export function CommandPalette({
               outline: "none",
             }}
           />
+          {liveLoading && (
+            <span
+              style={{
+                fontSize: "0.45rem",
+                color: "var(--text-muted)",
+                flexShrink: 0,
+                animation: "pulse 1.2s ease-in-out infinite",
+              }}
+            >
+              searching...
+            </span>
+          )}
           <span
             style={{
               fontSize: "0.45rem",
@@ -283,7 +383,7 @@ export function CommandPalette({
           )}
 
           {/* No results */}
-          {query.trim() && debouncedQuery.trim() && results.length === 0 && (
+          {query.trim() && debouncedQuery.trim() && results.length === 0 && !liveLoading && (
             <div
               style={{
                 padding: "1.2rem",
@@ -358,9 +458,15 @@ export function CommandPalette({
                         whiteSpace: "nowrap",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.3rem",
                       }}
                     >
-                      {result.title}
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {result.title}
+                      </span>
+                      {liveOnlyIds.has(result.id) && <LiveBadge />}
                     </div>
                     <div
                       style={{
@@ -410,7 +516,7 @@ export function CommandPalette({
         </div>
 
         {/* Footer hints */}
-        {results.length > 0 && (
+        {(results.length > 0 || liveLoading) && (
           <div
             style={{
               padding: "0.35rem 0.6rem",

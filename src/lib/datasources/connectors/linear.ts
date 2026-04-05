@@ -86,6 +86,62 @@ async function getValidLinearTokens(): Promise<TokenSet | null> {
   return tokens;
 }
 
+export async function searchLinearIssues(searchQuery: string): Promise<LinearIssue[]> {
+  const tokens = await getValidLinearTokens();
+  if (!tokens) return [];
+
+  try {
+    const query = `
+      query($term: String!) {
+        issueSearch(query: $term, first: 15) {
+          nodes {
+            identifier
+            title
+            state { name }
+            priority
+            assignee { name }
+            project { name }
+            updatedAt
+          }
+        }
+      }
+    `;
+
+    const res = await fetch("https://api.linear.app/graphql", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${tokens.access_token}`,
+      },
+      body: JSON.stringify({ query, variables: { term: searchQuery } }),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+
+    const priorityMap: Record<number, string> = {
+      0: "None",
+      1: "Urgent",
+      2: "High",
+      3: "Normal",
+      4: "Low",
+    };
+
+    return (data.data?.issueSearch?.nodes || []).map(
+      (issue: any) => ({
+        id: issue.identifier,
+        title: issue.title,
+        state: issue.state?.name || "Unknown",
+        priority: priorityMap[issue.priority] || "Normal",
+        assignee: issue.assignee?.name || "Unassigned",
+        project: issue.project?.name,
+        updatedAt: new Date(issue.updatedAt).toISOString(),
+      })
+    );
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchLinearIssues(): Promise<LinearIssue[]> {
   const tokens = await getValidLinearTokens();
   if (!tokens) return [];
