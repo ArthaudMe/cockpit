@@ -55,10 +55,37 @@ Command center for your company. Desktop AI co-pilot that connects to your live 
 - **Settings page** — Profile (editable name/role/company), Connected Tools (status + connect/disconnect), AI Engines (version + install status), Agents (inline rename, delete, backend selector), Skills (toggle enable/disable per skill), MCP Servers (add/test/toggle/remove)
 - **Persisted state** — debounced localStorage writes (500ms)
 
+### Search
+- **Command palette** (Cmd+K) — instant client-side search across cached data, then live API search with LIVE badge
+- **Live search providers** — Gmail, Google Calendar, Linear, GitHub, Notion, Slack (via `search.messages`)
+- **Source filtering** — `in:slack`, `in:linear`, `in:github`, etc.
+- **Grouped results** — by source with color-coded badges, keyboard navigation, shift+Enter to open URL
+
+### Write-Back Actions
+- **Action cards** — LLM proposes actions via `cockpit_action` JSON, user reviews and approves inline
+- **6 action types** — `linear_create_issue`, `github_comment_pr`, `slack_send_message`, `calendar_create_event`, `gmail_draft`, `notion_update_page`
+- **Action log** — all executed actions persisted to `~/.cockpit/action-log.json`
+
+### Memory
+- **Hermes-style memory** — two bounded markdown files (MEMORY.md + USER.md) in `~/.cockpit/memories/`
+- **Frozen snapshot** — loaded at session start, injected into system prompt
+- **LLM-driven writes** — model outputs `cockpit_memory` JSON blocks to add/replace/remove entries
+- **Content scanning** — injection pattern detection
+
+### Analytics
+- **PostHog integration** — opt-in anonymous usage analytics (opt-out by default)
+- **Events tracked** — `app_opened`, `chat_message_sent`, `panel_clicked`, `datasource_connected`
+- **Privacy-first** — no personal data or chat content sent
+
 ### Desktop App
-- **Electron shell** — full desktop app wrapper
-- **DMG packaging** — macOS distributable
+- **Electron shell** — full desktop app wrapper with cross-platform support (Mac/Win/Linux)
+- **Auto-update** — `electron-updater` with GitHub Releases, 4-hour check interval, restart prompt
+- **Tray icon** — programmatic diamond icon, show/hide/quit menu, click to toggle
+- **Window state persistence** — position/size saved to `~/.cockpit/window-state.json`
+- **Background intelligence** — 60s tick with native notifications for unfocused windows
+- **Graceful shutdown** — SIGTERM/SIGKILL on Unix, taskkill on Windows
 - **Splash screen** — branded launch experience
+- **DMG packaging** — macOS distributable
 
 ## Prerequisites
 
@@ -133,4 +160,33 @@ All user data stays local:
 - `~/.cockpit/agents.json` - Agent configurations
 - `~/.cockpit/skills.json` - Enabled/disabled skills
 - `~/.cockpit/mcp-servers.json` - MCP server configurations (mode 0o600)
+- `~/.cockpit/memories/` - Hermes-style memory (MEMORY.md + USER.md, mode 0o600)
+- `~/.cockpit/action-log.json` - Executed action history
+- `~/.cockpit/window-state.json` - Electron window position/size
 - `localStorage` - Chat history and UI state
+
+## Publish Checklist (for ~100 testers)
+
+### Blockers
+
+- [ ] **App icon** — need 1024x1024 PNG, then generate `public/icon.icns` (Mac), `build/icon.ico` (Win), `build/icon.png` (Linux). `electron-builder` will fail without these.
+- [ ] **OAuth apps created** — register OAuth apps for each service and populate `.env.local`:
+  - [ ] Google (Cloud Console → OAuth 2.0, add testers to "Test users" list, max 100)
+  - [ ] GitHub (Developer Settings → OAuth Apps)
+  - [ ] Linear (Settings → API → Applications)
+  - [ ] Slack (API → Create App → OAuth & Permissions)
+  - [ ] Notion (Integrations → Create integration)
+- [ ] **Bundle credentials** — credentials need to ship with the Electron build so testers don't need env vars
+- [ ] **Test `electron:build`** — verify DMG works end-to-end: Next.js starts, window loads, datasources connect, actions execute
+- [ ] **Code signing (Mac)** — either sign with Apple Developer cert, or document right-click → Open for unsigned DMGs
+
+### Should-have
+
+- [ ] **First-run onboarding** — guide new users to Settings → connect datasources on first launch
+- [ ] **Scope upgrade messaging** — clear "reconnect to enable actions" prompt when existing tokens lack write scopes
+- [ ] **GitHub Release** — create initial release so `electron-updater` has something to check against
+
+### Nice-to-have
+
+- [ ] **Windows/Linux build testing** — targets configured but untested, icons missing
+- [ ] **Crash reporting** — basic error boundaries + optional telemetry for desktop stability
