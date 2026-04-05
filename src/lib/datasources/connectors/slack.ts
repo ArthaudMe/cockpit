@@ -12,6 +12,8 @@ export const SLACK_OAUTH: OAuthConfig = {
     "users:read",
     "im:history",
     "mpim:history",
+    "search:read",
+    "chat:write",
   ],
   clientIdEnvVar: "SLACK_CLIENT_ID",
   clientSecretEnvVar: "SLACK_CLIENT_SECRET",
@@ -81,6 +83,40 @@ async function resolveUserName(
     return name;
   } catch {
     return userId;
+  }
+}
+
+export async function searchSlackMessages(query: string): Promise<SlackMessage[]> {
+  const tokens = getSlackTokens();
+  if (!tokens) return [];
+
+  try {
+    const res = await fetch(
+      `https://slack.com/api/search.messages?query=${encodeURIComponent(query)}&count=15&sort=timestamp&sort_dir=desc`,
+      { headers: { Authorization: `Bearer ${tokens.access_token}` } }
+    );
+    const data = await res.json();
+    if (!data.ok) return [];
+
+    const matches = data.messages?.matches || [];
+    const messages: SlackMessage[] = [];
+
+    for (const match of matches.slice(0, 15)) {
+      const author = match.username || match.user || "unknown";
+      const channelName = match.channel?.name || "unknown";
+      const ts = Number(match.ts) * 1000;
+
+      messages.push({
+        channel: `#${channelName}`,
+        message: (match.text || "").slice(0, 200),
+        author,
+        time: new Date(ts).toISOString(),
+      });
+    }
+
+    return messages;
+  } catch {
+    return [];
   }
 }
 

@@ -5,6 +5,7 @@ import { searchCalendarEvents, searchEmails } from "@/lib/datasources/connectors
 import { searchLinearIssues } from "@/lib/datasources/connectors/linear";
 import { searchGitHub } from "@/lib/datasources/connectors/github";
 import { searchNotionPages } from "@/lib/datasources/connectors/notion";
+import { searchSlackMessages } from "@/lib/datasources/connectors/slack";
 
 const googleLive: LiveSearchProvider = {
   sources: ["google_calendar", "gmail"],
@@ -96,9 +97,27 @@ const notionLive: LiveSearchProvider = {
   },
 };
 
+const slackLive: LiveSearchProvider = {
+  sources: ["slack"],
+  isConnected() {
+    return getConnectedServices().includes("slack");
+  },
+  async search(query: string): Promise<SearchResult[]> {
+    const messages = await searchSlackMessages(query);
+    return messages.map((msg) => ({
+      id: `live_slack_${msg.channel}_${msg.time}_${msg.author}`,
+      title: msg.message.length > 80 ? msg.message.slice(0, 80) + "..." : msg.message,
+      snippet: `${msg.author} in ${msg.channel}`,
+      source: "slack" as SearchSource,
+      timestamp: msg.time,
+    }));
+  },
+};
+
 export const allLiveProviders: LiveSearchProvider[] = [
   googleLive,
   linearLive,
   githubLive,
   notionLive,
+  slackLive,
 ];

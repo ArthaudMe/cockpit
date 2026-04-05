@@ -1,4 +1,6 @@
 import { getTokens } from "@/lib/datasources/token-store";
+import { createCalendarEvent, createGmailDraft } from "@/lib/datasources/connectors/google";
+import { appendToNotionPage } from "@/lib/datasources/connectors/notion";
 import type { ActionBlock, ActionResult } from "./types";
 
 async function executeLinearCreateIssue(
@@ -155,6 +157,70 @@ async function executeSlackSendMessage(
   }
 }
 
+async function executeCalendarCreateEvent(
+  params: Record<string, unknown>
+): Promise<ActionResult> {
+  const { summary, start, end, description, attendees } = params;
+  if (!summary || !start || !end) {
+    return { success: false, message: "Missing required params: summary, start, end (ISO datetime)" };
+  }
+
+  const result = await createCalendarEvent({
+    summary: summary as string,
+    start: start as string,
+    end: end as string,
+    description: description as string | undefined,
+    attendees: attendees as string[] | undefined,
+  });
+
+  return {
+    success: result.success,
+    message: result.message,
+    url: result.url,
+  };
+}
+
+async function executeGmailDraft(
+  params: Record<string, unknown>
+): Promise<ActionResult> {
+  const { to, subject, body } = params;
+  if (!to || !subject || !body) {
+    return { success: false, message: "Missing required params: to, subject, body" };
+  }
+
+  const result = await createGmailDraft({
+    to: to as string,
+    subject: subject as string,
+    body: body as string,
+  });
+
+  return {
+    success: result.success,
+    message: result.message,
+    url: result.url,
+  };
+}
+
+async function executeNotionUpdatePage(
+  params: Record<string, unknown>
+): Promise<ActionResult> {
+  const { pageId, content } = params;
+  if (!pageId || !content) {
+    return { success: false, message: "Missing required params: pageId, content" };
+  }
+
+  const result = await appendToNotionPage({
+    pageId: pageId as string,
+    content: content as string,
+  });
+
+  return {
+    success: result.success,
+    message: result.message,
+    url: result.url,
+  };
+}
+
 const SUPPORTED_ACTIONS = new Set([
   "linear_create_issue",
   "github_comment_pr",
@@ -177,11 +243,11 @@ export async function executeAction(action: ActionBlock): Promise<ActionResult> 
     case "slack_send_message":
       return executeSlackSendMessage(action.params);
     case "calendar_create_event":
-      return { success: false, message: "Calendar event creation is not yet implemented" };
+      return executeCalendarCreateEvent(action.params);
     case "gmail_draft":
-      return { success: false, message: "Gmail draft creation is not yet implemented" };
+      return executeGmailDraft(action.params);
     case "notion_update_page":
-      return { success: false, message: "Notion page update is not yet implemented" };
+      return executeNotionUpdatePage(action.params);
     default:
       return { success: false, message: `Unknown action type: ${action.cockpit_action}` };
   }
