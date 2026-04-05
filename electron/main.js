@@ -1,5 +1,6 @@
-const { app, BrowserWindow, shell, dialog, Menu, Tray, nativeImage } = require("electron");
-const { spawn, execFileSync } = require("child_process");
+const { app, BrowserWindow, shell, dialog, Menu } = require("electron");
+const { autoUpdater } = require("electron-updater");
+const { spawn } = require("child_process");
 const path = require("path");
 const net = require("net");
 const http = require("http");
@@ -8,6 +9,8 @@ const http = require("http");
 let mainWindow;
 let nextServer;
 
+const isMac = process.platform === "darwin";
+const isWin = process.platform === "win32";
 const isDev = process.env.NODE_ENV === "development";
 const PORT = isDev ? 3939 : 3123;
 const PROTOCOL = "cockpit";
@@ -16,10 +19,47 @@ const APP_ROOT = app.isPackaged
   ? path.join(process.resourcesPath, "app")
   : path.join(__dirname, "..");
 
+// ─── Auto-Update ──────────────────────────────────────────────────
+function setupAutoUpdate() {
+  if (isDev || !app.isPackaged) return;
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on("update-available", (info) => {
+    console.log("[updater] update available:", info.version);
+  });
+
+  autoUpdater.on("update-downloaded", (info) => {
+    console.log("[updater] update downloaded:", info.version);
+    const response = dialog.showMessageBoxSync(mainWindow, {
+      type: "info",
+      title: "Update Ready",
+      message: `Cockpit ${info.version} is ready to install.`,
+      detail: "The update will be applied when you restart.",
+      buttons: ["Restart Now", "Later"],
+      defaultId: 0,
+    });
+    if (response === 0) {
+      autoUpdater.quitAndInstall();
+    }
+  });
+
+  autoUpdater.on("error", (err) => {
+    console.error("[updater] error:", err.message);
+  });
+
+  // Check for updates after a short delay, then every 4 hours
+  setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), 5000);
+  setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 4 * 60 * 60 * 1000);
+}
+
 // ─── Next.js Server ────────────────────────────────────────────────
 function startNextServer() {
   return new Promise((resolve, reject) => {
-    const nextBin = path.join(APP_ROOT, "node_modules", ".bin", "next");
+    const nextBin = isWin
+      ? path.join(APP_ROOT, "node_modules", ".bin", "next.cmd")
+      : path.join(APP_ROOT, "node_modules", ".bin", "next");
 
     nextServer = spawn(nextBin, ["start", "--port", String(PORT)], {
       cwd: APP_ROOT,
@@ -29,6 +69,8 @@ function startNextServer() {
         NODE_ENV: "production",
       },
       stdio: ["ignore", "pipe", "pipe"],
+      // Windows needs shell for .cmd scripts
+      shell: isWin,
     });
 
     nextServer.stdout.on("data", (data) => {
@@ -46,7 +88,6 @@ function startNextServer() {
 
     nextServer.on("exit", (code) => {
       console.log("[electron] Next.js exited with code", code);
-      // If Next.js crashes while app is running, show error
       if (mainWindow && !app.isQuitting) {
         dialog.showErrorBox(
           "Cockpit Error",
@@ -85,6 +126,22 @@ function startNextServer() {
   });
 }
 
+// ─── Graceful Server Shutdown ─────────────────────────────────────
+function stopNextServer() {
+  if (!nextServer) return;
+
+  // Try SIGTERM first, force-kill after 3s
+  if (isWin) {
+    // Windows: kill process tree
+    spawn("taskkill", ["/pid", String(nextServer.pid), "/T", "/F"]);
+  } else {
+    nextServer.kill("SIGTERM");
+    setTimeout(() => {
+      try { nextServer.kill("SIGKILL"); } catch {}
+    }, 3000);
+  }
+}
+
 // ─── Window ────────────────────────────────────────────────────────
 function createSplash() {
   const splash = new BrowserWindow({
@@ -105,7 +162,7 @@ function createSplash() {
     <head><style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body {
-        font-family: "SF Mono", Monaco, Inconsolata, monospace;
+        font-family: -apple-system, "Segoe UI", Ubuntu, sans-serif;
         background: #0a0a0a;
         color: #e8e8e8;
         display: flex;
@@ -159,20 +216,29 @@ function createSplash() {
 }
 
 function createMainWindow() {
-  mainWindow = new BrowserWindow({
+  const windowOpts = {
     width: 1280,
     height: 820,
     minWidth: 900,
     minHeight: 600,
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 16 },
     backgroundColor: "#0a0a0a",
     show: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
     },
-  });
+  };
+
+  // Platform-specific title bar
+  if (isMac) {
+    windowOpts.titleBarStyle = "hiddenInset";
+    windowOpts.trafficLightPosition = { x: 16, y: 16 };
+  } else {
+    // Windows/Linux: use default frame with dark background
+    windowOpts.autoHideMenuBar = true;
+  }
+
+  mainWindow = new BrowserWindow(windowOpts);
 
   mainWindow.loadURL(`http://localhost:${PORT}`);
 
@@ -189,7 +255,6 @@ function createMainWindow() {
     mainWindow = null;
   });
 
-  // If the renderer crashes, reload instead of showing a blank window
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
     console.error("[electron] renderer crashed:", details.reason);
     if (!app.isQuitting) {
@@ -207,11 +272,18 @@ function createMainWindow() {
 
 // ─── App Menu ──────────────────────────────────────────────────────
 function buildMenu() {
-  const template = [
-    {
+  const template = [];
+
+  if (isMac) {
+    template.push({
       label: app.name,
       submenu: [
         { role: "about" },
+        { type: "separator" },
+        {
+          label: "Check for Updates...",
+          click: () => autoUpdater.checkForUpdates().catch(() => {}),
+        },
         { type: "separator" },
         { role: "hide" },
         { role: "hideOthers" },
@@ -219,7 +291,10 @@ function buildMenu() {
         { type: "separator" },
         { role: "quit" },
       ],
-    },
+    });
+  }
+
+  template.push(
     {
       label: "Edit",
       submenu: [
@@ -250,20 +325,43 @@ function buildMenu() {
       label: "Window",
       submenu: [
         { role: "minimize" },
-        { role: "zoom" },
+        ...(isMac ? [{ role: "zoom" }] : [{ role: "maximize" }]),
         { type: "separator" },
-        { role: "front" },
+        ...(isMac ? [{ role: "front" }] : [{ role: "close" }]),
       ],
-    },
-  ];
+    }
+  );
+
+  // Windows/Linux: add Help menu with update check
+  if (!isMac) {
+    template.push({
+      label: "Help",
+      submenu: [
+        {
+          label: "Check for Updates...",
+          click: () => autoUpdater.checkForUpdates().catch(() => {}),
+        },
+        { type: "separator" },
+        {
+          label: `About ${app.name}`,
+          click: () => {
+            dialog.showMessageBox(mainWindow, {
+              type: "info",
+              title: `About ${app.name}`,
+              message: `${app.name} v${app.getVersion()}`,
+              detail: "Pilot your company — desktop cockpit with AI co-pilot.",
+            });
+          },
+        },
+      ],
+    });
+  }
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
 // ─── Deep Link Protocol (cockpit://) ────────────────────────────────
-// Register as default handler for cockpit:// URLs
 if (process.defaultApp) {
-  // Dev: register with full path to electron binary
   if (process.argv.length >= 2) {
     app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [
       path.resolve(process.argv[1]),
@@ -273,22 +371,17 @@ if (process.defaultApp) {
   app.setAsDefaultProtocolClient(PROTOCOL);
 }
 
-// Handle the deep link URL — forward OAuth callback to Next.js server
 function handleDeepLink(url) {
   if (!url) return;
   console.log("[electron] deep link:", url);
 
-  // cockpit://oauth/callback?code=xxx&state=yyy
-  // → forward to http://localhost:{PORT}/api/datasources/callback?code=xxx&state=yyy
   try {
     const parsed = new URL(url);
     if (parsed.hostname === "oauth" && parsed.pathname.startsWith("/callback")) {
       const forwardUrl = `http://localhost:${PORT}/api/datasources/callback${parsed.search}`;
 
-      // Hit the local Next.js callback endpoint
       http.get(forwardUrl, (res) => {
         console.log("[electron] OAuth callback forwarded, status:", res.statusCode);
-        // Bring Cockpit window to front
         if (mainWindow) {
           if (mainWindow.isMinimized()) mainWindow.restore();
           mainWindow.focus();
@@ -302,19 +395,18 @@ function handleDeepLink(url) {
   }
 }
 
-// macOS: open-url event fires when app is already running
+// macOS: open-url event
 app.on("open-url", (event, url) => {
   event.preventDefault();
   handleDeepLink(url);
 });
 
-// Windows/Linux: deep link URL comes as process argument
+// Windows/Linux: deep link as process argument
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
   app.on("second-instance", (_event, argv) => {
-    // On Windows, the deep link URL is the last argument
     const url = argv.find((arg) => arg.startsWith(`${PROTOCOL}://`));
     if (url) handleDeepLink(url);
 
@@ -330,15 +422,14 @@ app.isQuitting = false;
 
 app.whenReady().then(async () => {
   buildMenu();
+  setupAutoUpdate();
 
   if (isDev) {
-    // Dev mode: Next.js dev server should already be running on :3000
     createMainWindow();
     mainWindow.show();
     return;
   }
 
-  // Production: show splash, start server, then show main window
   const splash = createSplash();
 
   try {
@@ -351,7 +442,6 @@ app.whenReady().then(async () => {
       mainWindow.show();
     });
 
-    // Fallback: if ready-to-show doesn't fire within 10s, show anyway
     setTimeout(() => {
       if (splash && !splash.isDestroyed()) {
         splash.close();
@@ -371,17 +461,16 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => {
-  // macOS: keep app alive when windows close (dock click re-opens)
-  if (process.platform !== "darwin") {
+  if (!isMac) {
     app.isQuitting = true;
-    if (nextServer) nextServer.kill();
+    stopNextServer();
     app.quit();
   }
 });
 
 app.on("before-quit", () => {
   app.isQuitting = true;
-  if (nextServer) nextServer.kill();
+  stopNextServer();
 });
 
 app.on("activate", () => {
