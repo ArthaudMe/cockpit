@@ -93,6 +93,44 @@ export async function fetchGitHubPRs(): Promise<GitHubPR[]> {
   }
 }
 
+export async function searchGitHub(query: string): Promise<GitHubPR[]> {
+  const tokens = getGitHubTokens();
+  if (!tokens) return [];
+
+  try {
+    const res = await fetch(
+      `https://api.github.com/search/issues?q=${encodeURIComponent(query)}+involves:@me&sort=updated&per_page=15`,
+      {
+        headers: {
+          Authorization: `Bearer ${tokens.access_token}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+      }
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+
+    return (data.items || []).map((item: any) => {
+      const repoUrl = item.repository_url || "";
+      const repo = repoUrl.split("/").slice(-2).join("/");
+
+      return {
+        title: item.title,
+        repo,
+        author: item.user?.login || "unknown",
+        status: item.pull_request
+          ? item.draft ? "draft" : item.state
+          : `issue:${item.state}`,
+        time: new Date(item.updated_at).toISOString(),
+        url: item.html_url,
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchGitHubNotifications(): Promise<GitHubNotification[]> {
   const tokens = getGitHubTokens();
   if (!tokens) return [];

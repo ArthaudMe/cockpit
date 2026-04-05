@@ -146,6 +146,109 @@ export async function fetchCalendarEvents(): Promise<CalendarEvent[]> {
   }
 }
 
+export async function searchCalendarEvents(query: string): Promise<CalendarEvent[]> {
+  const tokens = await getValidGoogleTokens();
+  if (!tokens) return [];
+
+  try {
+    const now = new Date();
+    const threeMonthsAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+    const threeMonthsAhead = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+    const params = new URLSearchParams({
+      q: query,
+      timeMin: threeMonthsAgo.toISOString(),
+      timeMax: threeMonthsAhead.toISOString(),
+      singleEvents: "true",
+      orderBy: "startTime",
+      maxResults: "15",
+    });
+
+    const res = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`,
+      { headers: { Authorization: `Bearer ${tokens.access_token}` } }
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+
+    return (data.items || []).map((event: any) => {
+      const start = event.start?.dateTime || event.start?.date || "";
+      const end = event.end?.dateTime || event.end?.date || "";
+      const startDate = new Date(start);
+      const endDate = new Date(end);
+      const durationMin = Math.round(
+        (endDate.getTime() - startDate.getTime()) / 60_000
+      );
+
+      return {
+        title: event.summary || "Untitled",
+        time: startDate.toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        }),
+        date: startDate.toISOString().split("T")[0],
+        duration: durationMin >= 60 ? `${Math.round(durationMin / 60)}h` : `${durationMin}m`,
+        attendees: (event.attendees || [])
+          .filter((a: any) => !a.self)
+          .map((a: any) => a.displayName || a.email?.split("@")[0] || "Unknown"),
+        description: event.description?.slice(0, 200),
+        source: "Google Calendar",
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+export async function searchEmails(query: string): Promise<EmailThread[]> {
+  const tokens = await getValidGoogleTokens();
+  if (!tokens) return [];
+
+  try {
+    const listRes = await fetch(
+      `https://www.googleapis.com/gmail/v1/users/me/messages?maxResults=10&q=${encodeURIComponent(query)}`,
+      { headers: { Authorization: `Bearer ${tokens.access_token}` } }
+    );
+    if (!listRes.ok) return [];
+    const listData = await listRes.json();
+
+    const messages = listData.messages || [];
+    const threads: EmailThread[] = [];
+
+    for (const msg of messages.slice(0, 10)) {
+      try {
+        const msgRes = await fetch(
+          `https://www.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`,
+          { headers: { Authorization: `Bearer ${tokens.access_token}` } }
+        );
+        if (!msgRes.ok) continue;
+        const msgData = await msgRes.json();
+
+        const headers = msgData.payload?.headers || [];
+        const subject =
+          headers.find((h: any) => h.name === "Subject")?.value || "No subject";
+        const from =
+          headers.find((h: any) => h.name === "From")?.value || "Unknown";
+        const unread = (msgData.labelIds || []).includes("UNREAD");
+
+        threads.push({
+          subject,
+          from: from.replace(/<[^>]+>/g, "").trim(),
+          snippet: msgData.snippet || "",
+          time: new Date(Number(msgData.internalDate)).toISOString(),
+          unread,
+        });
+      } catch {
+        continue;
+      }
+    }
+
+    return threads;
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchRecentEmails(): Promise<EmailThread[]> {
   const tokens = await getValidGoogleTokens();
   if (!tokens) return [];

@@ -66,6 +66,49 @@ export function isNotionConnected(): boolean {
   return getNotionTokens() !== null;
 }
 
+export async function searchNotionPages(query: string): Promise<NotionPage[]> {
+  const tokens = getNotionTokens();
+  if (!tokens) return [];
+
+  try {
+    const res = await fetch("https://api.notion.com/v1/search", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tokens.access_token}`,
+        "Content-Type": "application/json",
+        "Notion-Version": "2022-06-28",
+      },
+      body: JSON.stringify({
+        query,
+        sort: {
+          direction: "descending",
+          timestamp: "last_edited_time",
+        },
+        page_size: 15,
+      }),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+
+    return (data.results || [])
+      .filter((item: any) => item.object === "page")
+      .map((page: any) => {
+        const titleProp = page.properties?.title?.title?.[0]?.plain_text
+          || page.properties?.Name?.title?.[0]?.plain_text
+          || "Untitled";
+
+        return {
+          title: titleProp,
+          lastEdited: new Date(page.last_edited_time).toISOString(),
+          url: page.url || "",
+          parent: page.parent?.database_id ? "database" : page.parent?.page_id ? "page" : "workspace",
+        };
+      });
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchNotionPages(): Promise<NotionPage[]> {
   const tokens = getNotionTokens();
   if (!tokens) return [];
