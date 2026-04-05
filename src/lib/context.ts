@@ -3,6 +3,7 @@ import { join } from "path";
 import { homedir } from "os";
 import { buildSkillsPromptSection } from "./skills";
 import { buildMemoryPromptSection } from "./memory";
+import { searchHistory } from "./knowledge/search";
 import type { DatasourceData } from "./datasources/types";
 
 // Re-export client-safe types and functions so server-side consumers
@@ -155,6 +156,24 @@ export function buildSystemPrompt(ctx?: Context, live?: DatasourceData, userMess
         .join("\n")}`
     : "";
 
+  // Historical context: search past items relevant to the user's message
+  let historicalContext = "";
+  if (userMessage) {
+    try {
+      const results = searchHistory({ query: userMessage, limit: 5 });
+      if (results.length > 0) {
+        const lines = results.map((r) => {
+          const dateStr = r.timestamp ? r.timestamp.split("T")[0] : "";
+          const snippet = r.snippet ? `: ${r.snippet.slice(0, 80)}` : "";
+          return `- [${r.source}, ${dateStr}] ${r.title}${snippet}`;
+        });
+        historicalContext = `\n\n## Historical Context\nThe following past items may be relevant:\n${lines.join("\n")}`;
+      }
+    } catch {
+      // Never let search failures affect prompt building
+    }
+  }
+
   return `You are a sharp AI co-pilot embedded in Cockpit, a founder's command center. The user is ${userName}.${roleLine}${companyLine}
 
 You have access to their projects, tools, and data sources through Cockpit. Be concise, direct, and actionable — like a sharp chief of staff.
@@ -167,8 +186,7 @@ ${analytics ? `\n## Key Metrics\n${analytics}` : ""}
 ## Recent Slack Activity
 ${slack}
 ${competitors ? `\n## Competitor Intel\n${competitors}` : ""}
-${todos ? `\n## Todo List\n${todos}` : ""}${liveLinear}${liveGitHub}${liveEmails}${liveNotion}${liveGranola}${liveMcp}
-
+${todos ? `\n## Todo List\n${todos}` : ""}${liveLinear}${liveGitHub}${liveEmails}${liveNotion}${liveGranola}${liveMcp}${historicalContext}
 ${buildMemoryPromptSection()}
 
 When answering questions, use this context naturally. Don't say "based on the context I was given" — just answer as if you naturally know this information. Be concise and direct, like a sharp chief of staff. If you don't have information, say so clearly rather than making things up.

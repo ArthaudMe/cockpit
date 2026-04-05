@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { fetchAllData, getDatasourceStatuses } from "@/lib/datasources/manager";
 import { getMcpServers } from "@/lib/datasources/mcp-store";
+import { writeHistory } from "@/lib/knowledge/writer";
 import { writeDatasourceCache, readDatasourceCache } from "@/lib/datasources/cache";
 
 export async function GET() {
@@ -17,6 +18,13 @@ export async function GET() {
     }
 
     const response = { ...data, _connected: connected };
+
+    // Fire-and-forget: persist to filesystem history
+    try {
+      writeHistory(data);
+    } catch {
+      // Never let history writes affect the response
+    }
 
     // Cache successful response to disk for offline resilience
     writeDatasourceCache(response);
