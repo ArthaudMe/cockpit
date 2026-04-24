@@ -66,6 +66,18 @@ Command center for your company. Desktop AI co-pilot that connects to your live 
 - **6 action types** — `linear_create_issue`, `github_comment_pr`, `slack_send_message`, `calendar_create_event`, `gmail_draft`, `notion_update_page`
 - **Action log** — all executed actions persisted to `~/.cockpit/action-log.json`
 
+### Skill Creator
+- **Custom skills** — LLM proposes reusable workflows via `cockpit_skill` JSON blocks, user approves inline
+- **Slash commands** — each custom skill gets its own `/command`, available immediately after creation
+- **Auto-detection** — LLM can propose skills after successful multi-step interactions
+- **Persisted** — saved to `~/.cockpit/custom-skills/` as JSON files, loaded alongside 12 built-in skills
+- **Full lifecycle** — create, update, delete via LLM or API
+
+### Brain-First Protocol
+- **Local knowledge first** — LLM checks memory, history, and live datasources before suggesting external lookups
+- **Historical context** — past conversations and data searched by relevance and injected into system prompt
+- **Memory-aware** — persistent Notes + User Profile consulted before every response
+
 ### Memory
 - **Hermes-style memory** — two bounded markdown files (MEMORY.md + USER.md) in `~/.cockpit/memories/`
 - **Frozen snapshot** — loaded at session start, injected into system prompt
@@ -161,6 +173,7 @@ All user data stays local:
 - `~/.cockpit/skills.json` - Enabled/disabled skills
 - `~/.cockpit/mcp-servers.json` - MCP server configurations (mode 0o600)
 - `~/.cockpit/memories/` - Hermes-style memory (MEMORY.md + USER.md, mode 0o600)
+- `~/.cockpit/custom-skills/` - User-created skills (JSON files, mode 0o600)
 - `~/.cockpit/action-log.json` - Executed action history
 - `~/.cockpit/window-state.json` - Electron window position/size
 - `~/.cockpit/crash-log.json` - Electron crash log (last 50 entries)
