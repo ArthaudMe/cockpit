@@ -62,6 +62,8 @@ type DatasourceInfo = {
   icon: string;
   connected: boolean;
   needsOAuth: boolean;
+  needsScopeUpgrade?: boolean;
+  scopeUpgradeReason?: string;
 };
 
 type McpServer = {
@@ -462,22 +464,54 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                     }}
                   />
                 </div>
+                {ds.connected && ds.needsScopeUpgrade && (
+                  <div
+                    style={{
+                      marginTop: "0.3rem",
+                      padding: "0.25rem 0.4rem",
+                      background: "rgba(255,180,50,0.08)",
+                      border: "1px solid rgba(255,180,50,0.2)",
+                      borderRadius: 4,
+                      fontSize: "0.4rem",
+                      color: "var(--yellow)",
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    {ds.scopeUpgradeReason || "Reconnect to enable write actions"}
+                  </div>
+                )}
                 <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
                   {ds.connected ? (
-                    <button
-                      onClick={() => handleDisconnect(ds.id)}
-                      style={actionBtn}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = "var(--red)";
-                        e.currentTarget.style.color = "var(--red)";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = "var(--border)";
-                        e.currentTarget.style.color = "var(--text)";
-                      }}
-                    >
-                      Disconnect
-                    </button>
+                    <>
+                      <button
+                        onClick={() => handleDisconnect(ds.id)}
+                        style={actionBtn}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = "var(--red)";
+                          e.currentTarget.style.color = "var(--red)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = "var(--border)";
+                          e.currentTarget.style.color = "var(--text)";
+                        }}
+                      >
+                        Disconnect
+                      </button>
+                      {ds.needsScopeUpgrade && (
+                        <button
+                          onClick={() => !isConnecting && handleConnect(ds.id)}
+                          disabled={isConnecting}
+                          style={{
+                            ...actionBtn,
+                            borderColor: "var(--yellow)",
+                            color: "var(--yellow)",
+                            cursor: isConnecting ? "wait" : "pointer",
+                          }}
+                        >
+                          {isConnecting ? "Waiting..." : "Reconnect"}
+                        </button>
+                      )}
+                    </>
                   ) : ds.needsOAuth ? (
                     <button
                       onClick={() => !isConnecting && handleConnect(ds.id)}
@@ -496,7 +530,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                       Auto-detected
                     </span>
                   )}
-                  {ds.connected && (
+                  {ds.connected && !ds.needsScopeUpgrade && (
                     <span style={{ fontSize: "0.4rem", color: "var(--green)", marginTop: "0.35rem" }}>
                       Connected
                     </span>

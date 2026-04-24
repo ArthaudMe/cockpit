@@ -21,6 +21,8 @@ export interface DatasourceStatus {
   icon: string;
   description: string;
   needsOAuth: boolean;
+  needsScopeUpgrade?: boolean;
+  scopeUpgradeReason?: string;
 }
 
 export interface OAuthConfig {

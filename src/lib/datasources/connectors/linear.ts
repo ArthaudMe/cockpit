@@ -4,7 +4,7 @@ import { getTokens, saveTokens } from "../token-store";
 export const LINEAR_OAUTH: OAuthConfig = {
   authUrl: "https://linear.app/oauth/authorize",
   tokenUrl: "https://api.linear.app/oauth/token",
-  scopes: ["read"],
+  scopes: ["read", "write"],
   clientIdEnvVar: "LINEAR_CLIENT_ID",
   clientSecretEnvVar: "LINEAR_CLIENT_SECRET",
 };
