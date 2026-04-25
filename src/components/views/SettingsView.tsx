@@ -78,12 +78,23 @@ type McpServer = {
   addedAt: number;
 };
 
+type CustomSkillInfo = {
+  id: string;
+  name: string;
+  slash: string;
+  icon: string;
+  description: string;
+  custom: true;
+};
+
 export function SettingsView({ onBack }: { onBack: () => void }) {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [backends, setBackends] = useState<BackendStatus[]>([]);
   const [backendDefs, setBackendDefs] = useState<BackendDef[]>([]);
   const [profile, setProfile] = useState<Profile>({ name: "", role: "", company: "" });
   const [skills, setSkills] = useState<SkillInfo[]>([]);
+  const [customSkills, setCustomSkills] = useState<CustomSkillInfo[]>([]);
+  const [showAddSkill, setShowAddSkill] = useState(false);
   const [editingAgent, setEditingAgent] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editingField, setEditingField] = useState<string | null>(null);
@@ -130,6 +141,13 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
     fetch("/api/skills")
       .then((r) => r.json())
       .then((data: SkillInfo[]) => setSkills(data))
+      .catch(() => {});
+
+    fetch("/api/skills/custom")
+      .then((r) => r.json())
+      .then((data: CustomSkillInfo[]) => {
+        if (Array.isArray(data)) setCustomSkills(data);
+      })
       .catch(() => {});
 
     fetchDatasources();
@@ -272,6 +290,28 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, enabled }),
       });
+    } catch {}
+  }, []);
+
+  const handleAddCustomSkill = useCallback(async (skill: { name: string; slash: string; icon: string; description: string; promptInstruction: string }) => {
+    try {
+      const res = await fetch("/api/skills/custom", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "create", ...skill }),
+      });
+      const result = await res.json();
+      if (result.ok && result.skill) {
+        setCustomSkills((prev) => [...prev, result.skill]);
+        setShowAddSkill(false);
+      }
+    } catch {}
+  }, []);
+
+  const handleDeleteCustomSkill = useCallback(async (id: string) => {
+    try {
+      await fetch(`/api/skills/custom?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      setCustomSkills((prev) => prev.filter((s) => s.id !== id));
     } catch {}
   }, []);
 
@@ -707,6 +747,84 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
           ))}
         </div>
 
+        {/* ── Custom Skills ── */}
+        <div style={{ ...sectionTitle, marginTop: "1rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span>Custom Skills</span>
+          <button
+            onClick={() => setShowAddSkill(true)}
+            style={{
+              background: "none",
+              border: "1px solid var(--border)",
+              borderRadius: 4,
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              fontSize: "0.4rem",
+              padding: "0.1rem 0.4rem",
+              textTransform: "none",
+              letterSpacing: 0,
+              fontWeight: 400,
+            }}
+          >
+            + Create
+          </button>
+        </div>
+        <div
+          style={{
+            fontSize: "0.45rem",
+            color: "var(--text-muted)",
+            marginBottom: "0.5rem",
+            lineHeight: 1.5,
+          }}
+        >
+          Create reusable skills with custom prompts. The AI can also propose skills during conversations.
+        </div>
+
+        {showAddSkill && <AddSkillForm onAdd={handleAddCustomSkill} onCancel={() => setShowAddSkill(false)} card={card} />}
+
+        {customSkills.map((skill) => (
+          <div key={skill.id} style={{ ...card, borderColor: "rgba(168,139,250,0.2)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: "0.75rem", flexShrink: 0 }}>{skill.icon}</span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: "0.55rem", fontWeight: 600, color: "#a78bfa" }}>{skill.name}</div>
+                  <div style={{ fontSize: "0.4rem", color: "var(--text-muted)", marginTop: "0.05rem" }}>{skill.slash} — {skill.description}</div>
+                </div>
+              </div>
+              <button
+                onClick={() => handleDeleteCustomSkill(skill.id)}
+                style={{
+                  background: "none",
+                  border: "1px solid var(--border)",
+                  borderRadius: 4,
+                  color: "var(--text-muted)",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  fontSize: "0.4rem",
+                  padding: "0.1rem 0.35rem",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = "var(--red)";
+                  e.currentTarget.style.color = "var(--red)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = "var(--border)";
+                  e.currentTarget.style.color = "var(--text-muted)";
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        ))}
+
+        {customSkills.length === 0 && !showAddSkill && (
+          <div style={{ ...card, textAlign: "center", color: "var(--text-muted)", fontSize: "0.45rem", padding: "0.8rem" }}>
+            No custom skills yet — create one or let the AI propose one during chat
+          </div>
+        )}
+
         {/* ── AI Engines ── */}
         <div style={{ ...sectionTitle, marginTop: "1.25rem" }}>AI Engines</div>
         <div style={{ display: "flex", gap: "0.4rem", marginBottom: "0.75rem" }}>
@@ -1059,6 +1177,130 @@ function AddMcpForm({
           }}
         >
           Add Server
+        </button>
+        <button
+          onClick={onCancel}
+          style={{
+            background: "none",
+            border: "1px solid var(--border)",
+            borderRadius: 4,
+            color: "var(--text-muted)",
+            cursor: "pointer",
+            fontFamily: "inherit",
+            fontSize: "0.45rem",
+            padding: "0.25rem 0.6rem",
+          }}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Add Custom Skill Form ───────────────────────────────────────────
+
+function AddSkillForm({
+  onAdd,
+  onCancel,
+  card,
+}: {
+  onAdd: (skill: { name: string; slash: string; icon: string; description: string; promptInstruction: string }) => void;
+  onCancel: () => void;
+  card: React.CSSProperties;
+}) {
+  const [name, setName] = useState("");
+  const [slash, setSlash] = useState("");
+  const [icon, setIcon] = useState("★");
+  const [description, setDescription] = useState("");
+  const [promptInstruction, setPromptInstruction] = useState("");
+
+  const inputStyle: React.CSSProperties = {
+    background: "var(--bg)",
+    border: "1px solid var(--border)",
+    borderRadius: 4,
+    padding: "0.25rem 0.4rem",
+    fontSize: "0.5rem",
+    color: "var(--text)",
+    fontFamily: "inherit",
+    outline: "none",
+    width: "100%",
+  };
+
+  const labelStyle: React.CSSProperties = {
+    fontSize: "0.45rem",
+    color: "var(--text-muted)",
+    marginBottom: "0.2rem",
+    display: "block",
+  };
+
+  const canSubmit = name.trim() && promptInstruction.trim();
+
+  return (
+    <div style={{ ...card, marginBottom: "0.6rem", borderColor: "rgba(168,139,250,0.3)" }}>
+      <div style={{ fontSize: "0.55rem", fontWeight: 600, color: "#a78bfa", marginBottom: "0.5rem" }}>
+        Create Custom Skill
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.4rem", marginBottom: "0.4rem" }}>
+        <div>
+          <label style={labelStyle}>Name</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Weekly Report" style={inputStyle} />
+        </div>
+        <div style={{ width: 50 }}>
+          <label style={labelStyle}>Icon</label>
+          <input value={icon} onChange={(e) => setIcon(e.target.value)} style={{ ...inputStyle, textAlign: "center" }} maxLength={2} />
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.4rem", marginBottom: "0.4rem" }}>
+        <div>
+          <label style={labelStyle}>Slash command</label>
+          <input value={slash} onChange={(e) => setSlash(e.target.value)} placeholder="/report" style={inputStyle} />
+        </div>
+        <div>
+          <label style={labelStyle}>Description</label>
+          <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What this skill does" style={inputStyle} />
+        </div>
+      </div>
+
+      <div style={{ marginBottom: "0.4rem" }}>
+        <label style={labelStyle}>Prompt instruction</label>
+        <textarea
+          value={promptInstruction}
+          onChange={(e) => setPromptInstruction(e.target.value)}
+          placeholder="Instructions for the AI when this skill is activated..."
+          rows={3}
+          style={{ ...inputStyle, resize: "vertical", minHeight: 60 }}
+        />
+      </div>
+
+      <div style={{ display: "flex", gap: "0.35rem", marginTop: "0.5rem" }}>
+        <button
+          onClick={() => {
+            if (!canSubmit) return;
+            onAdd({
+              name: name.trim(),
+              slash: slash.trim() || `/${name.trim().toLowerCase().replace(/\s+/g, "-")}`,
+              icon,
+              description: description.trim() || `Custom skill: ${name.trim()}`,
+              promptInstruction: promptInstruction.trim(),
+            });
+          }}
+          disabled={!canSubmit}
+          style={{
+            background: canSubmit ? "#a78bfa" : "var(--border)",
+            border: "none",
+            borderRadius: 4,
+            color: "var(--bg)",
+            cursor: canSubmit ? "pointer" : "not-allowed",
+            fontFamily: "inherit",
+            fontSize: "0.45rem",
+            padding: "0.25rem 0.6rem",
+            fontWeight: 600,
+          }}
+        >
+          Create Skill
         </button>
         <button
           onClick={onCancel}
