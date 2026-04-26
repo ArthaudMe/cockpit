@@ -1,5 +1,6 @@
 import type { OAuthConfig, TokenSet, SlackMessage } from "../types";
 import { getTokens } from "../token-store";
+import { isProxyEnabled, proxyExchangeCode } from "../oauth-proxy";
 
 export const SLACK_OAUTH: OAuthConfig = {
   authUrl: "https://slack.com/oauth/v2/authorize",
@@ -34,18 +35,24 @@ export async function exchangeSlackCode(
   code: string,
   redirectUri: string
 ): Promise<TokenSet> {
-  const res = await fetch(SLACK_OAUTH.tokenUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      code,
-      client_id: process.env.SLACK_CLIENT_ID || "",
-      client_secret: process.env.SLACK_CLIENT_SECRET || "",
-      redirect_uri: redirectUri,
-    }),
-  });
-  const data = await res.json();
-  if (!data.ok) throw new Error(data.error || "Slack OAuth failed");
+  let data: any;
+
+  if (isProxyEnabled()) {
+    data = await proxyExchangeCode("slack", code, redirectUri);
+  } else {
+    const res = await fetch(SLACK_OAUTH.tokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: process.env.SLACK_CLIENT_ID || "",
+        client_secret: process.env.SLACK_CLIENT_SECRET || "",
+        redirect_uri: redirectUri,
+      }),
+    });
+    data = await res.json();
+    if (!data.ok) throw new Error(data.error || "Slack OAuth failed");
+  }
 
   // Slack returns user token in authed_user for user-scoped tokens
   const userToken = data.authed_user?.access_token || data.access_token;

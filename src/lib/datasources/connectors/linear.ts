@@ -1,5 +1,6 @@
 import type { OAuthConfig, TokenSet, LinearIssue } from "../types";
 import { getTokens, saveTokens } from "../token-store";
+import { isProxyEnabled, proxyExchangeCode, proxyRefreshToken } from "../oauth-proxy";
 
 export const LINEAR_OAUTH: OAuthConfig = {
   authUrl: "https://linear.app/oauth/authorize",
@@ -26,19 +27,25 @@ export async function exchangeLinearCode(
   code: string,
   redirectUri: string
 ): Promise<TokenSet> {
-  const res = await fetch(LINEAR_OAUTH.tokenUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      code,
-      client_id: process.env.LINEAR_CLIENT_ID || "",
-      client_secret: process.env.LINEAR_CLIENT_SECRET || "",
-      redirect_uri: redirectUri,
-      grant_type: "authorization_code",
-    }),
-  });
-  const data = await res.json();
-  if (data.error) throw new Error(data.error_description || data.error);
+  let data: any;
+
+  if (isProxyEnabled()) {
+    data = await proxyExchangeCode("linear", code, redirectUri);
+  } else {
+    const res = await fetch(LINEAR_OAUTH.tokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: process.env.LINEAR_CLIENT_ID || "",
+        client_secret: process.env.LINEAR_CLIENT_SECRET || "",
+        redirect_uri: redirectUri,
+        grant_type: "authorization_code",
+      }),
+    });
+    data = await res.json();
+    if (data.error) throw new Error(data.error_description || data.error);
+  }
 
   return {
     access_token: data.access_token,
@@ -49,18 +56,24 @@ export async function exchangeLinearCode(
 }
 
 async function refreshLinearToken(refreshToken: string): Promise<TokenSet> {
-  const res = await fetch(LINEAR_OAUTH.tokenUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      refresh_token: refreshToken,
-      client_id: process.env.LINEAR_CLIENT_ID || "",
-      client_secret: process.env.LINEAR_CLIENT_SECRET || "",
-      grant_type: "refresh_token",
-    }),
-  });
-  const data = await res.json();
-  if (data.error) throw new Error(data.error_description || data.error);
+  let data: any;
+
+  if (isProxyEnabled()) {
+    data = await proxyRefreshToken("linear", refreshToken);
+  } else {
+    const res = await fetch(LINEAR_OAUTH.tokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        refresh_token: refreshToken,
+        client_id: process.env.LINEAR_CLIENT_ID || "",
+        client_secret: process.env.LINEAR_CLIENT_SECRET || "",
+        grant_type: "refresh_token",
+      }),
+    });
+    data = await res.json();
+    if (data.error) throw new Error(data.error_description || data.error);
+  }
 
   const tokens: TokenSet = {
     access_token: data.access_token,
