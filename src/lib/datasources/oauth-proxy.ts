@@ -11,7 +11,7 @@ import type { ServiceId } from "./types";
 
 // Falls back to env var for local dev override
 const PROXY_URL = process.env.OAUTH_PROXY_URL || "https://proxy-mio-xyz.vercel.app";
-const PROXY_SECRET = process.env.OAUTH_PROXY_SECRET || "/OJznlopewbHj3E/goiT2KFtXwlR1LjbeHwM6zJhTuk=";
+const PROXY_SECRET = process.env.OAUTH_PROXY_SECRET || "44fa96b71e6d7f602c404cf341cf1ff0cd8a3aa0e2351b8c6f2cd81edd67254a";
 
 export function isProxyEnabled(): boolean {
   return !!PROXY_URL;
