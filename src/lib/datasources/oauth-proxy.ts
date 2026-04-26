@@ -9,10 +9,9 @@
 
 import type { ServiceId } from "./types";
 
-// Set OAUTH_PROXY_URL in the Electron build or .env
-// e.g. "https://cockpit-oauth-proxy.vercel.app"
-const PROXY_URL = process.env.OAUTH_PROXY_URL || "";
-const PROXY_SECRET = process.env.OAUTH_PROXY_SECRET || "";
+// Falls back to env var for local dev override
+const PROXY_URL = process.env.OAUTH_PROXY_URL || "https://proxy-mio-xyz.vercel.app";
+const PROXY_SECRET = process.env.OAUTH_PROXY_SECRET || "/OJznlopewbHj3E/goiT2KFtXwlR1LjbeHwM6zJhTuk=";
 
 export function isProxyEnabled(): boolean {
   return !!PROXY_URL;
