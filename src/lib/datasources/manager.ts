@@ -1,5 +1,5 @@
 import type { ServiceId, DatasourceStatus, DatasourceData } from "./types";
-import { getConnectedServices } from "./token-store";
+import { getConnectedServices, getTokens } from "./token-store";
 import { isGranolaAvailable, fetchGranolaMeetings } from "./connectors/granola";
 import { fetchCalendarEvents, fetchRecentEmails } from "./connectors/google";
 import { fetchLinearIssues } from "./connectors/linear";
@@ -71,20 +71,46 @@ const SERVICE_META: Record<
   },
 };
 
+// Services that need write scopes for actions but may have been connected with read-only
+const WRITE_SCOPE_REQUIREMENTS: Partial<Record<ServiceId, { required: string; reason: string }>> = {
+  linear: { required: "write", reason: "Reconnect to enable creating issues" },
+};
+
 export function getDatasourceStatuses(): DatasourceStatus[] {
   const connected = getConnectedServices();
   const granolaAvailable = isGranolaAvailable();
 
-  return Object.entries(SERVICE_META).map(([id, meta]) => ({
-    id: id as ServiceId,
-    ...meta,
-    connected:
+  return Object.entries(SERVICE_META).map(([id, meta]) => {
+    const serviceId = id as ServiceId;
+    const isConnected =
       id === "granola"
         ? granolaAvailable
         : id === "notion"
           ? isNotionConnected()
-          : connected.includes(id as ServiceId),
-  }));
+          : connected.includes(serviceId);
+
+    let needsScopeUpgrade = false;
+    let scopeUpgradeReason: string | undefined;
+
+    if (isConnected) {
+      const req = WRITE_SCOPE_REQUIREMENTS[serviceId];
+      if (req) {
+        const tokens = getTokens(serviceId);
+        if (tokens?.scope && !tokens.scope.includes(req.required)) {
+          needsScopeUpgrade = true;
+          scopeUpgradeReason = req.reason;
+        }
+      }
+    }
+
+    return {
+      id: serviceId,
+      ...meta,
+      connected: isConnected,
+      needsScopeUpgrade,
+      scopeUpgradeReason,
+    };
+  });
 }
 
 export function getAuthUrl(

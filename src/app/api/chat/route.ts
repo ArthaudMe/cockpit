@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { send } from "@/lib/claude-pool";
 import { extractAndProcessMemories } from "@/lib/memory";
+import { extractAndProcessSkills } from "@/lib/skills-extract";
 
 export const maxDuration = 300;
 
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
         }
         controller.close();
 
-        // Fire-and-forget: extract and process memory commands
+        // Fire-and-forget: extract and process memory + skill commands
         if (responseText) {
           try {
             const { processed } = extractAndProcessMemories(responseText);
@@ -44,6 +45,15 @@ export async function POST(req: NextRequest) {
             }
           } catch (err) {
             console.error("[chat] memory extraction error:", err);
+          }
+
+          try {
+            const { processed: skillResults } = extractAndProcessSkills(responseText);
+            if (skillResults.length > 0) {
+              console.log("[chat] processed %d skill commands", skillResults.length);
+            }
+          } catch (err) {
+            console.error("[chat] skill extraction error:", err);
           }
         }
       });

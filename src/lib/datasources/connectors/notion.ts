@@ -1,5 +1,7 @@
 import type { OAuthConfig, TokenSet, NotionPage } from "../types";
 import { getTokens } from "../token-store";
+import { isProxyEnabled, proxyExchangeCode } from "../oauth-proxy";
+import CREDENTIALS from "../credentials";
 
 export const NOTION_OAUTH: OAuthConfig = {
   authUrl: "https://api.notion.com/v1/oauth/authorize",
@@ -11,7 +13,7 @@ export const NOTION_OAUTH: OAuthConfig = {
 
 export function getNotionAuthUrl(redirectUri: string, state: string): string {
   const params = new URLSearchParams({
-    client_id: process.env.NOTION_CLIENT_ID || "",
+    client_id: CREDENTIALS.NOTION_CLIENT_ID || "",
     redirect_uri: redirectUri,
     response_type: "code",
     owner: "user",
@@ -24,24 +26,30 @@ export async function exchangeNotionCode(
   code: string,
   redirectUri: string
 ): Promise<TokenSet> {
-  const credentials = Buffer.from(
-    `${process.env.NOTION_CLIENT_ID}:${process.env.NOTION_CLIENT_SECRET}`
-  ).toString("base64");
+  let data: any;
 
-  const res = await fetch(NOTION_OAUTH.tokenUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Basic ${credentials}`,
-    },
-    body: JSON.stringify({
-      code,
-      grant_type: "authorization_code",
-      redirect_uri: redirectUri,
-    }),
-  });
-  const data = await res.json();
-  if (data.error) throw new Error(data.error || "Notion OAuth failed");
+  if (isProxyEnabled()) {
+    data = await proxyExchangeCode("notion", code, redirectUri);
+  } else {
+    const credentials = Buffer.from(
+      `${CREDENTIALS.NOTION_CLIENT_ID}:${process.env.NOTION_CLIENT_SECRET}`
+    ).toString("base64");
+
+    const res = await fetch(NOTION_OAUTH.tokenUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Basic ${credentials}`,
+      },
+      body: JSON.stringify({
+        code,
+        grant_type: "authorization_code",
+        redirect_uri: redirectUri,
+      }),
+    });
+    data = await res.json();
+    if (data.error) throw new Error(data.error || "Notion OAuth failed");
+  }
 
   return {
     access_token: data.access_token,

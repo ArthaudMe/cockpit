@@ -244,14 +244,17 @@ export const SKILLS: SkillDef[] = [
  * If the message starts with a skill slash command (e.g. "/prep tomorrow's board meeting"),
  * returns { skill, expandedMessage }. Returns null if no match.
  * `enabledSkills` should be the list of currently enabled skill IDs.
+ * `extraSkills` can provide additional skills (e.g. custom user-created skills).
  */
 export function expandSlashCommand(
   message: string,
-  enabledSkills?: SkillId[]
+  enabledSkills?: SkillId[],
+  extraSkills?: SkillDef[]
 ): { skill: SkillDef; expandedMessage: string } | null {
-  const pool = enabledSkills
+  const builtIn = enabledSkills
     ? SKILLS.filter((s) => enabledSkills.includes(s.id))
     : SKILLS;
+  const pool = extraSkills ? [...builtIn, ...extraSkills] : builtIn;
   const trimmed = message.trim();
 
   for (const skill of pool) {

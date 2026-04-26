@@ -43,13 +43,28 @@ export type ActionBlock = {
   confirm: boolean;
 };
 
+export type SkillProposal = {
+  cockpit_skill: true;
+  action: "create" | "update" | "delete";
+  id?: string;
+  name?: string;
+  slash?: string;
+  icon?: string;
+  description?: string;
+  category?: string;
+  promptInstruction?: string;
+  triggerHints?: string[];
+  outputFormat?: string;
+};
+
 export type ParsedSegment =
   | { type: "text"; content: string }
   | { type: "render"; block: RenderBlock }
   | { type: "loading" }
   | { type: "skill_active"; skillSlash: string }
   | { type: "subagent_suggestion"; suggestion: SubagentSuggestion }
-  | { type: "action"; action: ActionBlock };
+  | { type: "action"; action: ActionBlock }
+  | { type: "skill_proposal"; proposal: SkillProposal };
 
 /**
  * Find the matching closing brace for an opening brace at `start`.
@@ -173,6 +188,16 @@ export function parseResponse(text: string): ParsedSegment[] {
                 params: parsed.params || {},
                 confirm: parsed.confirm !== false, // default to true
               },
+            });
+            lastIndex = fenceEnd;
+            continue;
+          }
+          if (parsed.cockpit_skill === true && parsed.action && parsed.name) {
+            const before = text.slice(lastIndex, match.index).trim();
+            if (before) segments.push({ type: "text", content: before });
+            segments.push({
+              type: "skill_proposal",
+              proposal: parsed as SkillProposal,
             });
             lastIndex = fenceEnd;
             continue;

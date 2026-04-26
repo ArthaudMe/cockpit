@@ -66,6 +66,18 @@ Command center for your company. Desktop AI co-pilot that connects to your live 
 - **6 action types** — `linear_create_issue`, `github_comment_pr`, `slack_send_message`, `calendar_create_event`, `gmail_draft`, `notion_update_page`
 - **Action log** — all executed actions persisted to `~/.cockpit/action-log.json`
 
+### Skill Creator
+- **Custom skills** — LLM proposes reusable workflows via `cockpit_skill` JSON blocks, user approves inline
+- **Slash commands** — each custom skill gets its own `/command`, available immediately after creation
+- **Auto-detection** — LLM can propose skills after successful multi-step interactions
+- **Persisted** — saved to `~/.cockpit/custom-skills/` as JSON files, loaded alongside 12 built-in skills
+- **Full lifecycle** — create, update, delete via LLM or API
+
+### Brain-First Protocol
+- **Local knowledge first** — LLM checks memory, history, and live datasources before suggesting external lookups
+- **Historical context** — past conversations and data searched by relevance and injected into system prompt
+- **Memory-aware** — persistent Notes + User Profile consulted before every response
+
 ### Memory
 - **Hermes-style memory** — two bounded markdown files (MEMORY.md + USER.md) in `~/.cockpit/memories/`
 - **Frozen snapshot** — loaded at session start, injected into system prompt
@@ -161,15 +173,37 @@ All user data stays local:
 - `~/.cockpit/skills.json` - Enabled/disabled skills
 - `~/.cockpit/mcp-servers.json` - MCP server configurations (mode 0o600)
 - `~/.cockpit/memories/` - Hermes-style memory (MEMORY.md + USER.md, mode 0o600)
+- `~/.cockpit/custom-skills/` - User-created skills (JSON files, mode 0o600)
 - `~/.cockpit/action-log.json` - Executed action history
 - `~/.cockpit/window-state.json` - Electron window position/size
+- `~/.cockpit/crash-log.json` - Electron crash log (last 50 entries)
 - `localStorage` - Chat history and UI state
+
+### Crash Reporting
+- **React error boundary** — catches render errors, shows reload/dismiss screen, reports to PostHog (if opted in)
+- **Global error listeners** — `unhandledrejection` and `error` events tracked via PostHog
+- **Electron process handlers** — `uncaughtException` and `unhandledRejection` logged to `~/.cockpit/crash-log.json`
+- **Renderer crash recovery** — auto-reloads on `render-process-gone` and `unresponsive` events
+
+## Installing Unsigned DMGs (macOS)
+
+Since the DMG is not signed with an Apple Developer certificate, macOS Gatekeeper will block it by default. To open:
+
+1. Download and open the `.dmg` file, drag **Cockpit** to Applications
+2. **First launch:** Right-click (or Control-click) the app in Applications → select **Open**
+3. Click **Open** in the dialog that appears ("macOS cannot verify the developer...")
+4. Subsequent launches will open normally
+
+Alternatively, run from Terminal:
+```bash
+xattr -cr /Applications/Cockpit.app
+```
 
 ## Publish Checklist (for ~100 testers)
 
 ### Blockers
 
-- [ ] **App icon** — need 1024x1024 PNG, then generate `public/icon.icns` (Mac), `build/icon.ico` (Win), `build/icon.png` (Linux). `electron-builder` will fail without these.
+- [x] **App icon** — `public/icon.icns` (Mac), `build/icon.ico` (Win), `build/icon.png` (Linux)
 - [ ] **OAuth apps created** — register OAuth apps for each service and populate `.env.local`:
   - [ ] Google (Cloud Console → OAuth 2.0, add testers to "Test users" list, max 100)
   - [ ] GitHub (Developer Settings → OAuth Apps)
@@ -178,15 +212,15 @@ All user data stays local:
   - [ ] Notion (Integrations → Create integration)
 - [ ] **Bundle credentials** — credentials need to ship with the Electron build so testers don't need env vars
 - [ ] **Test `electron:build`** — verify DMG works end-to-end: Next.js starts, window loads, datasources connect, actions execute
-- [ ] **Code signing (Mac)** — either sign with Apple Developer cert, or document right-click → Open for unsigned DMGs
 
 ### Should-have
 
-- [ ] **First-run onboarding** — guide new users to Settings → connect datasources on first launch
-- [ ] **Scope upgrade messaging** — clear "reconnect to enable actions" prompt when existing tokens lack write scopes
+- [x] **First-run onboarding** — 4-step flow (Welcome → Engine → Datasources → Ready) already in place
+- [x] **Scope upgrade messaging** — yellow "Reconnect to enable actions" banner + Reconnect button for tokens lacking write scopes
+- [x] **Crash reporting** — React error boundary, global error listeners, Electron process-level handlers, crash log file
 - [ ] **GitHub Release** — create initial release so `electron-updater` has something to check against
 
 ### Nice-to-have
 
-- [ ] **Windows/Linux build testing** — targets configured but untested, icons missing
-- [ ] **Crash reporting** — basic error boundaries + optional telemetry for desktop stability
+- [ ] **Windows/Linux build testing** — targets configured but untested
+- [x] **Code signing (Mac)** — documented right-click → Open workaround for unsigned DMGs

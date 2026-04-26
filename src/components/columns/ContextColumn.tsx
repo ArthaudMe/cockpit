@@ -5,6 +5,22 @@ import type { Context } from "@/lib/context-client";
 import { usePersistedState } from "@/lib/use-persisted-state";
 import { track } from "@/lib/analytics";
 
+type QuickSkill = {
+  id: string;
+  name: string;
+  slash: string;
+  icon: string;
+  custom?: boolean;
+};
+
+const FEATURED_SKILLS: QuickSkill[] = [
+  { id: "data-analyst", name: "Analyst", slash: "/data", icon: "▥" },
+  { id: "product-manager", name: "PM", slash: "/pm", icon: "◧" },
+  { id: "sales-pipeline", name: "Sales", slash: "/sales", icon: "◆" },
+  { id: "eng-manager", name: "Admin", slash: "/eng", icon: "◫" },
+  { id: "builder", name: "Finance", slash: "/build", icon: "⚙" },
+];
+
 function Panel({
   title,
   count,
@@ -288,6 +304,9 @@ export function ContextColumn({
       </Panel>
       )}
 
+      {/* Skills */}
+      <SkillsPanel onPrefill={onPrefill} />
+
       {/* Todo */}
       <Panel title="Todo" count={todos.length > 0 ? todos.filter((t) => !t.done).length + "/" + todos.length : 0}>
         {todos.length === 0 ? (
@@ -325,5 +344,75 @@ export function ContextColumn({
       </Panel>
 
     </div>
+  );
+}
+
+function SkillsPanel({ onPrefill }: { onPrefill: (text: string) => void }) {
+  const [customSkills, setCustomSkills] = useState<QuickSkill[]>([]);
+
+  useEffect(() => {
+    fetch("/api/skills/custom")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setCustomSkills(
+            data.map((s: any) => ({
+              id: s.id,
+              name: s.name,
+              slash: s.slash,
+              icon: s.icon || "★",
+              custom: true,
+            }))
+          );
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const allSkills = [...FEATURED_SKILLS, ...customSkills];
+
+  return (
+    <Panel title="Skills" count={allSkills.length}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.3rem" }}>
+        {allSkills.map((skill) => (
+          <button
+            key={skill.id}
+            onClick={() => {
+              onPrefill(`${skill.slash} `);
+              track("skill_clicked", { skill: skill.id });
+            }}
+            style={{
+              background: skill.custom
+                ? "rgba(168,139,250,0.1)"
+                : "rgba(255,255,255,0.04)",
+              border: `1px solid ${skill.custom ? "rgba(168,139,250,0.3)" : "var(--border)"}`,
+              borderRadius: 4,
+              color: skill.custom ? "#a78bfa" : "var(--text)",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              fontSize: "0.5rem",
+              padding: "0.2rem 0.5rem",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.25rem",
+              transition: "all 0.15s",
+            }}
+            title={`${skill.slash} — Click to use`}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = skill.custom
+                ? "rgba(168,139,250,0.2)"
+                : "rgba(255,255,255,0.08)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = skill.custom
+                ? "rgba(168,139,250,0.1)"
+                : "rgba(255,255,255,0.04)";
+            }}
+          >
+            <span>{skill.icon}</span> {skill.name}
+          </button>
+        ))}
+      </div>
+    </Panel>
   );
 }

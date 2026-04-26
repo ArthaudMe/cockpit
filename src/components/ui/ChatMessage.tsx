@@ -4,6 +4,7 @@ import { parseResponse } from "@/lib/parser";
 import { SKILLS } from "@/lib/skills-defs";
 import { RenderBlockRenderer } from "../renderers/RenderBlockRenderer";
 import { ActionCard } from "./ActionCard";
+import { SkillProposalCard } from "./SkillProposalCard";
 import { FileChip } from "./FileChip";
 import type { SubagentSuggestion, ActionBlock } from "@/lib/parser";
 import type { ContextFocus } from "../views/ContextualChatView";
@@ -333,6 +334,10 @@ export function ChatMessage({
                 onCancel={() => {}}
               />
             );
+          }
+
+          if (seg.type === "skill_proposal") {
+            return <SkillProposalCard key={i} proposal={seg.proposal} />;
           }
 
           return (

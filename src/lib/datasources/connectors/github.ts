@@ -1,5 +1,7 @@
 import type { OAuthConfig, TokenSet, GitHubPR, GitHubNotification } from "../types";
 import { getTokens } from "../token-store";
+import { isProxyEnabled, proxyExchangeCode } from "../oauth-proxy";
+import CREDENTIALS from "../credentials";
 
 export const GITHUB_OAUTH: OAuthConfig = {
   authUrl: "https://github.com/login/oauth/authorize",
@@ -11,7 +13,7 @@ export const GITHUB_OAUTH: OAuthConfig = {
 
 export function getGitHubAuthUrl(redirectUri: string, state: string): string {
   const params = new URLSearchParams({
-    client_id: process.env.GITHUB_CLIENT_ID || "",
+    client_id: CREDENTIALS.GITHUB_CLIENT_ID,
     redirect_uri: redirectUri,
     scope: GITHUB_OAUTH.scopes.join(" "),
     state,
@@ -23,21 +25,27 @@ export async function exchangeGitHubCode(
   code: string,
   redirectUri: string
 ): Promise<TokenSet> {
-  const res = await fetch(GITHUB_OAUTH.tokenUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({
-      code,
-      client_id: process.env.GITHUB_CLIENT_ID || "",
-      client_secret: process.env.GITHUB_CLIENT_SECRET || "",
-      redirect_uri: redirectUri,
-    }),
-  });
-  const data = await res.json();
-  if (data.error) throw new Error(data.error_description || data.error);
+  let data: any;
+
+  if (isProxyEnabled()) {
+    data = await proxyExchangeCode("github", code, redirectUri);
+  } else {
+    const res = await fetch(GITHUB_OAUTH.tokenUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        code,
+        client_id: CREDENTIALS.GITHUB_CLIENT_ID,
+        client_secret: process.env.GITHUB_CLIENT_SECRET || "",
+        redirect_uri: redirectUri,
+      }),
+    });
+    data = await res.json();
+    if (data.error) throw new Error(data.error_description || data.error);
+  }
 
   return {
     access_token: data.access_token,

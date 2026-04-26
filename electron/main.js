@@ -7,6 +7,39 @@ const http = require("http");
 const fs = require("fs");
 const os = require("os");
 
+// ─── Crash Reporting ─────────────────────────────────────────────
+const CRASH_LOG_PATH = path.join(os.homedir(), ".cockpit", "crash-log.json");
+
+function logCrash(entry) {
+  try {
+    const dir = path.join(os.homedir(), ".cockpit");
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+
+    let log = [];
+    if (fs.existsSync(CRASH_LOG_PATH)) {
+      try { log = JSON.parse(fs.readFileSync(CRASH_LOG_PATH, "utf-8")); } catch {}
+    }
+    log.push({ ...entry, timestamp: new Date().toISOString() });
+    // Keep last 50 entries
+    if (log.length > 50) log = log.slice(-50);
+    fs.writeFileSync(CRASH_LOG_PATH, JSON.stringify(log, null, 2));
+  } catch {
+    // Never let crash logging itself crash
+  }
+}
+
+process.on("uncaughtException", (err) => {
+  console.error("[electron] uncaughtException:", err);
+  logCrash({ type: "uncaughtException", message: err.message, stack: err.stack });
+});
+
+process.on("unhandledRejection", (reason) => {
+  const message = reason instanceof Error ? reason.message : String(reason);
+  const stack = reason instanceof Error ? reason.stack : undefined;
+  console.error("[electron] unhandledRejection:", message);
+  logCrash({ type: "unhandledRejection", message, stack });
+});
+
 // ─── Config ────────────────────────────────────────────────────────
 let mainWindow;
 let nextServer;
@@ -387,6 +420,7 @@ function createMainWindow() {
 
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
     console.error("[electron] renderer crashed:", details.reason);
+    logCrash({ type: "renderProcessGone", reason: details.reason, exitCode: details.exitCode });
     if (!app.isQuitting) {
       mainWindow.loadURL(`http://localhost:${PORT}`);
     }
@@ -394,6 +428,7 @@ function createMainWindow() {
 
   mainWindow.webContents.on("unresponsive", () => {
     console.warn("[electron] window unresponsive, reloading...");
+    logCrash({ type: "windowUnresponsive" });
     mainWindow.webContents.reload();
   });
 
