@@ -1,6 +1,7 @@
 import type { OAuthConfig, TokenSet, NotionPage } from "../types";
 import { getTokens } from "../token-store";
 import { isProxyEnabled, proxyExchangeCode } from "../oauth-proxy";
+import CREDENTIALS from "../credentials";
 
 export const NOTION_OAUTH: OAuthConfig = {
   authUrl: "https://api.notion.com/v1/oauth/authorize",
@@ -12,7 +13,7 @@ export const NOTION_OAUTH: OAuthConfig = {
 
 export function getNotionAuthUrl(redirectUri: string, state: string): string {
   const params = new URLSearchParams({
-    client_id: process.env.NOTION_CLIENT_ID || "",
+    client_id: CREDENTIALS.NOTION_CLIENT_ID || "",
     redirect_uri: redirectUri,
     response_type: "code",
     owner: "user",
@@ -31,7 +32,7 @@ export async function exchangeNotionCode(
     data = await proxyExchangeCode("notion", code, redirectUri);
   } else {
     const credentials = Buffer.from(
-      `${process.env.NOTION_CLIENT_ID}:${process.env.NOTION_CLIENT_SECRET}`
+      `${CREDENTIALS.NOTION_CLIENT_ID}:${process.env.NOTION_CLIENT_SECRET}`
     ).toString("base64");
 
     const res = await fetch(NOTION_OAUTH.tokenUrl, {

@@ -1,6 +1,7 @@
 import type { OAuthConfig, TokenSet, GitHubPR, GitHubNotification } from "../types";
 import { getTokens } from "../token-store";
 import { isProxyEnabled, proxyExchangeCode } from "../oauth-proxy";
+import CREDENTIALS from "../credentials";
 
 export const GITHUB_OAUTH: OAuthConfig = {
   authUrl: "https://github.com/login/oauth/authorize",
@@ -12,7 +13,7 @@ export const GITHUB_OAUTH: OAuthConfig = {
 
 export function getGitHubAuthUrl(redirectUri: string, state: string): string {
   const params = new URLSearchParams({
-    client_id: process.env.GITHUB_CLIENT_ID || "",
+    client_id: CREDENTIALS.GITHUB_CLIENT_ID,
     redirect_uri: redirectUri,
     scope: GITHUB_OAUTH.scopes.join(" "),
     state,
@@ -37,7 +38,7 @@ export async function exchangeGitHubCode(
       },
       body: JSON.stringify({
         code,
-        client_id: process.env.GITHUB_CLIENT_ID || "",
+        client_id: CREDENTIALS.GITHUB_CLIENT_ID,
         client_secret: process.env.GITHUB_CLIENT_SECRET || "",
         redirect_uri: redirectUri,
       }),

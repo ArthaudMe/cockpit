@@ -1,6 +1,7 @@
 import type { OAuthConfig, TokenSet, SlackMessage } from "../types";
 import { getTokens } from "../token-store";
 import { isProxyEnabled, proxyExchangeCode } from "../oauth-proxy";
+import CREDENTIALS from "../credentials";
 
 export const SLACK_OAUTH: OAuthConfig = {
   authUrl: "https://slack.com/oauth/v2/authorize",
@@ -22,7 +23,7 @@ export const SLACK_OAUTH: OAuthConfig = {
 
 export function getSlackAuthUrl(redirectUri: string, state: string): string {
   const params = new URLSearchParams({
-    client_id: process.env.SLACK_CLIENT_ID || "",
+    client_id: CREDENTIALS.SLACK_CLIENT_ID,
     redirect_uri: redirectUri,
     scope: "", // Bot scopes go in scope, user scopes in user_scope
     user_scope: SLACK_OAUTH.scopes.join(","),
@@ -45,7 +46,7 @@ export async function exchangeSlackCode(
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         code,
-        client_id: process.env.SLACK_CLIENT_ID || "",
+        client_id: CREDENTIALS.SLACK_CLIENT_ID,
         client_secret: process.env.SLACK_CLIENT_SECRET || "",
         redirect_uri: redirectUri,
       }),

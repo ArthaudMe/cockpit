@@ -1,6 +1,7 @@
 import type { OAuthConfig, TokenSet, CalendarEvent, EmailThread } from "../types";
 import { getTokens, saveTokens } from "../token-store";
 import { isProxyEnabled, proxyExchangeCode, proxyRefreshToken } from "../oauth-proxy";
+import CREDENTIALS from "../credentials";
 
 export const GOOGLE_OAUTH: OAuthConfig = {
   authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
@@ -18,7 +19,7 @@ export const GOOGLE_OAUTH: OAuthConfig = {
 
 export function getGoogleAuthUrl(redirectUri: string, state: string): string {
   const params = new URLSearchParams({
-    client_id: process.env.GOOGLE_CLIENT_ID || "",
+    client_id: CREDENTIALS.GOOGLE_CLIENT_ID,
     redirect_uri: redirectUri,
     response_type: "code",
     scope: GOOGLE_OAUTH.scopes.join(" "),
@@ -43,7 +44,7 @@ export async function exchangeGoogleCode(
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         code,
-        client_id: process.env.GOOGLE_CLIENT_ID || "",
+        client_id: CREDENTIALS.GOOGLE_CLIENT_ID,
         client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
         redirect_uri: redirectUri,
         grant_type: "authorization_code",
@@ -73,7 +74,7 @@ async function refreshGoogleToken(refreshToken: string): Promise<TokenSet> {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         refresh_token: refreshToken,
-        client_id: process.env.GOOGLE_CLIENT_ID || "",
+        client_id: CREDENTIALS.GOOGLE_CLIENT_ID,
         client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
         grant_type: "refresh_token",
       }),

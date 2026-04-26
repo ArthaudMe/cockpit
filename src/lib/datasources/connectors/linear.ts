@@ -1,6 +1,7 @@
 import type { OAuthConfig, TokenSet, LinearIssue } from "../types";
 import { getTokens, saveTokens } from "../token-store";
 import { isProxyEnabled, proxyExchangeCode, proxyRefreshToken } from "../oauth-proxy";
+import CREDENTIALS from "../credentials";
 
 export const LINEAR_OAUTH: OAuthConfig = {
   authUrl: "https://linear.app/oauth/authorize",
@@ -12,7 +13,7 @@ export const LINEAR_OAUTH: OAuthConfig = {
 
 export function getLinearAuthUrl(redirectUri: string, state: string): string {
   const params = new URLSearchParams({
-    client_id: process.env.LINEAR_CLIENT_ID || "",
+    client_id: CREDENTIALS.LINEAR_CLIENT_ID,
     redirect_uri: redirectUri,
     response_type: "code",
     scope: LINEAR_OAUTH.scopes.join(","),
@@ -37,7 +38,7 @@ export async function exchangeLinearCode(
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         code,
-        client_id: process.env.LINEAR_CLIENT_ID || "",
+        client_id: CREDENTIALS.LINEAR_CLIENT_ID,
         client_secret: process.env.LINEAR_CLIENT_SECRET || "",
         redirect_uri: redirectUri,
         grant_type: "authorization_code",
@@ -66,7 +67,7 @@ async function refreshLinearToken(refreshToken: string): Promise<TokenSet> {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         refresh_token: refreshToken,
-        client_id: process.env.LINEAR_CLIENT_ID || "",
+        client_id: CREDENTIALS.LINEAR_CLIENT_ID,
         client_secret: process.env.LINEAR_CLIENT_SECRET || "",
         grant_type: "refresh_token",
       }),
