@@ -43,7 +43,7 @@ export function Header({
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
         <span
           style={{
-            fontSize: "0.65rem",
+            fontSize: "0.75rem",
             fontWeight: 700,
             letterSpacing: "0.1em",
             color: "var(--text)",
@@ -54,7 +54,7 @@ export function Header({
         </span>
         <span
           style={{
-            fontSize: "0.5rem",
+            fontSize: "0.75rem",
             color: "var(--text-muted)",
             letterSpacing: "0.03em",
           }}
@@ -64,7 +64,7 @@ export function Header({
         {offlineInfo?.offline && (
           <span
             style={{
-              fontSize: "0.45rem",
+              fontSize: "0.75rem",
               color: "var(--yellow, #e5a100)",
               background: "rgba(229, 161, 0, 0.1)",
               border: "1px solid rgba(229, 161, 0, 0.3)",
@@ -94,7 +94,7 @@ export function Header({
             borderRadius: 3,
             padding: "0.2rem 0.5rem",
             cursor: claudeStatus.checking ? "wait" : "pointer",
-            fontSize: "0.55rem",
+            fontSize: "0.75rem",
             color: "var(--text-dim)",
           }}
         >
@@ -129,7 +129,7 @@ export function Header({
               borderRadius: 3,
               padding: "0.2rem 0.4rem",
               cursor: "pointer",
-              fontSize: "0.6rem",
+              fontSize: "0.75rem",
               color: "var(--text-dim)",
               fontFamily: "inherit",
               display: "flex",

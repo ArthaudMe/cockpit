@@ -331,7 +331,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
   );
 
   const sectionTitle: React.CSSProperties = {
-    fontSize: "0.55rem",
+    fontSize: "0.65rem",
     fontWeight: 700,
     letterSpacing: "0.08em",
     textTransform: "uppercase",
@@ -372,13 +372,13 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
             color: "var(--text-muted)",
             cursor: "pointer",
             fontFamily: "inherit",
-            fontSize: "0.7rem",
+            fontSize: "0.8rem",
             padding: "0 0.2rem",
           }}
         >
           ←
         </button>
-        <span style={{ fontSize: "0.6rem", fontWeight: 600, color: "var(--text)" }}>Settings</span>
+        <span style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)" }}>Settings</span>
       </div>
 
       {/* Content */}
@@ -397,7 +397,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontSize: "0.75rem",
+                fontSize: "0.8rem",
                 fontWeight: 700,
                 flexShrink: 0,
               }}
@@ -412,7 +412,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                 onStartEdit={() => setEditingField("name")}
                 onSave={(v) => saveProfile({ name: v })}
                 onCancel={() => setEditingField(null)}
-                style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--text)" }}
+                style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text)" }}
               />
               <EditableField
                 value={profile.role}
@@ -421,7 +421,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                 onStartEdit={() => setEditingField("role")}
                 onSave={(v) => saveProfile({ role: v })}
                 onCancel={() => setEditingField(null)}
-                style={{ fontSize: "0.5rem", color: "var(--text-muted)", marginTop: "0.1rem" }}
+                style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: "0.1rem" }}
               />
             </div>
           </div>
@@ -432,7 +432,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
               borderTop: "1px solid var(--border)",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.5rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.65rem" }}>
               <span style={{ color: "var(--text-muted)" }}>Company:</span>
               <EditableField
                 value={profile.company}
@@ -441,7 +441,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                 onStartEdit={() => setEditingField("company")}
                 onSave={(v) => saveProfile({ company: v })}
                 onCancel={() => setEditingField(null)}
-                style={{ fontSize: "0.5rem", color: "var(--text-dim)" }}
+                style={{ fontSize: "0.65rem", color: "var(--text-dim)" }}
                 inline
               />
             </div>
@@ -452,7 +452,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
         <div style={{ ...sectionTitle, marginTop: "1.25rem" }}>Connected Tools</div>
         <div
           style={{
-            fontSize: "0.45rem",
+            fontSize: "0.65rem",
             color: "var(--text-muted)",
             marginBottom: "0.5rem",
             lineHeight: 1.5,
@@ -470,7 +470,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
               color: "var(--text)",
               cursor: "pointer",
               fontFamily: "inherit",
-              fontSize: "0.45rem",
+              fontSize: "0.65rem",
               padding: "0.2rem 0.5rem",
               transition: "all 0.15s",
               marginTop: "0.35rem",
@@ -479,12 +479,12 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
               <div key={ds.id} style={card}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                    <span style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>{ds.icon}</span>
+                    <span style={{ fontSize: "0.8rem", color: "var(--text-dim)" }}>{ds.icon}</span>
                     <div>
-                      <div style={{ fontSize: "0.6rem", fontWeight: 600, color: "var(--text)" }}>
+                      <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)" }}>
                         {ds.name}
                       </div>
-                      <div style={{ fontSize: "0.45rem", color: "var(--text-muted)" }}>
+                      <div style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>
                         {ds.description}
                       </div>
                     </div>
@@ -512,7 +512,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                       background: "rgba(255,180,50,0.08)",
                       border: "1px solid rgba(255,180,50,0.2)",
                       borderRadius: 4,
-                      fontSize: "0.4rem",
+                      fontSize: "0.65rem",
                       color: "var(--yellow)",
                       lineHeight: 1.4,
                     }}
@@ -566,12 +566,12 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                       {isConnecting ? "Waiting..." : "Connect"}
                     </button>
                   ) : (
-                    <span style={{ fontSize: "0.4rem", color: "var(--text-muted)", marginTop: "0.35rem" }}>
+                    <span style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: "0.35rem" }}>
                       Auto-detected
                     </span>
                   )}
                   {ds.connected && !ds.needsScopeUpgrade && (
-                    <span style={{ fontSize: "0.4rem", color: "var(--green)", marginTop: "0.35rem" }}>
+                    <span style={{ fontSize: "0.65rem", color: "var(--green)", marginTop: "0.35rem" }}>
                       Connected
                     </span>
                   )}
@@ -593,7 +593,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
               color: "var(--text-muted)",
               cursor: "pointer",
               fontFamily: "inherit",
-              fontSize: "0.4rem",
+              fontSize: "0.65rem",
               padding: "0.1rem 0.4rem",
               textTransform: "none",
               letterSpacing: 0,
@@ -605,7 +605,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
         </div>
         <div
           style={{
-            fontSize: "0.45rem",
+            fontSize: "0.65rem",
             color: "var(--text-muted)",
             marginBottom: "0.5rem",
             lineHeight: 1.5,
@@ -623,12 +623,12 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
             <div key={server.id} style={card}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                  <span style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>{"\u{1F50C}"}</span>
+                  <span style={{ fontSize: "0.8rem", color: "var(--text-dim)" }}>{"\u{1F50C}"}</span>
                   <div>
-                    <div style={{ fontSize: "0.6rem", fontWeight: 600, color: "var(--text)" }}>
+                    <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)" }}>
                       {server.name}
                     </div>
-                    <div style={{ fontSize: "0.45rem", color: "var(--text-muted)" }}>
+                    <div style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>
                       {server.transport === "stdio"
                         ? `${server.command} ${(server.args || []).join(" ")}`
                         : server.url}
@@ -663,7 +663,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                     color: isTesting ? "var(--yellow)" : "var(--text)",
                     cursor: isTesting ? "wait" : "pointer",
                     fontFamily: "inherit",
-                    fontSize: "0.45rem",
+                    fontSize: "0.65rem",
                     padding: "0.15rem 0.4rem",
                   }}
                 >
@@ -678,7 +678,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                     color: "var(--text)",
                     cursor: "pointer",
                     fontFamily: "inherit",
-                    fontSize: "0.45rem",
+                    fontSize: "0.65rem",
                     padding: "0.15rem 0.4rem",
                   }}
                   onMouseEnter={(e) => {
@@ -693,7 +693,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                   Remove
                 </button>
                 {testResult && (
-                  <span style={{ fontSize: "0.4rem", color: testResult.success ? "var(--green)" : "var(--red)" }}>
+                  <span style={{ fontSize: "0.65rem", color: testResult.success ? "var(--green)" : "var(--red)" }}>
                     {testResult.message}
                   </span>
                 )}
@@ -703,7 +703,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
         })}
 
         {mcpServers.length === 0 && !showAddMcp && (
-          <div style={{ ...card, textAlign: "center", color: "var(--text-muted)", fontSize: "0.45rem", padding: "0.8rem" }}>
+          <div style={{ ...card, textAlign: "center", color: "var(--text-muted)", fontSize: "0.65rem", padding: "0.8rem" }}>
             No MCP servers configured
           </div>
         )}
@@ -711,7 +711,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
         {/* ── Skills ── */}
         <div style={{ ...sectionTitle, marginTop: "1.25rem" }}>
           Skills
-          <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, marginLeft: "0.4rem", fontSize: "0.45rem" }}>
+          <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, marginLeft: "0.4rem", fontSize: "0.65rem" }}>
             {skills.filter((s) => s.enabled).length}/{skills.length} active
           </span>
         </div>
@@ -720,10 +720,10 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
             <div key={skill.id} style={{ ...card, opacity: skill.enabled ? 1 : 0.5, transition: "opacity 0.15s" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flex: 1, minWidth: 0 }}>
-                  <span style={{ fontSize: "0.75rem", flexShrink: 0 }}>{skill.icon}</span>
+                  <span style={{ fontSize: "0.8rem", flexShrink: 0 }}>{skill.icon}</span>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: "0.55rem", fontWeight: 600, color: "var(--text)" }}>{skill.name}</div>
-                    <div style={{ fontSize: "0.4rem", color: "var(--text-muted)", marginTop: "0.05rem" }}>{skill.slash} — {skill.description}</div>
+                    <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)" }}>{skill.name}</div>
+                    <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: "0.05rem" }}>{skill.slash} — {skill.description}</div>
                   </div>
                 </div>
                 <button
@@ -759,7 +759,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
               color: "var(--text-muted)",
               cursor: "pointer",
               fontFamily: "inherit",
-              fontSize: "0.4rem",
+              fontSize: "0.65rem",
               padding: "0.1rem 0.4rem",
               textTransform: "none",
               letterSpacing: 0,
@@ -771,7 +771,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
         </div>
         <div
           style={{
-            fontSize: "0.45rem",
+            fontSize: "0.65rem",
             color: "var(--text-muted)",
             marginBottom: "0.5rem",
             lineHeight: 1.5,
@@ -786,10 +786,10 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
           <div key={skill.id} style={{ ...card, borderColor: "rgba(168,139,250,0.2)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: "0.75rem", flexShrink: 0 }}>{skill.icon}</span>
+                <span style={{ fontSize: "0.8rem", flexShrink: 0 }}>{skill.icon}</span>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: "0.55rem", fontWeight: 600, color: "#a78bfa" }}>{skill.name}</div>
-                  <div style={{ fontSize: "0.4rem", color: "var(--text-muted)", marginTop: "0.05rem" }}>{skill.slash} — {skill.description}</div>
+                  <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "#a78bfa" }}>{skill.name}</div>
+                  <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: "0.05rem" }}>{skill.slash} — {skill.description}</div>
                 </div>
               </div>
               <button
@@ -801,7 +801,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                   color: "var(--text-muted)",
                   cursor: "pointer",
                   fontFamily: "inherit",
-                  fontSize: "0.4rem",
+                  fontSize: "0.65rem",
                   padding: "0.1rem 0.35rem",
                 }}
                 onMouseEnter={(e) => {
@@ -820,7 +820,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
         ))}
 
         {customSkills.length === 0 && !showAddSkill && (
-          <div style={{ ...card, textAlign: "center", color: "var(--text-muted)", fontSize: "0.45rem", padding: "0.8rem" }}>
+          <div style={{ ...card, textAlign: "center", color: "var(--text-muted)", fontSize: "0.65rem", padding: "0.8rem" }}>
             No custom skills yet — create one or let the AI propose one during chat
           </div>
         )}
@@ -839,8 +839,8 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginBottom: "0.25rem" }}>
-                <span style={{ fontSize: "0.7rem" }}>{BACKEND_ICONS[b.id] || "?"}</span>
-                <span style={{ fontSize: "0.6rem", fontWeight: 600, color: "var(--text)" }}>
+                <span style={{ fontSize: "0.8rem" }}>{BACKEND_ICONS[b.id] || "?"}</span>
+                <span style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)" }}>
                   {b.label}
                 </span>
               </div>
@@ -853,7 +853,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                     height: 5,
                   }}
                 />
-                <span style={{ fontSize: "0.45rem", color: "var(--text-muted)" }}>
+                <span style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>
                   {b.installed ? b.version || "Ready" : "Not installed"}
                 </span>
               </div>
@@ -894,7 +894,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                         border: "1px solid var(--border-light)",
                         borderRadius: 3,
                         padding: "0.15rem 0.3rem",
-                        fontSize: "0.6rem",
+                        fontSize: "0.65rem",
                         color: "var(--text)",
                         fontFamily: "inherit",
                         outline: "none",
@@ -903,7 +903,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                     />
                   ) : (
                     <span
-                      style={{ fontSize: "0.6rem", fontWeight: 600, color: "var(--text)", cursor: "pointer" }}
+                      style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)", cursor: "pointer" }}
                       onClick={() => {
                         setEditingAgent(agent.id);
                         setEditName(agent.name);
@@ -915,7 +915,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                   )}
                   <span
                     style={{
-                      fontSize: "0.45rem",
+                      fontSize: "0.65rem",
                       background: "rgba(255,255,255,0.06)",
                       padding: "0.1rem 0.3rem",
                       borderRadius: 3,
@@ -935,7 +935,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                       color: "var(--text-muted)",
                       cursor: "pointer",
                       fontFamily: "inherit",
-                      fontSize: "0.5rem",
+                      fontSize: "0.65rem",
                       padding: "0.1rem 0.3rem",
                       opacity: 0.5,
                       transition: "opacity 0.1s",
@@ -966,7 +966,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                   gap: "0.35rem",
                 }}
               >
-                <span style={{ fontSize: "0.5rem", color: "var(--text-muted)", flexShrink: 0 }}>
+                <span style={{ fontSize: "0.65rem", color: "var(--text-muted)", flexShrink: 0 }}>
                   Engine:
                 </span>
                 <select
@@ -980,7 +980,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                     border: "1px solid var(--border)",
                     borderRadius: 3,
                     padding: "0.15rem 0.3rem",
-                    fontSize: "0.5rem",
+                    fontSize: "0.65rem",
                     color: "var(--text)",
                     fontFamily: "inherit",
                     outline: "none",
@@ -1006,10 +1006,10 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
         <div style={card}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div>
-              <div style={{ fontSize: "0.6rem", fontWeight: 600, color: "var(--text)" }}>
+              <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)" }}>
                 Usage analytics
               </div>
-              <div style={{ fontSize: "0.45rem", color: "var(--text-muted)", marginTop: "0.15rem", lineHeight: 1.4 }}>
+              <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: "0.15rem", lineHeight: 1.4 }}>
                 Help improve Cockpit by sharing anonymous usage data (features used, session count). No personal data or chat content is ever sent.
               </div>
             </div>
@@ -1066,7 +1066,7 @@ function AddMcpForm({
     border: "1px solid var(--border)",
     borderRadius: 4,
     padding: "0.25rem 0.4rem",
-    fontSize: "0.5rem",
+    fontSize: "0.65rem",
     color: "var(--text)",
     fontFamily: "inherit",
     outline: "none",
@@ -1074,7 +1074,7 @@ function AddMcpForm({
   };
 
   const labelStyle: React.CSSProperties = {
-    fontSize: "0.45rem",
+    fontSize: "0.65rem",
     color: "var(--text-muted)",
     marginBottom: "0.2rem",
     display: "block",
@@ -1086,7 +1086,7 @@ function AddMcpForm({
 
   return (
     <div style={{ ...card, marginBottom: "0.6rem" }}>
-      <div style={{ fontSize: "0.55rem", fontWeight: 600, color: "var(--text)", marginBottom: "0.5rem" }}>
+      <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)", marginBottom: "0.5rem" }}>
         Add MCP Server
       </div>
 
@@ -1104,7 +1104,7 @@ function AddMcpForm({
         <label style={labelStyle}>Transport</label>
         <div style={{ display: "flex", gap: "0.5rem" }}>
           {(["stdio", "sse"] as const).map((t) => (
-            <label key={t} style={{ fontSize: "0.45rem", color: "var(--text)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.2rem" }}>
+            <label key={t} style={{ fontSize: "0.65rem", color: "var(--text)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.2rem" }}>
               <input
                 type="radio"
                 name="transport"
@@ -1171,7 +1171,7 @@ function AddMcpForm({
             color: "var(--bg)",
             cursor: canSubmit ? "pointer" : "not-allowed",
             fontFamily: "inherit",
-            fontSize: "0.45rem",
+            fontSize: "0.65rem",
             padding: "0.25rem 0.6rem",
             fontWeight: 600,
           }}
@@ -1187,7 +1187,7 @@ function AddMcpForm({
             color: "var(--text-muted)",
             cursor: "pointer",
             fontFamily: "inherit",
-            fontSize: "0.45rem",
+            fontSize: "0.65rem",
             padding: "0.25rem 0.6rem",
           }}
         >
@@ -1220,7 +1220,7 @@ function AddSkillForm({
     border: "1px solid var(--border)",
     borderRadius: 4,
     padding: "0.25rem 0.4rem",
-    fontSize: "0.5rem",
+    fontSize: "0.65rem",
     color: "var(--text)",
     fontFamily: "inherit",
     outline: "none",
@@ -1228,7 +1228,7 @@ function AddSkillForm({
   };
 
   const labelStyle: React.CSSProperties = {
-    fontSize: "0.45rem",
+    fontSize: "0.65rem",
     color: "var(--text-muted)",
     marginBottom: "0.2rem",
     display: "block",
@@ -1238,7 +1238,7 @@ function AddSkillForm({
 
   return (
     <div style={{ ...card, marginBottom: "0.6rem", borderColor: "rgba(168,139,250,0.3)" }}>
-      <div style={{ fontSize: "0.55rem", fontWeight: 600, color: "#a78bfa", marginBottom: "0.5rem" }}>
+      <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "#a78bfa", marginBottom: "0.5rem" }}>
         Create Custom Skill
       </div>
 
@@ -1295,7 +1295,7 @@ function AddSkillForm({
             color: "var(--bg)",
             cursor: canSubmit ? "pointer" : "not-allowed",
             fontFamily: "inherit",
-            fontSize: "0.45rem",
+            fontSize: "0.65rem",
             padding: "0.25rem 0.6rem",
             fontWeight: 600,
           }}
@@ -1311,7 +1311,7 @@ function AddSkillForm({
             color: "var(--text-muted)",
             cursor: "pointer",
             fontFamily: "inherit",
-            fontSize: "0.45rem",
+            fontSize: "0.65rem",
             padding: "0.25rem 0.6rem",
           }}
         >

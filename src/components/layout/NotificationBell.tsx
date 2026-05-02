@@ -75,7 +75,7 @@ export function NotificationBell({
           borderRadius: 3,
           padding: "0.2rem 0.4rem",
           cursor: "pointer",
-          fontSize: "0.6rem",
+          fontSize: "0.75rem",
           color: "var(--text-dim)",
           fontFamily: "inherit",
           display: "flex",
@@ -85,7 +85,7 @@ export function NotificationBell({
         title="Notifications"
       >
         {/* Bell character */}
-        <span style={{ fontSize: "0.65rem" }}>&#9951;</span>
+        <span style={{ fontSize: "0.75rem" }}>&#9951;</span>
         {unreadCount > 0 && (
           <span
             style={{
@@ -94,7 +94,7 @@ export function NotificationBell({
               right: -4,
               background: "var(--red)",
               color: "#fff",
-              fontSize: "0.4rem",
+              fontSize: "0.75rem",
               fontWeight: 700,
               minWidth: 13,
               height: 13,
@@ -140,7 +140,7 @@ export function NotificationBell({
           >
             <span
               style={{
-                fontSize: "0.55rem",
+                fontSize: "0.75rem",
                 fontWeight: 600,
                 textTransform: "uppercase",
                 letterSpacing: "0.05em",
@@ -155,7 +155,7 @@ export function NotificationBell({
                 style={{
                   background: "none",
                   border: "none",
-                  fontSize: "0.45rem",
+                  fontSize: "0.75rem",
                   color: "var(--text-muted)",
                   cursor: "pointer",
                   fontFamily: "inherit",
@@ -174,7 +174,7 @@ export function NotificationBell({
                 style={{
                   padding: "1.5rem",
                   textAlign: "center",
-                  fontSize: "0.55rem",
+                  fontSize: "0.75rem",
                   color: "var(--text-muted)",
                 }}
               >
@@ -203,7 +203,7 @@ export function NotificationBell({
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      fontSize: "0.45rem",
+                      fontSize: "0.75rem",
                       fontWeight: 700,
                       color: severityColor(n.severity),
                       flexShrink: 0,
@@ -216,7 +216,7 @@ export function NotificationBell({
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div
                       style={{
-                        fontSize: "0.6rem",
+                        fontSize: "0.75rem",
                         fontWeight: n.read ? 400 : 600,
                         color: "var(--text)",
                         lineHeight: 1.3,
@@ -226,7 +226,7 @@ export function NotificationBell({
                     </div>
                     <div
                       style={{
-                        fontSize: "0.5rem",
+                        fontSize: "0.75rem",
                         color: "var(--text-dim)",
                         lineHeight: 1.4,
                         marginTop: "0.1rem",
@@ -244,7 +244,7 @@ export function NotificationBell({
                     >
                       <span
                         style={{
-                          fontSize: "0.45rem",
+                          fontSize: "0.75rem",
                           color: "var(--text-muted)",
                         }}
                       >
@@ -252,7 +252,7 @@ export function NotificationBell({
                       </span>
                       <span
                         style={{
-                          fontSize: "0.45rem",
+                          fontSize: "0.75rem",
                           color: "var(--text-muted)",
                         }}
                       >
