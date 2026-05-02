@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { removeTokens } from "@/lib/datasources/token-store";
+import { removeTokens, disableService } from "@/lib/datasources/token-store";
 import type { ServiceId } from "@/lib/datasources/types";
 
 const VALID_SERVICES: ServiceId[] = [
@@ -8,7 +8,11 @@ const VALID_SERVICES: ServiceId[] = [
   "github",
   "notion",
   "slack",
+  "granola",
 ];
+
+// Auto-detected services use disable instead of token removal
+const AUTO_DETECTED: ServiceId[] = ["granola"];
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -21,6 +25,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  removeTokens(service);
+  if (AUTO_DETECTED.includes(service)) {
+    disableService(service);
+  } else {
+    removeTokens(service);
+  }
   return NextResponse.json({ success: true });
 }

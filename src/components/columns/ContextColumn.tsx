@@ -108,6 +108,7 @@ export function ContextColumn({
   onCompetitorClick,
   onTodoClick,
   onSettingsClick,
+  onConnectService,
 }: {
   context: Context;
   onPrefill: (text: string) => void;
@@ -117,6 +118,7 @@ export function ContextColumn({
   onCompetitorClick?: (index: number) => void;
   onTodoClick?: (index: number) => void;
   onSettingsClick?: () => void;
+  onConnectService?: (serviceId: string) => void;
 }) {
   const [todos, setTodos] = usePersistedState("cockpit-todos", context.todos);
 
@@ -138,7 +140,7 @@ export function ContextColumn({
             <ConnectPrompt
               service="Google"
               label="Connect Google to see your calendar events"
-              onConnect={() => onSettingsClick?.()}
+              onConnect={() => onConnectService ? onConnectService("google") : onSettingsClick?.()}
             />
           )
         ) : (() => {
@@ -262,7 +264,7 @@ export function ContextColumn({
             <ConnectPrompt
               service="Slack"
               label="Connect Slack to see your team's messages"
-              onConnect={() => onSettingsClick?.()}
+              onConnect={() => onConnectService ? onConnectService("slack") : onSettingsClick?.()}
             />
           )
         ) : context.slack_highlights.map((h, i) => (

@@ -216,6 +216,16 @@ export default function Home() {
     setCenterView({ type: "settings" });
   }, []);
 
+  const handleConnectService = useCallback(async (serviceId: string) => {
+    try {
+      const res = await fetch(`/api/datasources/connect?service=${serviceId}`);
+      const data = await res.json();
+      if (data.url) {
+        window.open(data.url, "_blank", "width=600,height=700");
+      }
+    } catch {}
+  }, []);
+
   const handleOpenFocus = useCallback((focus: ContextFocus) => {
     setCenterView({ type: "focus", focus });
   }, []);
@@ -545,6 +555,7 @@ export default function Home() {
               <ContextColumn
                 context={contextData}
                 onPrefill={handlePrefill}
+                onConnectService={handleConnectService}
                 onCalendarClick={handleCalendarClick}
                 onMetricClick={handleMetricClick}
                 onSlackClick={handleSlackClick}

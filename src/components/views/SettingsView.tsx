@@ -192,13 +192,34 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
       setConnecting(serviceId);
       const res = await fetch(`/api/datasources/connect?service=${serviceId}`);
       const data = await res.json();
-      if (data.url) {
+      if (data.reconnected) {
+        // Auto-detected service re-enabled — refresh immediately
+        fetchDatasources();
+        setConnecting(null);
+      } else if (data.url) {
         window.open(data.url, "_blank", "width=600,height=700");
       }
     } catch {
       setConnecting(null);
     }
-  }, []);
+  }, [fetchDatasources]);
+
+  // Poll for connection status while an OAuth flow is in progress
+  useEffect(() => {
+    if (!connecting) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/datasources");
+        const data: { datasources: DatasourceInfo[] } = await res.json();
+        setDatasources(data.datasources);
+        const target = data.datasources.find((d) => d.id === connecting);
+        if (target?.connected) {
+          setConnecting(null);
+        }
+      } catch {}
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [connecting]);
 
   const handleDisconnect = useCallback(async (serviceId: string) => {
     try {
@@ -566,9 +587,16 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                       {isConnecting ? "Waiting..." : "Connect"}
                     </button>
                   ) : (
-                    <span style={{ fontSize: "0.4rem", color: "var(--text-muted)", marginTop: "0.35rem" }}>
-                      Auto-detected
-                    </span>
+                    <button
+                      onClick={() => handleConnect(ds.id)}
+                      style={{
+                        ...actionBtn,
+                        borderColor: "var(--accent)",
+                        color: "var(--accent)",
+                      }}
+                    >
+                      Reconnect
+                    </button>
                   )}
                   {ds.connected && !ds.needsScopeUpgrade && (
                     <span style={{ fontSize: "0.4rem", color: "var(--green)", marginTop: "0.35rem" }}>

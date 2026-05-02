@@ -53,6 +53,39 @@ export function getConnectedServices(): ServiceId[] {
   return Object.keys(store) as ServiceId[];
 }
 
+// ─── Disabled Services (for auto-detected datasources like Granola) ──
+
+const DISABLED_PATH = path.join(STORE_DIR, "disabled-services.json");
+
+function readDisabled(): ServiceId[] {
+  try {
+    if (!fs.existsSync(DISABLED_PATH)) return [];
+    return JSON.parse(fs.readFileSync(DISABLED_PATH, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+
+function writeDisabled(disabled: ServiceId[]) {
+  ensureDir();
+  fs.writeFileSync(DISABLED_PATH, JSON.stringify(disabled), { mode: 0o600 });
+}
+
+export function disableService(service: ServiceId) {
+  const disabled = readDisabled();
+  if (!disabled.includes(service)) {
+    writeDisabled([...disabled, service]);
+  }
+}
+
+export function enableService(service: ServiceId) {
+  writeDisabled(readDisabled().filter((s) => s !== service));
+}
+
+export function isServiceDisabled(service: ServiceId): boolean {
+  return readDisabled().includes(service);
+}
+
 // File-based state store for OAuth CSRF protection
 // (in-memory Map gets cleared by Next.js HMR reloads)
 const STATES_PATH = path.join(STORE_DIR, "oauth-states.json");
