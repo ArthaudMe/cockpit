@@ -11,18 +11,10 @@ const VALID_SERVICES: ServiceId[] = [
   "slack",
 ];
 
-// In production Electron, use deep link protocol.
-// In dev, use localhost callback directly.
-function getRedirectUri(origin: string, service: ServiceId): string {
-  const isDev = process.env.NODE_ENV === "development";
-  if (isDev) {
-    // Slack requires HTTPS redirect URIs
-    if (service === "slack") {
-      return `https://localhost:3939/api/datasources/callback`;
-    }
-    return `${origin}/api/datasources/callback`;
-  }
-  return "cockpit://oauth/callback";
+// Always use localhost callback — the local Next.js server handles it directly.
+// This avoids custom-scheme issues (Google blocks cockpit://, Slack needs PKCE, etc.)
+function getRedirectUri(origin: string, _service: ServiceId): string {
+  return `${origin}/api/datasources/callback`;
 }
 
 export async function GET(req: NextRequest) {

@@ -48,7 +48,7 @@ let tray;
 const isMac = process.platform === "darwin";
 const isWin = process.platform === "win32";
 const isDev = process.env.NODE_ENV === "development";
-const PORT = isDev ? 3939 : 3123;
+const PORT = isDev ? 3939 : 3000;
 const PROTOCOL = "cockpit";
 
 const APP_ROOT = app.isPackaged
@@ -200,20 +200,21 @@ function createTray() {
 // ─── Next.js Server ────────────────────────────────────────────────
 function startNextServer() {
   return new Promise((resolve, reject) => {
-    const nextBin = isWin
-      ? path.join(APP_ROOT, "node_modules", ".bin", "next.cmd")
-      : path.join(APP_ROOT, "node_modules", ".bin", "next");
+    // Spawn a detached Node process using Electron's bundled node.
+    // We use ELECTRON_RUN_AS_NODE=1 so `process.execPath` (the Electron
+    // binary) behaves as a plain Node interpreter, which avoids the asar
+    // symlink issue with `node_modules/.bin/next`.
+    const nextCli = path.join(APP_ROOT, "node_modules", "next", "dist", "bin", "next");
 
-    nextServer = spawn(nextBin, ["start", "--port", String(PORT)], {
+    nextServer = spawn(process.execPath, [nextCli, "start", "--port", String(PORT)], {
       cwd: APP_ROOT,
       env: {
         ...process.env,
+        ELECTRON_RUN_AS_NODE: "1",
         PORT: String(PORT),
         NODE_ENV: "production",
       },
       stdio: ["ignore", "pipe", "pipe"],
-      // Windows needs shell for .cmd scripts
-      shell: isWin,
     });
 
     nextServer.stdout.on("data", (data) => {

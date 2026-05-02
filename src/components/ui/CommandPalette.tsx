@@ -392,7 +392,12 @@ export function CommandPalette({
                 textAlign: "center",
               }}
             >
-              No results found
+              <div>No results found</div>
+              {!data.calendar?.length && !data.linearIssues?.length && !data.githubPRs?.length && !data.slackMessages?.length && !data.notionPages?.length && !data.granolaMeetings?.length && (
+                <div style={{ marginTop: "0.4rem", fontSize: "0.48rem", color: "var(--text-dim)" }}>
+                  No datasources connected yet. Go to Settings to connect Slack, Linear, GitHub, and more.
+                </div>
+              )}
             </div>
           )}
 
