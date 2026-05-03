@@ -374,6 +374,7 @@ function createMainWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, "preload.js"),
     },
   };
 
@@ -583,8 +584,70 @@ if (!gotLock) {
   });
 }
 
-// Background tick removed — the frontend polls /api/background/tick directly,
-// avoiding duplicate API calls that double CPU/network usage.
+// ─── Background Tick ──────────────────────────────────────────────
+// The main process owns all polling — the renderer is purely reactive via IPC.
+let tickInterval;
+let dataInterval;
+
+function fetchJson(urlPath) {
+  return new Promise((resolve, reject) => {
+    http.get(`http://localhost:${PORT}${urlPath}`, (res) => {
+      let body = "";
+      res.on("data", (chunk) => (body += chunk));
+      res.on("end", () => {
+        try {
+          resolve(JSON.parse(body));
+        } catch {
+          reject(new Error("Invalid JSON"));
+        }
+      });
+    }).on("error", reject);
+  });
+}
+
+function sendToRenderer(channel, data) {
+  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
+    mainWindow.webContents.send(channel, data);
+  }
+}
+
+async function pollDatasourceData() {
+  try {
+    const data = await fetchJson("/api/datasources/data");
+    sendToRenderer("datasource-data", data);
+  } catch (err) {
+    console.error("[electron] data poll failed:", err.message);
+  }
+}
+
+async function pollBackgroundTick() {
+  try {
+    const tick = await fetchJson("/api/background/tick");
+    if (tick.newCount > 0) {
+      const notifs = await fetchJson("/api/background/notifications");
+      sendToRenderer("notifications-update", notifs);
+    }
+  } catch (err) {
+    console.error("[electron] tick failed:", err.message);
+  }
+}
+
+function startBackgroundTick() {
+  // Initial data fetch after a short delay (let the server settle)
+  setTimeout(() => {
+    pollDatasourceData();
+    pollBackgroundTick();
+  }, 3000);
+
+  // Data poll every 60s, notification tick every 120s
+  dataInterval = setInterval(pollDatasourceData, 60_000);
+  tickInterval = setInterval(pollBackgroundTick, 120_000);
+}
+
+function stopBackgroundTick() {
+  clearInterval(dataInterval);
+  clearInterval(tickInterval);
+}
 
 // ─── Startup ───────────────────────────────────────────────────────
 app.isQuitting = false;
@@ -597,7 +660,7 @@ app.whenReady().then(async () => {
   if (isDev) {
     createMainWindow();
     mainWindow.show();
-    // Background tick handled by frontend
+    startBackgroundTick();
     return;
   }
 
@@ -611,7 +674,7 @@ app.whenReady().then(async () => {
     mainWindow.once("ready-to-show", () => {
       splash.close();
       mainWindow.show();
-      // Background tick handled by frontend
+      startBackgroundTick();
     });
 
     setTimeout(() => {
@@ -639,6 +702,7 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   app.isQuitting = true;
+  stopBackgroundTick();
   stopNextServer();
 });
 
