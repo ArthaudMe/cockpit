@@ -85,13 +85,10 @@ export function FeedColumn({
   const [visibleCount, setVisibleCount] = useState(0);
   const [filter, setFilter] = useState<string | null>(null);
 
-  // Animate feed items appearing one by one
+  // Show all items immediately (avoids dozens of rapid re-renders)
   useEffect(() => {
-    if (visibleCount < feed.length) {
-      const timer = setTimeout(() => setVisibleCount((c) => c + 1), 80);
-      return () => clearTimeout(timer);
-    }
-  }, [visibleCount, feed.length]);
+    setVisibleCount(feed.length);
+  }, [feed.length]);
 
   const filteredFeed = filter ? feed.filter((f) => f.type === filter) : feed;
   const types = Array.from(new Set(feed.map((f) => f.type)));

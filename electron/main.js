@@ -583,63 +583,8 @@ if (!gotLock) {
   });
 }
 
-// ─── Background Intelligence ────────────────────────────────────────
-let backgroundInterval;
-
-function startBackgroundTick() {
-  // Don't start until server is ready
-  if (backgroundInterval) return;
-
-  backgroundInterval = setInterval(() => {
-    if (app.isQuitting) {
-      clearInterval(backgroundInterval);
-      return;
-    }
-
-    const tickUrl = `http://localhost:${PORT}/api/background/tick`;
-    http.get(tickUrl, (res) => {
-      let body = "";
-      res.on("data", (chunk) => { body += chunk; });
-      res.on("end", () => {
-        try {
-          const data = JSON.parse(body);
-          if (data.newNotifications && data.newNotifications.length > 0) {
-            // Only show native notifications when the window is not focused
-            const windowFocused = mainWindow && mainWindow.isFocused();
-            if (!windowFocused && ElectronNotification.isSupported()) {
-              for (const notif of data.newNotifications) {
-                const native = new ElectronNotification({
-                  title: notif.title,
-                  body: notif.body,
-                  silent: false,
-                });
-                native.on("click", () => {
-                  if (mainWindow) {
-                    if (mainWindow.isMinimized()) mainWindow.restore();
-                    mainWindow.show();
-                    mainWindow.focus();
-                  }
-                });
-                native.show();
-              }
-            }
-          }
-        } catch {
-          // ignore parse errors
-        }
-      });
-    }).on("error", () => {
-      // Server might not be ready yet, ignore
-    });
-  }, 60_000); // Every 60 seconds
-}
-
-function stopBackgroundTick() {
-  if (backgroundInterval) {
-    clearInterval(backgroundInterval);
-    backgroundInterval = null;
-  }
-}
+// Background tick removed — the frontend polls /api/background/tick directly,
+// avoiding duplicate API calls that double CPU/network usage.
 
 // ─── Startup ───────────────────────────────────────────────────────
 app.isQuitting = false;
@@ -652,7 +597,7 @@ app.whenReady().then(async () => {
   if (isDev) {
     createMainWindow();
     mainWindow.show();
-    startBackgroundTick();
+    // Background tick handled by frontend
     return;
   }
 
@@ -666,7 +611,7 @@ app.whenReady().then(async () => {
     mainWindow.once("ready-to-show", () => {
       splash.close();
       mainWindow.show();
-      startBackgroundTick();
+      // Background tick handled by frontend
     });
 
     setTimeout(() => {
@@ -694,7 +639,6 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   app.isQuitting = true;
-  stopBackgroundTick();
   stopNextServer();
 });
 

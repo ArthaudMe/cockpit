@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Editor, { type OnMount } from "@monaco-editor/react";
+import dynamic from "next/dynamic";
+
+const Editor = dynamic(() => import("@monaco-editor/react").then(m => m.default), {
+  ssr: false,
+  loading: () => <div style={{ padding: "1rem", color: "var(--text-muted)", fontSize: "0.6rem" }}>Loading editor...</div>,
+});
+
+type OnMount = import("@monaco-editor/react").OnMount;
 
 export interface OpenFile {
   path: string;

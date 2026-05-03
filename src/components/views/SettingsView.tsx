@@ -161,8 +161,8 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
   // Poll for datasource status while connecting, with 2-minute timeout
   useEffect(() => {
     if (!connecting) return;
-    const interval = setInterval(fetchDatasources, 2000);
-    const timeout = setTimeout(() => setConnecting(null), 120_000);
+    const interval = setInterval(fetchDatasources, 3000);
+    const timeout = setTimeout(() => setConnecting(null), 60_000);
     return () => { clearInterval(interval); clearTimeout(timeout); };
   }, [connecting, fetchDatasources]);
 

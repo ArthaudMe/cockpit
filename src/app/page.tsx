@@ -95,7 +95,7 @@ export default function Home() {
     };
 
     fetchLiveData();
-    interval = setInterval(fetchLiveData, 30_000); // refresh every 30s
+    interval = setInterval(fetchLiveData, 60_000); // refresh every 60s
 
     return () => clearInterval(interval);
   }, [userName]);
@@ -123,8 +123,8 @@ export default function Home() {
     };
 
     // Initial tick after a short delay (let datasources load first)
-    const initialTimeout = setTimeout(tick, 5_000);
-    interval = setInterval(tick, 60_000);
+    const initialTimeout = setTimeout(tick, 10_000);
+    interval = setInterval(tick, 120_000);
 
     return () => {
       clearTimeout(initialTimeout);

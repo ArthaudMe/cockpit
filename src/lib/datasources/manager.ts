@@ -155,7 +155,17 @@ export async function exchangeCode(
   }
 }
 
+// In-memory cache to avoid redundant API calls from concurrent consumers
+let _cachedData: DatasourceData | null = null;
+let _cacheTime = 0;
+const DATA_CACHE_TTL = 30_000; // 30s — stale data is fine for background tick
+
 export async function fetchAllData(): Promise<DatasourceData> {
+  // Return cached data if fresh enough
+  if (_cachedData && Date.now() - _cacheTime < DATA_CACHE_TTL) {
+    return _cachedData;
+  }
+
   const connected = getConnectedServices();
   const granolaAvailable = isGranolaAvailable();
 
@@ -192,7 +202,7 @@ export async function fetchAllData(): Promise<DatasourceData> {
     )
     .flatMap((r) => r.value);
 
-  return {
+  const result: DatasourceData = {
     calendar,
     emails,
     linearIssues,
@@ -203,4 +213,9 @@ export async function fetchAllData(): Promise<DatasourceData> {
     granolaMeetings,
     mcpResources: mcpResources.length > 0 ? mcpResources : undefined,
   };
+
+  _cachedData = result;
+  _cacheTime = Date.now();
+
+  return result;
 }
