@@ -43,6 +43,7 @@
     "directories": {
       "output": "dist-electron"
     },
+    "asar": false,
     "files": [
       "electron/**/*",
       ".next/**/*",
@@ -55,6 +56,17 @@
       "target": "dmg",
       "category": "public.app-category.productivity",
       "icon": "public/icon.icns"
+    },
+    "dmg": {
+      "background": "build/dmg-background.png",
+      "window": {
+        "width": 660,
+        "height": 440
+      },
+      "contents": [
+        { "x": 190, "y": 150 },
+        { "x": 470, "y": 150, "type": "link", "path": "/Applications" }
+      ]
     },
     "publish": {
       "provider": "github",

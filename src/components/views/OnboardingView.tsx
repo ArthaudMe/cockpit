@@ -168,7 +168,7 @@ function DatasourcesScreen({ onContinue }: { onContinue: () => void }) {
         <div style={{ marginBottom: "1.5rem" }}>
           <div
             style={{
-              fontSize: "0.55rem",
+              fontSize: "0.75rem",
               fontWeight: 600,
               color: "var(--text-muted)",
               textTransform: "uppercase",
@@ -191,7 +191,7 @@ function DatasourcesScreen({ onContinue }: { onContinue: () => void }) {
           </div>
           <div
             style={{
-              fontSize: "0.65rem",
+              fontSize: "0.75rem",
               color: "var(--text-dim)",
               marginTop: "0.35rem",
               lineHeight: 1.5,
@@ -227,7 +227,7 @@ function DatasourcesScreen({ onContinue }: { onContinue: () => void }) {
               border: "none",
               borderRadius: 5,
               padding: "0.4rem 1.2rem",
-              fontSize: "0.65rem",
+              fontSize: "0.75rem",
               fontWeight: 700,
               cursor: "pointer",
               fontFamily: "inherit",
@@ -239,7 +239,7 @@ function DatasourcesScreen({ onContinue }: { onContinue: () => void }) {
             {connectedCount > 0 ? "Continue" : "Skip for now"}
           </button>
           {connectedCount > 0 && (
-            <span style={{ fontSize: "0.55rem", color: "var(--text-dim)" }}>
+            <span style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>
               {connectedCount} connected
             </span>
           )}
@@ -283,7 +283,7 @@ function DatasourceCard({
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          fontSize: "0.5rem",
+          fontSize: "0.75rem",
           fontWeight: 700,
           color: datasource.connected ? "var(--green)" : "var(--text-dim)",
           flexShrink: 0,
@@ -296,7 +296,7 @@ function DatasourceCard({
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{
-            fontSize: "0.65rem",
+            fontSize: "0.75rem",
             fontWeight: 600,
             color: "var(--text)",
           }}
@@ -305,7 +305,7 @@ function DatasourceCard({
         </div>
         <div
           style={{
-            fontSize: "0.5rem",
+            fontSize: "0.75rem",
             color: "var(--text-muted)",
             marginTop: "0.1rem",
           }}
@@ -318,7 +318,7 @@ function DatasourceCard({
       {datasource.connected ? (
         <span
           style={{
-            fontSize: "0.5rem",
+            fontSize: "0.75rem",
             color: "var(--green)",
             fontWeight: 600,
             flexShrink: 0,
@@ -336,7 +336,7 @@ function DatasourceCard({
             border: "1px solid var(--border-light)",
             borderRadius: 4,
             padding: "0.2rem 0.6rem",
-            fontSize: "0.55rem",
+            fontSize: "0.75rem",
             fontWeight: 600,
             cursor: connecting ? "default" : "pointer",
             fontFamily: "inherit",
@@ -363,7 +363,7 @@ function DatasourceCard({
       ) : (
         <span
           style={{
-            fontSize: "0.5rem",
+            fontSize: "0.75rem",
             color: datasource.connected ? "var(--green)" : "var(--text-muted)",
             fontWeight: 600,
             flexShrink: 0,
@@ -415,7 +415,7 @@ function WelcomeScreen({ onContinue }: { onContinue: () => void }) {
 
         <div
           style={{
-            fontSize: "0.7rem",
+            fontSize: "0.75rem",
             color: "var(--text-dim)",
             lineHeight: 1.6,
             maxWidth: 300,
@@ -434,7 +434,7 @@ function WelcomeScreen({ onContinue }: { onContinue: () => void }) {
         <div
           style={{
             marginTop: "1rem",
-            fontSize: "0.5rem",
+            fontSize: "0.75rem",
             color: "var(--text-muted)",
           }}
         >
@@ -514,7 +514,7 @@ function SetupScreen({
           </div>
           <div
             style={{
-              fontSize: "0.65rem",
+              fontSize: "0.75rem",
               color: "var(--text-dim)",
               marginTop: "0.35rem",
               lineHeight: 1.5,
@@ -542,7 +542,7 @@ function SetupScreen({
                 className="dot"
                 style={{ background: "var(--accent)", animation: "pulse 1.5s ease-in-out infinite" }}
               />
-              <span style={{ fontSize: "0.6rem", color: "var(--text-muted)" }}>
+              <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
                 Detecting installed backends...
               </span>
             </div>
@@ -586,7 +586,7 @@ function SetupScreen({
               border: "1px solid var(--border)",
               borderRadius: 4,
               color: "var(--text-muted)",
-              fontSize: "0.55rem",
+              fontSize: "0.75rem",
               cursor: detecting ? "default" : "pointer",
               fontFamily: "inherit",
               padding: "0.3rem 0.6rem",
@@ -607,7 +607,7 @@ function SetupScreen({
 
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             {anyAvailable && (
-              <span style={{ fontSize: "0.5rem", color: "var(--green)" }}>
+              <span style={{ fontSize: "0.75rem", color: "var(--green)" }}>
                 {installedCount} engine{installedCount !== 1 ? "s" : ""} ready
               </span>
             )}
@@ -630,7 +630,7 @@ function SetupScreen({
           style={{
             marginTop: "1.25rem",
             textAlign: "center",
-            fontSize: "0.5rem",
+            fontSize: "0.75rem",
             color: "var(--text-muted)",
             lineHeight: 1.6,
           }}
@@ -712,18 +712,18 @@ function BackendCard({
         {/* Name + description */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-            <span style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--text)" }}>
+            <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text)" }}>
               {backend.label}
             </span>
             {backend.installed && backend.version && (
-              <span style={{ fontSize: "0.45rem", color: "var(--text-muted)" }}>
+              <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
                 {backend.version.substring(0, 30)}
               </span>
             )}
           </div>
           <div
             style={{
-              fontSize: "0.55rem",
+              fontSize: "0.75rem",
               color: "var(--text-dim)",
               lineHeight: 1.4,
               marginTop: "0.1rem",
@@ -736,7 +736,7 @@ function BackendCard({
         {/* Status badge */}
         <span
           style={{
-            fontSize: "0.5rem",
+            fontSize: "0.75rem",
             fontWeight: 600,
             padding: "0.15rem 0.4rem",
             borderRadius: 3,
@@ -776,7 +776,7 @@ function BackendCard({
                   border: "none",
                   borderRadius: 4,
                   padding: "0.25rem 0.6rem",
-                  fontSize: "0.55rem",
+                  fontSize: "0.75rem",
                   fontWeight: 700,
                   cursor: installing ? "default" : "pointer",
                   fontFamily: "inherit",
@@ -803,7 +803,7 @@ function BackendCard({
                 border: "1px solid var(--border)",
                 borderRadius: 4,
                 color: "var(--text-muted)",
-                fontSize: "0.55rem",
+                fontSize: "0.75rem",
                 cursor: "pointer",
                 fontFamily: "inherit",
                 padding: "0.25rem 0.5rem",
@@ -830,7 +830,7 @@ function BackendCard({
             >
               <code
                 style={{
-                  fontSize: "0.55rem",
+                  fontSize: "0.75rem",
                   color: "var(--green)",
                   fontFamily: "inherit",
                   overflow: "hidden",
@@ -847,7 +847,7 @@ function BackendCard({
                   border: "1px solid var(--border)",
                   borderRadius: 3,
                   color: copied ? "var(--green)" : "var(--text-muted)",
-                  fontSize: "0.45rem",
+                  fontSize: "0.75rem",
                   padding: "0.1rem 0.3rem",
                   cursor: "pointer",
                   fontFamily: "inherit",
@@ -872,7 +872,7 @@ function BackendCard({
             justifyContent: "space-between",
           }}
         >
-          <span style={{ fontSize: "0.5rem", color: "var(--text-muted)" }}>
+          <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
             Uses your Claude subscription
           </span>
           <button
@@ -882,7 +882,7 @@ function BackendCard({
               border: "1px solid var(--border)",
               borderRadius: 3,
               color: "var(--text-dim)",
-              fontSize: "0.5rem",
+              fontSize: "0.75rem",
               cursor: "pointer",
               fontFamily: "inherit",
               padding: "0.15rem 0.4rem",
@@ -955,7 +955,7 @@ function ReadyScreen({
 
         <div
           style={{
-            fontSize: "0.65rem",
+            fontSize: "0.75rem",
             color: "var(--text-dim)",
             lineHeight: 1.6,
             marginBottom: "0.75rem",
@@ -979,7 +979,7 @@ function ReadyScreen({
             <span
               key={b.id}
               style={{
-                fontSize: "0.5rem",
+                fontSize: "0.75rem",
                 fontWeight: 600,
                 color: "var(--green)",
                 background: "rgba(68,255,136,0.08)",
@@ -1024,7 +1024,7 @@ const primaryBtn: React.CSSProperties = {
   border: "none",
   borderRadius: 6,
   padding: "0.5rem 1.5rem",
-  fontSize: "0.7rem",
+  fontSize: "0.75rem",
   fontWeight: 700,
   cursor: "pointer",
   fontFamily: "inherit",
@@ -1033,7 +1033,7 @@ const primaryBtn: React.CSSProperties = {
 };
 
 const labelStyle: React.CSSProperties = {
-  fontSize: "0.55rem",
+  fontSize: "0.75rem",
   fontWeight: 600,
   color: "var(--text-muted)",
   textTransform: "uppercase",

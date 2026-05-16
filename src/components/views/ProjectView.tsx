@@ -74,7 +74,7 @@ function Panel({
           {badge && <span className="panel-count">{badge}</span>}
         </div>
         {onClick && (
-          <span style={{ fontSize: "0.45rem", color: "var(--accent)", letterSpacing: "0.04em", fontWeight: 600 }}>CHAT →</span>
+          <span style={{ fontSize: "0.75rem", color: "var(--accent)", letterSpacing: "0.04em", fontWeight: 600 }}>CHAT →</span>
         )}
       </div>
       <div className="panel-content">{children}</div>
@@ -148,16 +148,16 @@ export function ProjectView({
       {/* Header */}
       <div className="panel-header" style={{ cursor: "default" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <button onClick={onBack} style={{ background: "none", border: "1px solid var(--border)", borderRadius: 3, color: "var(--text-dim)", fontSize: "0.55rem", padding: "0.15rem 0.4rem", cursor: "pointer" }}>
+          <button onClick={onBack} style={{ background: "none", border: "1px solid var(--border)", borderRadius: 3, color: "var(--text-dim)", fontSize: "0.75rem", padding: "0.15rem 0.4rem", cursor: "pointer" }}>
             ← BACK
           </button>
-          <span style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--text)" }}>{project.name}</span>
+          <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text)" }}>{project.name}</span>
           <span className={`tag ${project.status === "Active" ? "tag-green" : "tag-yellow"}`}>{project.status}</span>
           <span className="tag tag-dim">{project.category}</span>
         </div>
         <button
           onClick={() => chat(focusProject(project as any))}
-          style={{ background: "var(--accent)", border: "none", borderRadius: 3, color: "var(--bg)", fontSize: "0.5rem", padding: "0.2rem 0.5rem", cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700, fontFamily: "inherit" }}
+          style={{ background: "var(--accent)", border: "none", borderRadius: 3, color: "var(--bg)", fontSize: "0.75rem", padding: "0.2rem 0.5rem", cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700, fontFamily: "inherit" }}
         >
           ⌘ Agent Chat
         </button>
@@ -173,7 +173,7 @@ export function ProjectView({
               background: "none", border: "none",
               borderBottom: activeTab === tab ? "2px solid var(--accent)" : "2px solid transparent",
               color: activeTab === tab ? "var(--text)" : "var(--text-muted)",
-              fontSize: "0.55rem", fontWeight: 600, textTransform: "uppercase",
+              fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase",
               letterSpacing: "0.05em", padding: "0.4rem 0.75rem", cursor: "pointer", fontFamily: "inherit",
             }}
           >
@@ -213,7 +213,7 @@ export function ProjectView({
             {linear && (
               <Panel title="Linear" badge={linear.project} onClick={() => chat(focusProjectLinear(project as any))}>
                 <div style={{ marginBottom: "0.4rem" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.5rem", color: "var(--text-muted)", marginBottom: "0.2rem" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "0.2rem" }}>
                     <span>Done {linear.completed}</span>
                     <span>In Progress {linear.in_progress}</span>
                     <span>Backlog {linear.backlog}</span>
@@ -228,7 +228,7 @@ export function ProjectView({
                   <Clickable key={issue.id} onClick={() => chat(focusIssue(issue, project.name))}>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
                       <PriorityDot priority={issue.priority} />
-                      <span style={{ fontSize: "0.55rem", color: "var(--text-muted)", flexShrink: 0 }}>{issue.id}</span>
+                      <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", flexShrink: 0 }}>{issue.id}</span>
                       <span className="feed-title" style={{ flex: 1 }}>{issue.title}</span>
                       <IssueStateTag state={issue.state} />
                     </div>
@@ -241,7 +241,7 @@ export function ProjectView({
             {github && (
               <Panel title="GitHub" badge={github.repo} onClick={() => chat(focusProjectGitHub(project as any))}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.4rem" }}>
-                  <div style={{ fontSize: "0.55rem", color: "var(--text-dim)" }}>Commits (7d)</div>
+                  <div style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>Commits (7d)</div>
                   <Sparkline data={github.activity_sparkline} />
                 </div>
                 {github.recent_prs.map((pr, i) => (
@@ -269,11 +269,11 @@ export function ProjectView({
                     className="clickable-row"
                     style={{ background: "rgba(255,255,255,0.02)", borderRadius: 3, padding: "0.4rem", cursor: "pointer" }}
                   >
-                    <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)" }}>{person.name}</div>
-                    <div style={{ fontSize: "0.5rem", color: "var(--text-muted)" }}>{person.role}</div>
+                    <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text)" }}>{person.name}</div>
+                    <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{person.role}</div>
                     <div style={{ display: "flex", gap: "0.4rem", marginTop: "0.2rem" }}>
-                      {person.active_issues > 0 && <span style={{ fontSize: "0.5rem", color: "var(--blue)" }}>{person.active_issues} issues</span>}
-                      {person.commits_this_week > 0 && <span style={{ fontSize: "0.5rem", color: "var(--green)" }}>{person.commits_this_week} commits</span>}
+                      {person.active_issues > 0 && <span style={{ fontSize: "0.75rem", color: "var(--blue)" }}>{person.active_issues} issues</span>}
+                      {person.commits_this_week > 0 && <span style={{ fontSize: "0.75rem", color: "var(--green)" }}>{person.commits_this_week} commits</span>}
                     </div>
                   </div>
                 ))}
@@ -290,12 +290,12 @@ export function ProjectView({
                       <span className="tag tag-dim">{m.source}</span>
                     </div>
                     <div className="feed-meta">
-                      <span style={{ fontSize: "0.6rem", color: "var(--accent)" }}>{m.time}</span>
+                      <span style={{ fontSize: "0.75rem", color: "var(--accent)" }}>{m.time}</span>
                       <span className="feed-time">{m.duration}</span>
                       <span className="feed-time">{m.attendees.join(", ")}</span>
                     </div>
                     {m.notes && (
-                      <div style={{ fontSize: "0.55rem", color: "var(--text-dim)", marginTop: "0.15rem", fontStyle: "italic" }}>{m.notes}</div>
+                      <div style={{ fontSize: "0.75rem", color: "var(--text-dim)", marginTop: "0.15rem", fontStyle: "italic" }}>{m.notes}</div>
                     )}
                   </Clickable>
                 ))}
@@ -308,7 +308,7 @@ export function ProjectView({
                 {slack.recent.map((msg, i) => (
                   <Clickable key={i} onClick={() => chat(focusSlackChannelMessage(msg, slack.channel, project.name))}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <span style={{ fontSize: "0.6rem", fontWeight: 600, color: "var(--text)" }}>{msg.author}</span>
+                      <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text)" }}>{msg.author}</span>
                       <span className="feed-time">{msg.time}</span>
                     </div>
                     <div className="feed-title">{msg.message}</div>
@@ -322,7 +322,7 @@ export function ProjectView({
               <Panel title="Key Decisions" badge={String(project.key_decisions.length)}>
                 {project.key_decisions.map((d, i) => (
                   <Clickable key={i} onClick={() => chat(focusDecision(d, project.name))}>
-                    <div style={{ fontSize: "0.6rem", color: "var(--text-dim)", lineHeight: 1.4, paddingLeft: "0.5rem", borderLeft: "2px solid var(--border-light)" }}>
+                    <div style={{ fontSize: "0.75rem", color: "var(--text-dim)", lineHeight: 1.4, paddingLeft: "0.5rem", borderLeft: "2px solid var(--border-light)" }}>
                       {d}
                     </div>
                   </Clickable>
@@ -340,9 +340,9 @@ export function ProjectView({
                 <Clickable key={issue.id} onClick={() => chat(focusIssue(issue, project.name))}>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
                     <PriorityDot priority={issue.priority} />
-                    <span style={{ fontSize: "0.55rem", color: "var(--text-muted)", flexShrink: 0, width: 55 }}>{issue.id}</span>
+                    <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", flexShrink: 0, width: 55 }}>{issue.id}</span>
                     <span className="feed-title" style={{ flex: 1 }}>{issue.title}</span>
-                    <span style={{ fontSize: "0.5rem", color: "var(--text-muted)", flexShrink: 0 }}>{issue.assignee}</span>
+                    <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", flexShrink: 0 }}>{issue.assignee}</span>
                     <IssueStateTag state={issue.state} />
                   </div>
                 </Clickable>
@@ -352,7 +352,7 @@ export function ProjectView({
         )}
 
         {activeTab === "issues" && !linear && (
-          <div style={{ textAlign: "center", padding: "2rem 0", color: "var(--text-muted)", fontSize: "0.6rem" }}>
+          <div style={{ textAlign: "center", padding: "2rem 0", color: "var(--text-muted)", fontSize: "0.75rem" }}>
             No Linear project connected
           </div>
         )}
@@ -415,7 +415,7 @@ function MetricCard({ label, value, sub, color, onClick }: { label: string; valu
     >
       <div className="metric-label">{label}</div>
       <div className="metric-value" style={{ color }}>{value}</div>
-      <div style={{ fontSize: "0.5rem", color: "var(--text-muted)", marginTop: "0.1rem" }}>{sub}</div>
+      <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.1rem" }}>{sub}</div>
     </div>
   );
 }

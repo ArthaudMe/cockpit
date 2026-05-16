@@ -48,7 +48,7 @@ function SourceBadge({ source }: { source: SearchSource }) {
         display: "inline-block",
         padding: "1px 5px",
         borderRadius: 3,
-        fontSize: "0.42rem",
+        fontSize: "0.55rem",
         fontWeight: 700,
         color: "#ffffff",
         background: badge.bg,
@@ -70,7 +70,7 @@ function LiveBadge() {
         display: "inline-block",
         padding: "1px 4px",
         borderRadius: 3,
-        fontSize: "0.38rem",
+        fontSize: "0.5rem",
         fontWeight: 600,
         color: "#a3e635",
         background: "rgba(163,230,53,0.12)",
@@ -309,7 +309,7 @@ export function CommandPalette({
         >
           <span
             style={{
-              fontSize: "0.7rem",
+              fontSize: "0.75rem",
               color: "var(--text-muted)",
               flexShrink: 0,
             }}
@@ -326,7 +326,7 @@ export function CommandPalette({
               width: "100%",
               background: "transparent",
               border: "none",
-              fontSize: "0.7rem",
+              fontSize: "0.75rem",
               color: "var(--text)",
               fontFamily: "inherit",
               outline: "none",
@@ -335,7 +335,7 @@ export function CommandPalette({
           {liveLoading && (
             <span
               style={{
-                fontSize: "0.45rem",
+                fontSize: "0.75rem",
                 color: "var(--text-muted)",
                 flexShrink: 0,
                 animation: "pulse 1.2s ease-in-out infinite",
@@ -346,7 +346,7 @@ export function CommandPalette({
           )}
           <span
             style={{
-              fontSize: "0.45rem",
+              fontSize: "0.75rem",
               color: "var(--text-muted)",
               background: "var(--bg)",
               padding: "2px 5px",
@@ -366,7 +366,7 @@ export function CommandPalette({
             <div
               style={{
                 padding: "1.2rem",
-                fontSize: "0.55rem",
+                fontSize: "0.75rem",
                 color: "var(--text-muted)",
                 textAlign: "center",
               }}
@@ -374,7 +374,7 @@ export function CommandPalette({
               <div style={{ marginBottom: "0.4rem" }}>
                 Type to search across Calendar, Email, Slack, Linear, GitHub, Notion, and Granola
               </div>
-              <div style={{ fontSize: "0.48rem", color: "var(--text-dim)" }}>
+              <div style={{ fontSize: "0.6rem", color: "var(--text-dim)" }}>
                 Tip: use <span style={{ color: "var(--blue)" }}>in:slack</span>,{" "}
                 <span style={{ color: "var(--blue)" }}>in:linear</span>,{" "}
                 <span style={{ color: "var(--blue)" }}>in:github</span> to filter by source
@@ -387,12 +387,17 @@ export function CommandPalette({
             <div
               style={{
                 padding: "1.2rem",
-                fontSize: "0.55rem",
+                fontSize: "0.75rem",
                 color: "var(--text-muted)",
                 textAlign: "center",
               }}
             >
-              No results found
+              <div>No results found</div>
+              {!data.calendar?.length && !data.linearIssues?.length && !data.githubPRs?.length && !data.slackMessages?.length && !data.notionPages?.length && !data.granolaMeetings?.length && (
+                <div style={{ marginTop: "0.4rem", fontSize: "0.6rem", color: "var(--text-dim)" }}>
+                  No datasources connected yet. Go to Settings to connect Slack, Linear, GitHub, and more.
+                </div>
+              )}
             </div>
           )}
 
@@ -411,7 +416,7 @@ export function CommandPalette({
                 <SourceBadge source={group.source} />
                 <span
                   style={{
-                    fontSize: "0.42rem",
+                    fontSize: "0.55rem",
                     color: "var(--text-dim)",
                   }}
                 >
@@ -453,7 +458,7 @@ export function CommandPalette({
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div
                       style={{
-                        fontSize: "0.6rem",
+                        fontSize: "0.75rem",
                         color: "var(--text)",
                         whiteSpace: "nowrap",
                         overflow: "hidden",
@@ -470,7 +475,7 @@ export function CommandPalette({
                     </div>
                     <div
                       style={{
-                        fontSize: "0.5rem",
+                        fontSize: "0.75rem",
                         color: "var(--text-dim)",
                         marginTop: "0.1rem",
                         whiteSpace: "nowrap",
@@ -486,7 +491,7 @@ export function CommandPalette({
                   {result.timestamp && (
                     <div
                       style={{
-                        fontSize: "0.45rem",
+                        fontSize: "0.75rem",
                         color: "var(--text-muted)",
                         flexShrink: 0,
                         paddingTop: "0.15rem",
@@ -500,7 +505,7 @@ export function CommandPalette({
                   {globalIndex === selected && (
                     <span
                       style={{
-                        fontSize: "0.55rem",
+                        fontSize: "0.75rem",
                         color: "var(--text-muted)",
                         flexShrink: 0,
                         paddingTop: "0.1rem",
@@ -523,7 +528,7 @@ export function CommandPalette({
               borderTop: "1px solid var(--border)",
               display: "flex",
               gap: "0.8rem",
-              fontSize: "0.43rem",
+              fontSize: "0.55rem",
               color: "var(--text-muted)",
             }}
           >

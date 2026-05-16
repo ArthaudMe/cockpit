@@ -3,19 +3,8 @@ import { consumeOAuthState, saveTokens } from "@/lib/datasources/token-store";
 import { exchangeCode } from "@/lib/datasources/manager";
 import type { ServiceId } from "@/lib/datasources/types";
 
-const PROXY_URL = process.env.OAUTH_PROXY_URL || "https://proxy-mio-xyz.vercel.app";
-
-function getRedirectUri(origin: string, service: ServiceId): string {
-  const isDev = process.env.NODE_ENV === "development";
-  if (isDev) {
-    // Slack requires HTTPS redirect URIs — must match connect route
-    if (service === "slack") {
-      return `https://localhost:3939/api/datasources/callback`;
-    }
-    return `${origin}/api/datasources/callback`;
-  }
-  // Must match the redirect_uri used in the authorize request
-  return `${PROXY_URL}/api/oauth/redirect`;
+function getRedirectUri(origin: string, _service: ServiceId): string {
+  return `${origin}/api/datasources/callback`;
 }
 
 function escapeHtml(str: string): string {

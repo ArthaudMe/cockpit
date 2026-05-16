@@ -24,7 +24,7 @@ html {
   font-family: "SF Mono", Monaco, Inconsolata, "Fira Code", monospace;
   background-color: var(--bg);
   color: var(--text);
-  font-size: 14px;
+  font-size: 20px;
 }
 
 body {
@@ -74,7 +74,7 @@ body {
 }
 
 .panel-title {
-  font-size: 0.65rem;
+  font-size: 0.7rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -83,7 +83,7 @@ body {
 }
 
 .panel-count {
-  font-size: 0.6rem;
+  font-size: 0.65rem;
   font-weight: 500;
   color: var(--accent);
   background: rgba(255,255,255,0.06);
@@ -92,7 +92,7 @@ body {
 }
 
 .panel-toggle {
-  font-size: 0.5rem;
+  font-size: 0.55rem;
   color: var(--text-muted);
   transition: transform 0.15s;
 }
@@ -112,7 +112,7 @@ body {
 }
 .feed-item:last-child { border-bottom: none; }
 .empty-state {
-  font-size: 0.55rem;
+  font-size: 0.6rem;
   color: var(--text-muted);
   padding: 0.5rem 0;
   text-align: center;
@@ -131,7 +131,7 @@ body {
 }
 
 .feed-source {
-  font-size: 0.55rem;
+  font-size: 0.6rem;
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -139,7 +139,7 @@ body {
 }
 
 .feed-title {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   line-height: 1.35;
   color: var(--text);
 }
@@ -152,13 +152,13 @@ body {
 }
 
 .feed-time {
-  font-size: 0.55rem;
+  font-size: 0.6rem;
   color: var(--text-muted);
 }
 
 /* Tags */
 .tag {
-  font-size: 0.5rem;
+  font-size: 0.55rem;
   font-weight: 600;
   padding: 0.1rem 0.3rem;
   border-radius: 2px;
@@ -172,10 +172,10 @@ body {
 
 /* Metrics */
 .metric-value { font-size: 1.1rem; font-weight: 600; color: var(--text); letter-spacing: -0.02em; }
-.metric-change { font-size: 0.6rem; font-weight: 500; }
+.metric-change { font-size: 0.65rem; font-weight: 500; }
 .metric-change.positive { color: var(--green); }
 .metric-change.negative { color: var(--red); }
-.metric-label { font-size: 0.55rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.metric-label { font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
 
 /* Status dot */
 .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; }
@@ -200,18 +200,18 @@ body {
 }
 
 /* Chat markdown */
-.prose-mio p { margin: 0.3em 0; line-height: 1.5; font-size: 0.75rem; }
+.prose-mio p { margin: 0.3em 0; line-height: 1.5; font-size: 0.8rem; }
 .prose-mio h1, .prose-mio h2, .prose-mio h3 { color: var(--text); margin-top: 0.6em; margin-bottom: 0.3em; font-weight: 600; }
-.prose-mio h1 { font-size: 0.85rem; }
-.prose-mio h2 { font-size: 0.8rem; }
-.prose-mio h3 { font-size: 0.75rem; }
-.prose-mio ul, .prose-mio ol { margin: 0.3em 0; padding-left: 1.2em; font-size: 0.75rem; }
+.prose-mio h1 { font-size: 0.95rem; }
+.prose-mio h2 { font-size: 0.9rem; }
+.prose-mio h3 { font-size: 0.8rem; }
+.prose-mio ul, .prose-mio ol { margin: 0.3em 0; padding-left: 1.2em; font-size: 0.8rem; }
 .prose-mio li { margin: 0.15em 0; }
-.prose-mio code { background: var(--border); padding: 0.1em 0.3em; border-radius: 3px; font-size: 0.7rem; }
-.prose-mio pre { background: var(--surface); border: 1px solid var(--border); padding: 0.6em; border-radius: 4px; overflow-x: auto; margin: 0.4em 0; font-size: 0.65rem; }
+.prose-mio code { background: var(--border); padding: 0.1em 0.3em; border-radius: 3px; font-size: 0.75rem; }
+.prose-mio pre { background: var(--surface); border: 1px solid var(--border); padding: 0.6em; border-radius: 4px; overflow-x: auto; margin: 0.4em 0; font-size: 0.7rem; }
 .prose-mio pre code { background: none; padding: 0; }
 .prose-mio strong { color: var(--text); font-weight: 600; }
-.prose-mio blockquote { border-left: 2px solid var(--border-light); margin: 0.4em 0; padding-left: 0.6em; color: var(--text-dim); font-size: 0.7rem; }
+.prose-mio blockquote { border-left: 2px solid var(--border-light); margin: 0.4em 0; padding-left: 0.6em; color: var(--text-dim); font-size: 0.75rem; }
 
 /* Checkbox */
 .checkbox {
@@ -271,7 +271,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 3px;
   color: var(--text-muted);
-  font-size: 0.5rem;
+  font-size: 0.55rem;
   font-weight: 600;
   font-family: inherit;
   padding: 0.15rem 0.4rem;
@@ -286,7 +286,7 @@ body {
 }
 
 .agent-breadcrumb {
-  font-size: 0.6rem;
+  font-size: 0.65rem;
   font-family: inherit;
 }
 
@@ -315,7 +315,7 @@ body {
 
 .agent-tool-body {
   padding: 0.4rem 0.5rem;
-  font-size: 0.55rem;
+  font-size: 0.6rem;
   line-height: 1.6;
   font-family: inherit;
 }
@@ -339,7 +339,7 @@ body {
   border: 1px solid transparent;
   border-radius: 3px;
   padding: 0.35rem 0.5rem;
-  font-size: 0.6rem;
+  font-size: 0.65rem;
   color: var(--text-dim);
   cursor: pointer;
   text-align: left;
@@ -365,7 +365,7 @@ body {
   display: flex;
   align-items: flex-start;
   gap: 0.35rem;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   color: var(--text);
   padding: 0.3rem 0;
 }
@@ -373,7 +373,7 @@ body {
 .agent-prompt-indicator {
   color: var(--blue);
   font-weight: 700;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   line-height: 1.35;
 }
 
@@ -440,7 +440,7 @@ body {
   border: none;
   outline: none;
   color: var(--text);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-family: inherit;
   max-height: 120px;
   line-height: 1.4;
@@ -477,6 +477,6 @@ body {
   display: flex;
   gap: 0.8rem;
   padding-top: 0.3rem;
-  font-size: 0.45rem;
+  font-size: 0.5rem;
   color: var(--text-muted);
 }

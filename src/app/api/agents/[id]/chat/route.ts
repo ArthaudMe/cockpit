@@ -27,6 +27,7 @@ export async function POST(
     const proc = sendToAgent(id, message || "", focusContext, images);
 
     let responseText = "";
+    let stderrText = "";
 
     const stream = new ReadableStream({
       start(controller) {
@@ -37,14 +38,24 @@ export async function POST(
         });
 
         proc.stderr!.on("data", (chunk: Buffer) => {
-          console.error(`[agent:${id}:stderr]`, chunk.toString());
+          const text = chunk.toString();
+          stderrText += text;
+          console.error(`[agent:${id}:stderr]`, text);
         });
 
         proc.on("close", (code) => {
           if (code !== 0) {
-            controller.enqueue(
-              encoder.encode(`\n\n[Process exited with code ${code}]`)
-            );
+            // Detect "not logged in" from Claude CLI
+            const combined = (responseText + stderrText).toLowerCase();
+            if (combined.includes("not logged in") || combined.includes("please run /login") || combined.includes("authentication")) {
+              controller.enqueue(
+                encoder.encode(`\n\n**Claude CLI is not authenticated.** Open Terminal and run:\n\n\`\`\`\nclaude login\n\`\`\`\n\nThen restart Cockpit.`)
+              );
+            } else {
+              controller.enqueue(
+                encoder.encode(`\n\n[Process exited with code ${code}]`)
+              );
+            }
           }
           controller.close();
 

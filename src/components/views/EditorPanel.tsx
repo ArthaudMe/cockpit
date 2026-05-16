@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Editor, { type OnMount } from "@monaco-editor/react";
+import dynamic from "next/dynamic";
+
+const Editor = dynamic(() => import("@monaco-editor/react").then(m => m.default), {
+  ssr: false,
+  loading: () => <div style={{ padding: "1rem", color: "var(--text-muted)", fontSize: "0.6rem" }}>Loading editor...</div>,
+});
+
+type OnMount = import("@monaco-editor/react").OnMount;
 
 export interface OpenFile {
   path: string;
@@ -103,7 +110,7 @@ export function EditorPanel({
                 border: "none",
                 borderRight: "1px solid var(--border)",
                 padding: "0.3rem 0.5rem",
-                fontSize: "0.55rem",
+                fontSize: "0.75rem",
                 fontWeight: i === activeIndex ? 600 : 400,
                 color: i === activeIndex ? "var(--text)" : "var(--text-dim)",
                 cursor: "pointer",
@@ -116,7 +123,7 @@ export function EditorPanel({
               }}
             >
               {file.dirty && (
-                <span style={{ color: "var(--accent)", fontSize: "0.7rem", lineHeight: 1 }}>
+                <span style={{ color: "var(--accent)", fontSize: "0.75rem", lineHeight: 1 }}>
                   &bull;
                 </span>
               )}
@@ -127,7 +134,7 @@ export function EditorPanel({
                   onClose(i);
                 }}
                 style={{
-                  fontSize: "0.5rem",
+                  fontSize: "0.75rem",
                   color: "var(--text-muted)",
                   cursor: "pointer",
                   marginLeft: "0.15rem",
@@ -144,7 +151,7 @@ export function EditorPanel({
 
         <div style={{ display: "flex", alignItems: "center", gap: "0.15rem", padding: "0 0.4rem", flexShrink: 0 }}>
           {saving && (
-            <span style={{ fontSize: "0.45rem", color: "var(--text-muted)" }}>
+            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
               Saving...
             </span>
           )}
@@ -153,7 +160,7 @@ export function EditorPanel({
             style={{
               background: "none",
               border: "none",
-              fontSize: "0.45rem",
+              fontSize: "0.75rem",
               color: "var(--text-muted)",
               cursor: "pointer",
               fontFamily: "inherit",
@@ -170,7 +177,7 @@ export function EditorPanel({
       <div
         style={{
           padding: "0.2rem 0.5rem",
-          fontSize: "0.45rem",
+          fontSize: "0.75rem",
           color: "var(--text-muted)",
           borderBottom: "1px solid var(--border)",
           overflow: "hidden",

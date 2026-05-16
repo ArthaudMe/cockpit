@@ -48,7 +48,7 @@ let tray;
 const isMac = process.platform === "darwin";
 const isWin = process.platform === "win32";
 const isDev = process.env.NODE_ENV === "development";
-const PORT = isDev ? 3939 : 3123;
+const PORT = isDev ? 3939 : 3000;
 const PROTOCOL = "cockpit";
 
 const APP_ROOT = app.isPackaged
@@ -200,20 +200,21 @@ function createTray() {
 // ─── Next.js Server ────────────────────────────────────────────────
 function startNextServer() {
   return new Promise((resolve, reject) => {
-    const nextBin = isWin
-      ? path.join(APP_ROOT, "node_modules", ".bin", "next.cmd")
-      : path.join(APP_ROOT, "node_modules", ".bin", "next");
+    // Spawn a detached Node process using Electron's bundled node.
+    // We use ELECTRON_RUN_AS_NODE=1 so `process.execPath` (the Electron
+    // binary) behaves as a plain Node interpreter, which avoids the asar
+    // symlink issue with `node_modules/.bin/next`.
+    const nextCli = path.join(APP_ROOT, "node_modules", "next", "dist", "bin", "next");
 
-    nextServer = spawn(nextBin, ["start", "--port", String(PORT)], {
+    nextServer = spawn(process.execPath, [nextCli, "start", "--port", String(PORT)], {
       cwd: APP_ROOT,
       env: {
         ...process.env,
+        ELECTRON_RUN_AS_NODE: "1",
         PORT: String(PORT),
         NODE_ENV: "production",
       },
       stdio: ["ignore", "pipe", "pipe"],
-      // Windows needs shell for .cmd scripts
-      shell: isWin,
     });
 
     nextServer.stdout.on("data", (data) => {
@@ -373,6 +374,7 @@ function createMainWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, "preload.js"),
     },
   };
 
@@ -582,62 +584,69 @@ if (!gotLock) {
   });
 }
 
-// ─── Background Intelligence ────────────────────────────────────────
-let backgroundInterval;
+// ─── Background Tick ──────────────────────────────────────────────
+// The main process owns all polling — the renderer is purely reactive via IPC.
+let tickInterval;
+let dataInterval;
 
-function startBackgroundTick() {
-  // Don't start until server is ready
-  if (backgroundInterval) return;
-
-  backgroundInterval = setInterval(() => {
-    if (app.isQuitting) {
-      clearInterval(backgroundInterval);
-      return;
-    }
-
-    const tickUrl = `http://localhost:${PORT}/api/background/tick`;
-    http.get(tickUrl, (res) => {
+function fetchJson(urlPath) {
+  return new Promise((resolve, reject) => {
+    http.get(`http://localhost:${PORT}${urlPath}`, (res) => {
       let body = "";
-      res.on("data", (chunk) => { body += chunk; });
+      res.on("data", (chunk) => (body += chunk));
       res.on("end", () => {
         try {
-          const data = JSON.parse(body);
-          if (data.newNotifications && data.newNotifications.length > 0) {
-            // Only show native notifications when the window is not focused
-            const windowFocused = mainWindow && mainWindow.isFocused();
-            if (!windowFocused && ElectronNotification.isSupported()) {
-              for (const notif of data.newNotifications) {
-                const native = new ElectronNotification({
-                  title: notif.title,
-                  body: notif.body,
-                  silent: false,
-                });
-                native.on("click", () => {
-                  if (mainWindow) {
-                    if (mainWindow.isMinimized()) mainWindow.restore();
-                    mainWindow.show();
-                    mainWindow.focus();
-                  }
-                });
-                native.show();
-              }
-            }
-          }
+          resolve(JSON.parse(body));
         } catch {
-          // ignore parse errors
+          reject(new Error("Invalid JSON"));
         }
       });
-    }).on("error", () => {
-      // Server might not be ready yet, ignore
-    });
-  }, 60_000); // Every 60 seconds
+    }).on("error", reject);
+  });
+}
+
+function sendToRenderer(channel, data) {
+  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
+    mainWindow.webContents.send(channel, data);
+  }
+}
+
+async function pollDatasourceData() {
+  try {
+    const data = await fetchJson("/api/datasources/data");
+    sendToRenderer("datasource-data", data);
+  } catch (err) {
+    console.error("[electron] data poll failed:", err.message);
+  }
+}
+
+async function pollBackgroundTick() {
+  try {
+    const tick = await fetchJson("/api/background/tick");
+    if (tick.newCount > 0) {
+      const notifs = await fetchJson("/api/background/notifications");
+      sendToRenderer("notifications-update", notifs);
+    }
+  } catch (err) {
+    console.error("[electron] tick failed:", err.message);
+  }
+}
+
+function startBackgroundTick() {
+  // Initial data fetch after a short delay (let the server settle)
+  setTimeout(() => {
+    pollDatasourceData();
+    pollBackgroundTick();
+  }, 3000);
+
+  // Data poll every 60s, notification tick every 120s
+  dataInterval = setInterval(pollDatasourceData, 60_000);
+  tickInterval = setInterval(pollBackgroundTick, 120_000);
 }
 
 function stopBackgroundTick() {
-  if (backgroundInterval) {
-    clearInterval(backgroundInterval);
-    backgroundInterval = null;
-  }
+  clearInterval(dataInterval);
+  clearInterval(tickInterval);
 }
 
 // ─── Startup ───────────────────────────────────────────────────────

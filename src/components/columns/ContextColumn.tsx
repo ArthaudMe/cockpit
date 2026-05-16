@@ -68,7 +68,7 @@ function ConnectPrompt({
         textAlign: "center",
       }}
     >
-      <span style={{ fontSize: "0.55rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
+      <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
         {label}
       </span>
       <button
@@ -80,7 +80,7 @@ function ConnectPrompt({
           color: "var(--accent)",
           cursor: "pointer",
           fontFamily: "inherit",
-          fontSize: "0.5rem",
+          fontSize: "0.75rem",
           padding: "0.25rem 0.6rem",
           transition: "all 0.15s",
         }}
@@ -179,7 +179,7 @@ export function ContextColumn({
                   marginTop: di > 0 ? "0.25rem" : 0,
                 }}>
                   <span style={{
-                    fontSize: "0.45rem",
+                    fontSize: "0.75rem",
                     fontWeight: 700,
                     color: color,
                     textTransform: "uppercase",
@@ -187,7 +187,7 @@ export function ContextColumn({
                   }}>
                     {dayLabel}
                   </span>
-                  <span style={{ fontSize: "0.4rem", color: "var(--text-muted)" }}>
+                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
                     {dateLabel}
                   </span>
                   <div style={{ flex: 1, height: 1, background: color, opacity: 0.2 }} />
@@ -205,7 +205,7 @@ export function ContextColumn({
                         <span className="feed-time">{m.duration}</span>
                       </div>
                       <div className="feed-meta">
-                        <span style={{ fontSize: "0.6rem", color }}>{m.time}</span>
+                        <span style={{ fontSize: "0.75rem", color }}>{m.time}</span>
                         <span className="feed-time">{m.attendees.join(", ")}</span>
                       </div>
                     </div>
@@ -292,7 +292,7 @@ export function ContextColumn({
             onClick={() => onCompetitorClick ? onCompetitorClick(i) : onPrefill(`${u.competitor} is ${u.event.toLowerCase()}. What does that mean for us?`)}
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)" }}>
+              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text)" }}>
                 {u.competitor}
               </span>
               <div className="feed-meta">
@@ -333,7 +333,7 @@ export function ContextColumn({
             </div>
             <span
               style={{
-                fontSize: "0.6rem",
+                fontSize: "0.75rem",
                 color: t.done ? "var(--text-muted)" : "var(--text)",
                 textDecoration: t.done ? "line-through" : "none",
                 lineHeight: 1.3,
@@ -392,7 +392,7 @@ function SkillsPanel({ onPrefill }: { onPrefill: (text: string) => void }) {
               color: skill.custom ? "#a78bfa" : "var(--text)",
               cursor: "pointer",
               fontFamily: "inherit",
-              fontSize: "0.5rem",
+              fontSize: "0.75rem",
               padding: "0.2rem 0.5rem",
               display: "flex",
               alignItems: "center",

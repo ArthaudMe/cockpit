@@ -14,21 +14,10 @@ const OAUTH_SERVICES: ServiceId[] = [
 // Auto-detected services just need to be re-enabled
 const AUTO_DETECTED: ServiceId[] = ["granola"];
 
-const PROXY_URL = process.env.OAUTH_PROXY_URL || "https://proxy-mio-xyz.vercel.app";
-
-// In production, redirect through the hosted proxy which bounces to cockpit:// deep link.
-// In dev, redirect to localhost directly.
-function getRedirectUri(origin: string, service: ServiceId): string {
-  const isDev = process.env.NODE_ENV === "development";
-  if (isDev) {
-    // Slack requires HTTPS redirect URIs
-    if (service === "slack") {
-      return `https://localhost:3939/api/datasources/callback`;
-    }
-    return `${origin}/api/datasources/callback`;
-  }
-  // Production: HTTPS redirect accepted by all providers, bounces to cockpit://
-  return `${PROXY_URL}/api/oauth/redirect`;
+// Always use localhost callback — the local Next.js server handles it directly.
+// This avoids custom-scheme issues (Google blocks cockpit://, Slack needs PKCE, etc.)
+function getRedirectUri(origin: string): string {
+  return `${origin}/api/datasources/callback`;
 }
 
 export async function GET(req: NextRequest) {
@@ -48,7 +37,7 @@ export async function GET(req: NextRequest) {
   }
 
   const origin = req.nextUrl.origin;
-  const redirectUri = getRedirectUri(origin, service);
+  const redirectUri = getRedirectUri(origin);
   const state = createOAuthState(service);
 
   const authUrl = getAuthUrl(service, redirectUri, state);

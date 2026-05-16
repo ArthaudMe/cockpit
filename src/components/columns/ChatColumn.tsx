@@ -480,7 +480,7 @@ export function ChatColumn({
                 border: "none",
                 borderRight: "1px solid var(--border)",
                 padding: "0.35rem 0.6rem",
-                fontSize: "0.55rem",
+                fontSize: "0.75rem",
                 fontWeight: agent.id === activeAgentId ? 600 : 400,
                 color: agent.id === activeAgentId ? "var(--text)" : "var(--text-dim)",
                 cursor: "pointer",
@@ -509,7 +509,7 @@ export function ChatColumn({
               {notifiedAgents.has(agent.id) && (
                 <span
                   style={{
-                    fontSize: "0.4rem",
+                    fontSize: "0.75rem",
                     background: "var(--blue)",
                     color: "var(--bg)",
                     borderRadius: "50%",
@@ -525,7 +525,7 @@ export function ChatColumn({
                   !
                 </span>
               )}
-              <span style={{ fontSize: "0.45rem", color: "var(--text-muted)" }}>
+              <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
                 {BACKEND_ICONS[agent.backend] || "?"} {shortModel(agent.model)}
               </span>
               {agents.length > 1 && (
@@ -535,7 +535,7 @@ export function ChatColumn({
                     handleDeleteAgent(agent.id);
                   }}
                   style={{
-                    fontSize: "0.5rem",
+                    fontSize: "0.75rem",
                     color: "var(--text-muted)",
                     cursor: "pointer",
                     marginLeft: "0.15rem",
@@ -558,7 +558,7 @@ export function ChatColumn({
             border: "none",
             borderLeft: "1px solid var(--border)",
             padding: "0.35rem 0.5rem",
-            fontSize: "0.65rem",
+            fontSize: "0.75rem",
             color: "var(--text-muted)",
             cursor: "pointer",
             fontFamily: "inherit",
@@ -591,7 +591,7 @@ export function ChatColumn({
               alignItems: "center",
               justifyContent: "center",
               height: "100%",
-              fontSize: "0.55rem",
+              fontSize: "0.75rem",
               color: "var(--text-muted)",
             }}
           >
@@ -606,7 +606,7 @@ export function ChatColumn({
         {streaming && (
           <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", padding: "0.25rem 0" }}>
             <span className="dot dot-green" style={{ animation: "spin 1s linear infinite" }} />
-            <span style={{ fontSize: "0.5rem", color: "var(--text-muted)" }}>thinking...</span>
+            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>thinking...</span>
           </div>
         )}
       </div>
@@ -629,7 +629,7 @@ export function ChatColumn({
               zIndex: 101,
             }}
           >
-            <div style={{ padding: "0.35rem 0.5rem", borderBottom: "1px solid var(--border)", fontSize: "0.45rem", color: "var(--text-muted)" }}>
+            <div style={{ padding: "0.35rem 0.5rem", borderBottom: "1px solid var(--border)", fontSize: "0.75rem", color: "var(--text-muted)" }}>
               Skills — Tab to select
             </div>
             {slashMatches.map((skill, idx) => (
@@ -650,13 +650,13 @@ export function ChatColumn({
                   textAlign: "left",
                 }}
               >
-                <span style={{ fontSize: "0.7rem", width: 16, textAlign: "center" }}>{skill.icon}</span>
+                <span style={{ fontSize: "0.75rem", width: 16, textAlign: "center" }}>{skill.icon}</span>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: "0.6rem", color: "var(--text)", fontWeight: 500 }}>
+                  <div style={{ fontSize: "0.75rem", color: "var(--text)", fontWeight: 500 }}>
                     {skill.slash}
                     <span style={{ color: "var(--text-muted)", fontWeight: 400, marginLeft: "0.4rem" }}>{skill.name}</span>
                   </div>
-                  <div style={{ fontSize: "0.45rem", color: "var(--text-dim)", marginTop: "0.1rem" }}>{skill.description}</div>
+                  <div style={{ fontSize: "0.75rem", color: "var(--text-dim)", marginTop: "0.1rem" }}>{skill.description}</div>
                 </div>
               </button>
             ))}
@@ -714,7 +714,7 @@ export function ChatColumn({
                     background: "rgba(0,0,0,0.7)",
                     color: "#fff",
                     border: "none",
-                    fontSize: "0.45rem",
+                    fontSize: "0.75rem",
                     cursor: "pointer",
                     display: "flex",
                     alignItems: "center",
@@ -758,7 +758,7 @@ export function ChatColumn({
                 border: "1px solid var(--border)",
                 borderRadius: 3,
                 padding: "0.15rem 0.4rem",
-                fontSize: "0.5rem",
+                fontSize: "0.75rem",
                 color: "var(--text-dim)",
                 cursor: "pointer",
                 fontFamily: "inherit",
@@ -769,9 +769,9 @@ export function ChatColumn({
                 transition: "all 0.1s",
               }}
             >
-              <span style={{ fontSize: "0.6rem" }}>{BACKEND_ICONS[activeAgent.backend] || "?"}</span>
+              <span style={{ fontSize: "0.75rem" }}>{BACKEND_ICONS[activeAgent.backend] || "?"}</span>
               {shortModel(activeAgent.model)}
-              <span style={{ fontSize: "0.4rem", opacity: 0.6 }}>▼</span>
+              <span style={{ fontSize: "0.75rem", opacity: 0.6 }}>▼</span>
             </button>
           )}
 
@@ -784,7 +784,7 @@ export function ChatColumn({
               border: "1px solid var(--border)",
               borderRadius: 3,
               padding: "0.15rem 0.35rem",
-              fontSize: "0.6rem",
+              fontSize: "0.75rem",
               color: "var(--text-dim)",
               cursor: claudeConnected && activeAgent ? "pointer" : "default",
               fontFamily: "inherit",
@@ -827,7 +827,7 @@ export function ChatColumn({
               border: "none",
               outline: "none",
               color: "var(--text)",
-              fontSize: "0.7rem",
+              fontSize: "0.75rem",
               fontFamily: "inherit",
               maxHeight: 180,
               overflow: "auto",
@@ -857,7 +857,7 @@ export function ChatColumn({
                 (inputValue.trim() || pendingImages.length > 0) && !streaming && claudeConnected && activeAgent
                   ? "pointer"
                   : "default",
-              fontSize: "0.6rem",
+              fontSize: "0.75rem",
               fontWeight: 700,
               flexShrink: 0,
             }}
@@ -919,7 +919,7 @@ function BackendSwitcher({
         style={{
           padding: "0.5rem 0.6rem",
           borderBottom: "1px solid var(--border)",
-          fontSize: "0.6rem",
+          fontSize: "0.75rem",
           fontWeight: 600,
           color: "var(--text-dim)",
         }}
@@ -935,7 +935,7 @@ function BackendSwitcher({
             <div
               style={{
                 padding: "0.4rem 0.6rem 0.2rem",
-                fontSize: "0.5rem",
+                fontSize: "0.75rem",
                 fontWeight: 600,
                 color: "var(--text-muted)",
                 textTransform: "uppercase",
@@ -945,7 +945,7 @@ function BackendSwitcher({
                 gap: "0.3rem",
               }}
             >
-              <span style={{ fontSize: "0.6rem" }}>{BACKEND_ICONS[backend.id] || "?"}</span>
+              <span style={{ fontSize: "0.75rem" }}>{BACKEND_ICONS[backend.id] || "?"}</span>
               {backend.label}
             </div>
 
@@ -966,7 +966,7 @@ function BackendSwitcher({
                     border: "none",
                     cursor: "pointer",
                     fontFamily: "inherit",
-                    fontSize: "0.6rem",
+                    fontSize: "0.75rem",
                     color: isActive ? "var(--text)" : "var(--text-dim)",
                     transition: "background 0.1s",
                   }}
@@ -979,7 +979,7 @@ function BackendSwitcher({
                 >
                   <span>{model.label}</span>
                   {isActive && (
-                    <span style={{ color: "var(--green)", fontSize: "0.7rem" }}>✓</span>
+                    <span style={{ color: "var(--green)", fontSize: "0.75rem" }}>✓</span>
                   )}
                 </button>
               );
@@ -1011,15 +1011,15 @@ function EmptyState({
         gap: "0.75rem",
       }}
     >
-      <div style={{ fontSize: "0.7rem", color: "var(--text-dim)", textAlign: "center" }}>
+      <div style={{ fontSize: "0.75rem", color: "var(--text-dim)", textAlign: "center" }}>
         {agent.name}
-        <span style={{ fontSize: "0.5rem", color: "var(--text-muted)", marginLeft: "0.4rem" }}>
+        <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginLeft: "0.4rem" }}>
           {BACKEND_ICONS[agent.backend]} {agent.backend}
         </span>
       </div>
       <div
         style={{
-          fontSize: "0.55rem",
+          fontSize: "0.75rem",
           color: "var(--text-muted)",
           textAlign: "center",
           maxWidth: "80%",
@@ -1052,7 +1052,7 @@ function EmptyState({
               border: "1px solid var(--border)",
               borderRadius: 3,
               padding: "0.25rem 0.5rem",
-              fontSize: "0.55rem",
+              fontSize: "0.75rem",
               color: "var(--text-dim)",
               cursor: "pointer",
               fontFamily: "inherit",
@@ -1107,7 +1107,7 @@ function NewAgentForm({
     border: "1px solid var(--border)",
     borderRadius: 3,
     padding: "0.25rem 0.4rem",
-    fontSize: "0.55rem",
+    fontSize: "0.75rem",
     color: "var(--text)",
     fontFamily: "inherit",
     outline: "none",
@@ -1123,7 +1123,7 @@ function NewAgentForm({
     >
       <div
         style={{
-          fontSize: "0.55rem",
+          fontSize: "0.75rem",
           fontWeight: 600,
           color: "var(--text-dim)",
           marginBottom: "0.4rem",
@@ -1145,7 +1145,7 @@ function NewAgentForm({
             border: "1px solid var(--border)",
             borderRadius: 3,
             padding: "0.25rem 0.4rem",
-            fontSize: "0.55rem",
+            fontSize: "0.75rem",
             color: "var(--text)",
             fontFamily: "inherit",
             outline: "none",
@@ -1186,7 +1186,7 @@ function NewAgentForm({
             border: "none",
             borderRadius: 3,
             padding: "0.2rem 0.5rem",
-            fontSize: "0.5rem",
+            fontSize: "0.75rem",
             fontWeight: 600,
             cursor: name.trim() ? "pointer" : "default",
             fontFamily: "inherit",
@@ -1201,7 +1201,7 @@ function NewAgentForm({
             border: "1px solid var(--border)",
             borderRadius: 3,
             padding: "0.2rem 0.5rem",
-            fontSize: "0.5rem",
+            fontSize: "0.75rem",
             color: "var(--text-muted)",
             cursor: "pointer",
             fontFamily: "inherit",

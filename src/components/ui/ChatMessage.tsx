@@ -81,7 +81,7 @@ function SimpleMarkdown({ content }: { content: string }) {
         items.push(<li key={i}>{inlineFormat(lines[i].replace(/^[-*] /, ""))}</li>);
         i++;
       }
-      elements.push(<ul key={`ul-${i}`} style={{ paddingLeft: "1.2em", margin: "0.3em 0", fontSize: "0.7rem" }}>{items}</ul>);
+      elements.push(<ul key={`ul-${i}`} style={{ paddingLeft: "1.2em", margin: "0.3em 0", fontSize: "0.75rem" }}>{items}</ul>);
       continue;
     } else if (line.match(/^\d+\. /)) {
       const items: React.ReactNode[] = [];
@@ -89,7 +89,7 @@ function SimpleMarkdown({ content }: { content: string }) {
         items.push(<li key={i}>{inlineFormat(lines[i].replace(/^\d+\. /, ""))}</li>);
         i++;
       }
-      elements.push(<ol key={`ol-${i}`} style={{ paddingLeft: "1.2em", margin: "0.3em 0", fontSize: "0.7rem" }}>{items}</ol>);
+      elements.push(<ol key={`ol-${i}`} style={{ paddingLeft: "1.2em", margin: "0.3em 0", fontSize: "0.75rem" }}>{items}</ol>);
       continue;
     } else if (line.startsWith("```")) {
       const codeLines: string[] = [];
@@ -99,14 +99,14 @@ function SimpleMarkdown({ content }: { content: string }) {
         i++;
       }
       elements.push(
-        <pre key={`code-${i}`} style={{ background: "var(--surface)", border: "1px solid var(--border)", padding: "0.6em", borderRadius: 4, overflow: "auto", margin: "0.4em 0", fontSize: "0.65rem" }}>
+        <pre key={`code-${i}`} style={{ background: "var(--surface)", border: "1px solid var(--border)", padding: "0.6em", borderRadius: 4, overflow: "auto", margin: "0.4em 0", fontSize: "0.75rem" }}>
           <code>{codeLines.join("\n")}</code>
         </pre>
       );
     } else if (line.trim() === "") {
       // skip
     } else {
-      elements.push(<p key={i} style={{ margin: "0.3em 0", lineHeight: 1.5, fontSize: "0.7rem", overflowWrap: "break-word", wordBreak: "break-word" }}>{inlineFormat(line)}</p>);
+      elements.push(<p key={i} style={{ margin: "0.3em 0", lineHeight: 1.5, fontSize: "0.75rem", overflowWrap: "break-word", wordBreak: "break-word" }}>{inlineFormat(line)}</p>);
     }
 
     i++;
@@ -175,7 +175,7 @@ export function ChatMessage({
             color: "var(--bg)",
             padding: "0.4rem 0.6rem",
             borderRadius: "4px 4px 1px 4px",
-            fontSize: "0.7rem",
+            fontSize: "0.75rem",
             lineHeight: 1.4,
           }}
         >
@@ -220,7 +220,7 @@ export function ChatMessage({
           if (seg.type === "skill_active") {
             const skill = SKILLS.find((s) => s.slash === seg.skillSlash);
             return (
-              <div key={i} style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", background: "rgba(255,255,255,0.06)", border: "1px solid var(--border)", borderRadius: 3, padding: "0.15rem 0.45rem", marginBottom: "0.4rem", fontSize: "0.5rem", color: "var(--accent)", fontWeight: 600 }}>
+              <div key={i} style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", background: "rgba(255,255,255,0.06)", border: "1px solid var(--border)", borderRadius: 3, padding: "0.15rem 0.45rem", marginBottom: "0.4rem", fontSize: "0.75rem", color: "var(--accent)", fontWeight: 600 }}>
                 <span>{skill?.icon || "◆"}</span>
                 {skill?.name || seg.skillSlash}
               </div>
@@ -231,14 +231,14 @@ export function ChatMessage({
             const s = seg.suggestion;
             return (
               <div key={i} style={{ margin: "0.4rem 0", border: "1px solid var(--border-light)", borderRadius: 6, padding: "0.6rem 0.75rem", background: "var(--surface)" }}>
-                <div style={{ fontSize: "0.5rem", fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.3rem" }}>Suggested subagent</div>
-                <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)", marginBottom: "0.15rem" }}>
+                <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.3rem" }}>Suggested subagent</div>
+                <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text)", marginBottom: "0.15rem" }}>
                   {s.name}
-                  <span style={{ fontSize: "0.45rem", background: "rgba(255,255,255,0.06)", padding: "0.1rem 0.3rem", borderRadius: 3, color: "var(--text-muted)", marginLeft: "0.4rem", fontWeight: 400 }}>{s.role}</span>
+                  <span style={{ fontSize: "0.75rem", background: "rgba(255,255,255,0.06)", padding: "0.1rem 0.3rem", borderRadius: 3, color: "var(--text-muted)", marginLeft: "0.4rem", fontWeight: 400 }}>{s.role}</span>
                 </div>
-                <div style={{ fontSize: "0.55rem", color: "var(--text-dim)", marginBottom: "0.5rem", lineHeight: 1.4 }}>{s.task}</div>
+                <div style={{ fontSize: "0.75rem", color: "var(--text-dim)", marginBottom: "0.5rem", lineHeight: 1.4 }}>{s.task}</div>
                 {onApproveSubagent && (
-                  <button onClick={() => onApproveSubagent(s)} style={{ background: "var(--accent)", color: "var(--bg)", border: "none", borderRadius: 4, padding: "0.25rem 0.6rem", fontSize: "0.5rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                  <button onClick={() => onApproveSubagent(s)} style={{ background: "var(--accent)", color: "var(--bg)", border: "none", borderRadius: 4, padding: "0.25rem 0.6rem", fontSize: "0.75rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
                     Spawn agent
                   </button>
                 )}
@@ -270,7 +270,7 @@ export function ChatMessage({
                 />
                 <span
                   style={{
-                    fontSize: "0.55rem",
+                    fontSize: "0.75rem",
                     color: "var(--text-muted)",
                     fontFamily: "inherit",
                     letterSpacing: "0.03em",

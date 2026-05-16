@@ -64,13 +64,13 @@ export function SkillProposalCard({
       >
         <span style={{ fontSize: "0.75rem" }}>{proposal.icon || "★"}</span>
         <div>
-          <div style={{ fontSize: "0.6rem", fontWeight: 600, color: "var(--text)" }}>
+          <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text)" }}>
             {proposal.action === "delete" ? "Delete" : "New"} Skill: {proposal.name}
           </div>
           {proposal.slash && (
             <span
               style={{
-                fontSize: "0.42rem",
+                fontSize: "0.55rem",
                 color: "rgba(139, 92, 246, 0.8)",
                 fontWeight: 600,
               }}
@@ -84,7 +84,7 @@ export function SkillProposalCard({
       {proposal.description && (
         <div
           style={{
-            fontSize: "0.5rem",
+            fontSize: "0.75rem",
             color: "var(--text-muted)",
             marginBottom: "0.3rem",
             lineHeight: 1.4,
@@ -98,7 +98,7 @@ export function SkillProposalCard({
         <details style={{ marginBottom: "0.35rem" }}>
           <summary
             style={{
-              fontSize: "0.45rem",
+              fontSize: "0.75rem",
               color: "var(--text-dim)",
               cursor: "pointer",
             }}
@@ -107,7 +107,7 @@ export function SkillProposalCard({
           </summary>
           <pre
             style={{
-              fontSize: "0.42rem",
+              fontSize: "0.55rem",
               color: "var(--text-muted)",
               background: "rgba(0,0,0,0.2)",
               padding: "0.4rem",
@@ -137,7 +137,7 @@ export function SkillProposalCard({
             <span
               key={hint}
               style={{
-                fontSize: "0.4rem",
+                fontSize: "0.75rem",
                 padding: "1px 5px",
                 borderRadius: 3,
                 background: "rgba(139, 92, 246, 0.1)",
@@ -161,7 +161,7 @@ export function SkillProposalCard({
               color: "rgba(139, 92, 246, 0.9)",
               cursor: "pointer",
               fontFamily: "inherit",
-              fontSize: "0.5rem",
+              fontSize: "0.75rem",
               fontWeight: 600,
               padding: "0.25rem 0.6rem",
             }}
@@ -177,7 +177,7 @@ export function SkillProposalCard({
               color: "var(--text-muted)",
               cursor: "pointer",
               fontFamily: "inherit",
-              fontSize: "0.5rem",
+              fontSize: "0.75rem",
               padding: "0.25rem 0.6rem",
             }}
           >
@@ -187,19 +187,19 @@ export function SkillProposalCard({
       )}
 
       {status === "saving" && (
-        <span style={{ fontSize: "0.45rem", color: "var(--text-muted)" }}>
+        <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
           Saving...
         </span>
       )}
 
       {status === "saved" && (
-        <span style={{ fontSize: "0.45rem", color: "var(--green)" }}>
+        <span style={{ fontSize: "0.75rem", color: "var(--green)" }}>
           Skill saved — available immediately via {proposal.slash}
         </span>
       )}
 
       {status === "error" && (
-        <span style={{ fontSize: "0.45rem", color: "var(--text-dim)" }}>
+        <span style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>
           {error}
         </span>
       )}

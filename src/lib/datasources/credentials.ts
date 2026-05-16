@@ -8,7 +8,7 @@
 const CREDENTIALS = {
   GOOGLE_CLIENT_ID:
     process.env.GOOGLE_CLIENT_ID ||
-    "434600410325-adrugi23q2vdphgrt46a0s36jb65osjq.apps.googleusercontent.com",
+    "434600410325-di9slrobiucra57kurn7f8620pcif3vg.apps.googleusercontent.com",
 
   GITHUB_CLIENT_ID:
     process.env.GITHUB_CLIENT_ID ||

@@ -76,40 +76,50 @@ export default function Home() {
       .catch(() => {});
   }, []);
 
-  // Fetch live datasource data
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
+  // Handle incoming datasource data (from IPC or fetch)
+  const handleDatasourceData = useCallback(
+    (data: DatasourceData & { _offline?: boolean; _cachedAt?: number }) => {
+      setRawDatasourceData(data);
+      setContextData(buildContextFromLiveData(data, userName));
+      setOfflineInfo({
+        offline: !!data._offline,
+        cachedAt: data._cachedAt,
+      });
+    },
+    [userName],
+  );
 
+  // Data + notification updates — IPC from Electron main process, polling fallback for browser
+  useEffect(() => {
+    const api = (window as any).electronAPI;
+
+    if (api) {
+      // Electron: main process pushes data via IPC — no polling needed
+      api.onDatasourceData(handleDatasourceData);
+      api.onNotifications((data: { notifications: NotificationItem[]; unreadCount: number }) => {
+        setNotifications(data.notifications || []);
+        setUnreadCount(data.unreadCount || 0);
+      });
+
+      return () => {
+        api.removeAllListeners("datasource-data");
+        api.removeAllListeners("notifications-update");
+      };
+    }
+
+    // Browser fallback (dev without Electron): poll directly
     const fetchLiveData = () => {
       fetch("/api/datasources/data")
         .then((r) => r.json())
-        .then((data: DatasourceData) => {
-          setRawDatasourceData(data);
-          setContextData(buildContextFromLiveData(data, userName));
-          setOfflineInfo({
-            offline: !!data._offline,
-            cachedAt: data._cachedAt,
-          });
-        })
+        .then(handleDatasourceData)
         .catch(() => {});
     };
-
-    fetchLiveData();
-    interval = setInterval(fetchLiveData, 30_000); // refresh every 30s
-
-    return () => clearInterval(interval);
-  }, [userName]);
-
-  // Background intelligence tick — polls every 60s for notifications
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
 
     const tick = () => {
       fetch("/api/background/tick")
         .then((r) => r.json())
         .then((data) => {
           if (data.newCount > 0) {
-            // Fetch full notification list when new ones arrive
             fetch("/api/background/notifications")
               .then((r) => r.json())
               .then((result) => {
@@ -122,15 +132,17 @@ export default function Home() {
         .catch(() => {});
     };
 
-    // Initial tick after a short delay (let datasources load first)
-    const initialTimeout = setTimeout(tick, 5_000);
-    interval = setInterval(tick, 60_000);
+    fetchLiveData();
+    const dataInterval = setInterval(fetchLiveData, 60_000);
+    const initialTimeout = setTimeout(tick, 10_000);
+    const tickInterval = setInterval(tick, 120_000);
 
     return () => {
+      clearInterval(dataInterval);
       clearTimeout(initialTimeout);
-      clearInterval(interval);
+      clearInterval(tickInterval);
     };
-  }, []);
+  }, [handleDatasourceData]);
 
   const handleMarkAllRead = useCallback(() => {
     fetch("/api/background/notifications", {
