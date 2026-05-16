@@ -1,5 +1,5 @@
 import type { ServiceId, DatasourceStatus, DatasourceData } from "./types";
-import { getConnectedServices, getTokens } from "./token-store";
+import { getConnectedServices, getTokens, isServiceDisabled } from "./token-store";
 import { isGranolaAvailable, fetchGranolaMeetings } from "./connectors/granola";
 import { fetchCalendarEvents, fetchRecentEmails } from "./connectors/google";
 import { fetchLinearIssues } from "./connectors/linear";
@@ -84,7 +84,7 @@ export function getDatasourceStatuses(): DatasourceStatus[] {
     const serviceId = id as ServiceId;
     const isConnected =
       id === "granola"
-        ? granolaAvailable
+        ? granolaAvailable && !isServiceDisabled("granola")
         : id === "notion"
           ? isNotionConnected()
           : connected.includes(serviceId);
