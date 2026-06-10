@@ -199,28 +199,3 @@ Alternatively, run from Terminal:
 xattr -cr /Applications/Cockpit.app
 ```
 
-## Publish Checklist (for ~100 testers)
-
-### Blockers
-
-- [x] **App icon** — `public/icon.icns` (Mac), `build/icon.ico` (Win), `build/icon.png` (Linux)
-- [ ] **OAuth apps created** — register OAuth apps for each service and populate `.env.local`:
-  - [ ] Google (Cloud Console → OAuth 2.0, add testers to "Test users" list, max 100)
-  - [ ] GitHub (Developer Settings → OAuth Apps)
-  - [ ] Linear (Settings → API → Applications)
-  - [ ] Slack (API → Create App → OAuth & Permissions)
-  - [ ] Notion (Integrations → Create integration)
-- [ ] **Bundle credentials** — credentials need to ship with the Electron build so testers don't need env vars
-- [ ] **Test `electron:build`** — verify DMG works end-to-end: Next.js starts, window loads, datasources connect, actions execute
-
-### Should-have
-
-- [x] **First-run onboarding** — 4-step flow (Welcome → Engine → Datasources → Ready) already in place
-- [x] **Scope upgrade messaging** — yellow "Reconnect to enable actions" banner + Reconnect button for tokens lacking write scopes
-- [x] **Crash reporting** — React error boundary, global error listeners, Electron process-level handlers, crash log file
-- [ ] **GitHub Release** — create initial release so `electron-updater` has something to check against
-
-### Nice-to-have
-
-- [ ] **Windows/Linux build testing** — targets configured but untested
-- [x] **Code signing (Mac)** — documented right-click → Open workaround for unsigned DMGs
