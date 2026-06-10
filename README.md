@@ -5,99 +5,72 @@ Command center for your company. Desktop AI co-pilot that connects to your live 
 ## What's live
 
 ### AI Engine Layer
-- **Multi-backend LLM support** — Claude, Codex, and Ollama as interchangeable backends
+- **Claude-first, multi-backend** — Claude is the primary engine; Codex and Ollama available as alternates in the model switcher
 - **Backend auto-detection** — scans installed binaries and versions at startup
-- **Multi-agent system** — create agents with distinct names, roles (general, research, writer, ops), and custom system prompts
-- **Claude process pooling** — warm single process with respawn, 30s datasource cache across messages
+- **Multi-agent system** — instant agent creation ("+" tab), double-click to rename, per-agent backend/model switching
+- **One chat engine** — main chat and focus-view chat share the same agents, memory, and history
+- **Warm process pre-spawning** — per-agent warm CLI processes for instant first tokens; system prompts rebuilt on every respawn with fresh datasource context
+- **Conversation memory** — recent turns and relevant workspace history travel with each message (one-shot CLI calls, stateful conversations)
 - **Streaming response parsing** — handles incomplete JSON blocks mid-stream without breaking
-- **Skills system** — 12 built-in skills (meeting prep, writer, research, PM, data analyst, builder, UX, feedback, eng manager, people manager, sales pipeline, content marketing) with slash commands, per-skill prompt injection, and enable/disable toggles
-- **Subagent spawning** — LLM can suggest spawning specialized subagents mid-conversation; user approves via inline button, subagent opens as a new tab
+- **Skills system** — 12 built-in skills with slash commands, per-skill prompt injection, and enable/disable toggles; LLM can propose new custom skills mid-chat
+- **Subagent spawning** — LLM suggests specialized subagents; user approves via inline button, subagent opens as a new tab
 
-### Data Integrations (7 OAuth connectors + MCP)
+### Data Integrations (7 connectors + MCP)
 - **Google Calendar** — next 7 days of events, auto token refresh with 5-min expiry buffer
 - **Gmail** — recent emails with unread status
 - **Linear** — assigned issues (excl. canceled/completed), priority mapping via GraphQL
 - **GitHub** — open PRs involving user, notifications
 - **Notion** — recent pages by last edit, OAuth + internal token fallback
-- **Slack** — recent channel messages (past 24h), username caching
-- **Granola** — meeting notes from local macOS cache (last 7 days)
-- **Generic MCP client** — connect any MCP server (stdio or SSE) as a datasource. Add/test/toggle servers in Settings, resources auto-injected into AI context
+- **Slack** — recent channel messages (past 24h), parallel fetch with username caching
+- **Granola** — meeting notes from local macOS cache (last 7 days), mtime-cached parsing
+- **Generic MCP client** — connect any MCP server (stdio or SSE) as a datasource; resources auto-injected into AI context
 
 ### Context & Intelligence
-- **Dynamic system prompt builder** — assembles user profile, projects, calendar, metrics, Slack highlights, competitors, and todos into LLM context
-- **Context Focus** — 17 entity-specific focus helpers (calendar event, Linear issue, PR, Slack message, competitor, person, etc.) each with structured data and suggested questions
-- **Render blocks** — Tables, bar charts, and card grids embedded inline in LLM responses via `cockpit_render` JSON format
-- **Subagent suggestion blocks** — LLM can propose spawning a subagent via `cockpit_subagent` JSON; renders as an approval card in chat
-- **Skill-aware responses** — active skill badge rendered inline when a skill is triggered (parser detects `[skill: /slash]` prefix)
-- **Live profile integration** — user profile (name, role, company) persisted in `~/.cockpit/profile.json`, pulled into system prompt dynamically
-- **Concurrent agent requests** — parallel queries with visual notifications
+- **Dynamic system prompt builder** — user profile + live calendar, Slack, Linear, GitHub, email, Notion, Granola, and MCP data assembled per spawn
+- **Knowledge layer** — datasource history persisted daily to `~/.cockpit/history/`; keyword search over past items injected as historical context with each message
+- **Memory** — two bounded markdown files (MEMORY.md + USER.md); LLM-driven add/replace/remove via `cockpit_memory` blocks, injection-pattern scanning, live entries in every prompt
+- **Render blocks** — tables, bar charts, card grids, layouts, and mermaid blocks embedded inline in responses via `cockpit_render` JSON
+- **Context Focus** — click any calendar event, feed item, metric, or search result to open an entity-focused chat with structured data and suggested questions
+- **Project inference** — projects auto-clustered from Linear/GitHub/Slack signals via LLM, with heuristic fallback; clustering cached on disk and re-run only when sources change
 
 ### Dashboard & UI
-- **Live activity feed** — color-coded by type (agent, code, meeting, sales, milestone), staggered animations
-- **Context sidebar panels** — Calendar (grouped by day), Metrics (MRR with change colors), Slack, Competitors, Todos, Projects
-- **Chat interface** — terminal-style input, markdown rendering (headings, code blocks, bold, italic, links)
-- **Contextual chat view** — breadcrumb navigation, entity-focused conversations with structured data headers and suggested questions
-- **30-second live refresh** — all datasource data polled and updated automatically
-
-### Project Management
-- **Project CRUD** — create, update, delete with category, status (Active/Paused/Done), tools list
-- **Project views** — tabbed: Overview (metrics + team + decisions), Issues (Linear), Activity (combined timeline)
-- **File-based persistence** — `~/.cockpit/projects.json` with secure file permissions
+- **Live activity feed** — color-coded by type, built from all connected sources
+- **Context sidebar panels** — calendar (grouped by day), Slack highlights, skills, todos
+- **Chat interface** — terminal-style input, markdown rendering, image attachments (paste/drop), slash-command autocomplete
+- **Live refresh** — Electron main process polls every 60s and pushes to the renderer over IPC (browser dev mode falls back to polling)
 
 ### Auth & Token Management
-- **Standardized OAuth2 flow** — per connector: auth URL generation, code exchange, token validation
+- **OAuth via token-exchange proxy** — client secrets never ship in the app or repo; they live in a small Vercel function (`proxy/`)
 - **Auto token refresh** — 5-minute buffer before expiry, transparent to caller
-- **Secure token storage** — JSON in `~/.cockpit/` with `0o600` file permissions
-- **OAuth popup windows** — 600x700px with 2-minute timeout polling
+- **Secure local storage** — tokens in `~/.cockpit/` with `0o600` permissions, mtime-cached reads
+- **Deep-link OAuth callback** — `cockpit://` protocol forwards to the local server
 
 ### Settings & Onboarding
-- **4-step onboarding** — Welcome, Backend detection, Datasource connection (polls every 3s), Ready
-- **Settings page** — Profile (editable name/role/company), Connected Tools (status + connect/disconnect), AI Engines (version + install status), Agents (inline rename, delete, backend selector), Skills (toggle enable/disable per skill), MCP Servers (add/test/toggle/remove)
-- **Persisted state** — debounced localStorage writes (500ms)
+- **2-step onboarding** — Claude install/sign-in (auto-detecting, with one-click install) → connect one tool, add the rest later
+- **Settings** — profile, connected tools, AI engines, analytics opt-in; MCP servers, skill toggles, custom skills, and agent management under Advanced
+- **Persisted state** — debounced localStorage writes, capped per-agent chat history, images excluded from persistence
 
 ### Search
 - **Command palette** (Cmd+K) — instant client-side search across cached data, then live API search with LIVE badge
-- **Live search providers** — Gmail, Google Calendar, Linear, GitHub, Notion, Slack (via `search.messages`)
+- **Live search providers** — Gmail, Google Calendar, Linear, GitHub, Notion, Slack
 - **Source filtering** — `in:slack`, `in:linear`, `in:github`, etc.
-- **Grouped results** — by source with color-coded badges, keyboard navigation, shift+Enter to open URL
 
 ### Write-Back Actions
-- **Action cards** — LLM proposes actions via `cockpit_action` JSON, user reviews and approves inline
+- **Action cards** — LLM proposes actions via `cockpit_action` JSON; user reviews and approves inline
 - **6 action types** — `linear_create_issue`, `github_comment_pr`, `slack_send_message`, `calendar_create_event`, `gmail_draft`, `notion_update_page`
-- **Action log** — all executed actions persisted to `~/.cockpit/action-log.json`
+- **Action log** — executed actions persisted to `~/.cockpit/action-log.json` (capped at 500)
 
-### Skill Creator
-- **Custom skills** — LLM proposes reusable workflows via `cockpit_skill` JSON blocks, user approves inline
-- **Slash commands** — each custom skill gets its own `/command`, available immediately after creation
-- **Auto-detection** — LLM can propose skills after successful multi-step interactions
-- **Persisted** — saved to `~/.cockpit/custom-skills/` as JSON files, loaded alongside 12 built-in skills
-- **Full lifecycle** — create, update, delete via LLM or API
-
-### Brain-First Protocol
-- **Local knowledge first** — LLM checks memory, history, and live datasources before suggesting external lookups
-- **Historical context** — past conversations and data searched by relevance and injected into system prompt
-- **Memory-aware** — persistent Notes + User Profile consulted before every response
-
-### Memory
-- **Hermes-style memory** — two bounded markdown files (MEMORY.md + USER.md) in `~/.cockpit/memories/`
-- **Frozen snapshot** — loaded at session start, injected into system prompt
-- **LLM-driven writes** — model outputs `cockpit_memory` JSON blocks to add/replace/remove entries
-- **Content scanning** — injection pattern detection
-
-### Analytics
-- **PostHog integration** — opt-in anonymous usage analytics (opt-out by default)
-- **Events tracked** — `app_opened`, `chat_message_sent`, `panel_clicked`, `datasource_connected`
-- **Privacy-first** — no personal data or chat content sent
+### Analytics & Crash Reporting
+- **PostHog integration** — opt-in anonymous usage analytics (off by default); no personal data or chat content sent
+- **React error boundary + global error listeners**; Electron process-level handlers log to `~/.cockpit/crash-log.json`
+- **Renderer crash recovery** — auto-reload on `render-process-gone` / `unresponsive`
 
 ### Desktop App
-- **Electron shell** — full desktop app wrapper with cross-platform support (Mac/Win/Linux)
-- **Auto-update** — `electron-updater` with GitHub Releases, 4-hour check interval, restart prompt
-- **Tray icon** — programmatic diamond icon, show/hide/quit menu, click to toggle
-- **Window state persistence** — position/size saved to `~/.cockpit/window-state.json`
-- **Background intelligence** — 60s tick with native notifications for unfocused windows
-- **Graceful shutdown** — SIGTERM/SIGKILL on Unix, taskkill on Windows
-- **Splash screen** — branded launch experience
-- **DMG packaging** — macOS distributable
+- **Electron shell** — Mac (DMG), Windows (NSIS), Linux (AppImage) targets
+- **Standalone server bundle** — the app ships Next.js standalone output (self-contained `server.js`), not `node_modules`; runs on a dynamically allocated localhost port
+- **Auto-update** — `electron-updater` with GitHub Releases, 4-hour check interval (requires a signed app on macOS)
+- **Tray icon, window state persistence, splash screen, graceful shutdown**
+- **Background intelligence** — periodic rule checks over live data with native notifications
 
 ## Prerequisites
 
@@ -105,35 +78,37 @@ Command center for your company. Desktop AI co-pilot that connects to your live 
 - **pnpm**
 - **Claude CLI** installed and authenticated (`claude` command available in your terminal)
 
-Optional backends: [Codex](https://github.com/openai/codex), [Ollama](https://ollama.com) (detected automatically at startup)
+Optional backends: [Codex](https://github.com/openai/codex), [Ollama](https://ollama.com) (detected automatically).
 
 ## Setup
 
 ```bash
+cp .env.example .env.local   # fill in OAUTH_PROXY_SECRET (see below)
 pnpm install
 pnpm dev
 ```
 
-Open http://localhost:3000. The onboarding flow will guide you through connecting your tools.
+Open http://localhost:3939. The onboarding flow guides you through the rest.
+
+`OAUTH_PROXY_SECRET` authenticates the app to the OAuth token-exchange proxy and is inlined at build time — it must match `PROXY_SECRET` on the deployed proxy (see `proxy/README.md`). Without it, datasource OAuth connects will fail.
 
 ### Connecting datasources
 
-Click "Connect" in Settings for each service you want to use. You'll be redirected to the service's OAuth page to authorize read access. Tokens are stored locally in `~/.cockpit/tokens.json`.
+Connect services from onboarding or Settings. You'll be redirected to each service's OAuth page; tokens are stored locally in `~/.cockpit/tokens.json`. Granola needs no OAuth — its local cache is detected automatically.
 
-Supported services:
-- **Google** - Calendar events (next 7 days) and recent emails
-- **GitHub** - Open PRs involving you and notifications
-- **Linear** - Issues assigned to you
-- **Slack** - Recent channel messages
-- **Notion** - Recently edited pages
-- **Granola** - Meeting notes from local macOS cache (no OAuth needed)
-- **MCP Servers** - Any MCP-compatible server (stdio or SSE transport)
-
-### Electron (desktop)
+### Desktop (Electron)
 
 ```bash
-pnpm electron:dev     # Development (with hot reload)
-pnpm electron:build   # Build distributable DMG/installer
+pnpm electron:dev       # development (uses the dev server on :3939)
+pnpm electron:build     # next build + standalone packaging + electron-builder
+pnpm electron:publish   # build and publish a release (auto-update feed)
+```
+
+### Quality
+
+```bash
+pnpm typecheck
+pnpm test
 ```
 
 ## Architecture
@@ -141,61 +116,57 @@ pnpm electron:build   # Build distributable DMG/installer
 ```
 src/
   app/
-    api/              # API routes (agents, chat, datasources, projects, backends, profile, skills)
-    page.tsx          # Main dashboard with 30s live polling
+    api/                # API routes (agents, chat, datasources, projects, skills, ...)
+    page.tsx            # Main dashboard (IPC-pushed data, browser polling fallback)
   components/
-    columns/          # ChatColumn, FeedColumn (activity feed)
-    layout/           # App shell, sidebar
-    renderers/        # BarChart, CardGrid, Table (render blocks)
-    ui/               # ChatMessage, shared UI primitives
-    views/            # ContextualChatView, OnboardingView, SettingsView
+    columns/            # ProjectsColumn, FeedColumn, ChatColumn, ContextColumn
+    layout/             # Header, NotificationBell
+    renderers/          # Table, BarChart, CardGrid, Layout, Mermaid render blocks
+    ui/                 # ChatMessage, CommandPalette, action/skill cards
+    views/              # ContextualChatView, OnboardingView, SettingsView
   lib/
-    agent-manager.ts  # Multi-agent CRUD + role-specific prompts
-    claude-pool.ts    # Warm process pool for Claude CLI
-    context.ts        # System prompt builder with live context
-    datasources/      # 7 OAuth connectors + MCP client + manager + token store
-    focus.ts          # 17 context focus helpers
-    parser.ts         # Streaming cockpit_render + cockpit_subagent JSON parser
-    projects/         # Project store (file-based persistence)
-    skills.ts         # Skills persistence + prompt section builder
-    skills-defs.ts    # 12 skill definitions with slash commands + prompt instructions
+    agent-manager.ts    # Multi-agent lifecycle, warm processes, persistence
+    agent-stream.ts     # Shared CLI→HTTP streaming (one chat engine)
+    prompt-prelude.ts   # Per-message context: recent turns + historical items
+    context.ts          # System prompt builder with live datasource context
+    fs-cache.ts         # mtime-keyed JSON read cache for ~/.cockpit stores
+    datasources/        # Connectors, manager (single-flight cache), token store
+    knowledge/          # History writer/search + conversation persistence
+    projects/           # Project store + LLM-based project inference
+    skills*.ts          # Built-in defs, custom skills, extraction
 electron/
-  main.js            # Electron main process
+  main.js               # Spawns the standalone server, tray, auto-update, IPC push
+proxy/
+  api/oauth/token.ts    # Vercel function holding OAuth client secrets
+scripts/
+  prepare-standalone.js # Copies static assets into the standalone bundle
 ```
 
 ## Data storage
 
 All user data stays local:
-- `~/.cockpit/tokens.json` - OAuth tokens (mode 0o600)
-- `~/.cockpit/profile.json` - Name, role, company
-- `~/.cockpit/projects.json` - Project definitions
-- `~/.cockpit/agents.json` - Agent configurations
-- `~/.cockpit/skills.json` - Enabled/disabled skills
-- `~/.cockpit/mcp-servers.json` - MCP server configurations (mode 0o600)
-- `~/.cockpit/memories/` - Hermes-style memory (MEMORY.md + USER.md, mode 0o600)
-- `~/.cockpit/custom-skills/` - User-created skills (JSON files, mode 0o600)
-- `~/.cockpit/action-log.json` - Executed action history
-- `~/.cockpit/window-state.json` - Electron window position/size
-- `~/.cockpit/crash-log.json` - Electron crash log (last 50 entries)
-- `localStorage` - Chat history and UI state
-
-### Crash Reporting
-- **React error boundary** — catches render errors, shows reload/dismiss screen, reports to PostHog (if opted in)
-- **Global error listeners** — `unhandledrejection` and `error` events tracked via PostHog
-- **Electron process handlers** — `uncaughtException` and `unhandledRejection` logged to `~/.cockpit/crash-log.json`
-- **Renderer crash recovery** — auto-reloads on `render-process-gone` and `unresponsive` events
+- `~/.cockpit/tokens.json` — OAuth tokens (mode 0o600)
+- `~/.cockpit/profile.json` — name, role, company
+- `~/.cockpit/agents.json` — agent configurations
+- `~/.cockpit/skills.json` / `custom-skills/` — skill toggles and user-created skills
+- `~/.cockpit/mcp-servers.json` — MCP server configurations (mode 0o600)
+- `~/.cockpit/memories/` — MEMORY.md + USER.md (mode 0o600)
+- `~/.cockpit/history/` — daily datasource snapshots + conversation history
+- `~/.cockpit/cache/` — offline datasource cache, project-inference cache
+- `~/.cockpit/action-log.json` — executed action history
+- `~/.cockpit/window-state.json`, `crash-log.json` — Electron state
+- `localStorage` — chat UI state (capped, images excluded)
 
 ## Installing Unsigned DMGs (macOS)
 
-Since the DMG is not signed with an Apple Developer certificate, macOS Gatekeeper will block it by default. To open:
+Until the app is signed and notarized, macOS Gatekeeper will block it. After dragging **Cockpit** to Applications, either run:
 
-1. Download and open the `.dmg` file, drag **Cockpit** to Applications
-2. **First launch:** Right-click (or Control-click) the app in Applications → select **Open**
-3. Click **Open** in the dialog that appears ("macOS cannot verify the developer...")
-4. Subsequent launches will open normally
-
-Alternatively, run from Terminal:
 ```bash
 xattr -cr /Applications/Cockpit.app
 ```
 
+or go to **System Settings → Privacy & Security** and click **Open Anyway** after the first blocked launch attempt. Note that auto-update does not work on unsigned macOS builds.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
