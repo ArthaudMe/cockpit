@@ -53,13 +53,11 @@ export const ChatColumn = memo(function ChatColumn({
   inputValue,
   onInputChange,
   claudeConnected,
-  onOpenFile,
   onOpenFocus,
 }: {
   inputValue: string;
   onInputChange: (v: string) => void;
   claudeConnected: boolean;
-  onOpenFile?: (path: string) => void;
   onOpenFocus?: (focus: ContextFocus) => void;
 }) {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
@@ -73,7 +71,9 @@ export const ChatColumn = memo(function ChatColumn({
   >("cockpit-chat-agents", {}, { serialize: stripImagesForPersist });
   const [streamingAgents, setStreamingAgents] = useState<Set<string>>(new Set());
   const [notifiedAgents, setNotifiedAgents] = useState<Set<string>>(new Set());
-  const [showNewAgent, setShowNewAgent] = useState(false);
+  const [creatingAgent, setCreatingAgent] = useState(false);
+  const [renamingAgentId, setRenamingAgentId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [slashSelected, setSlashSelected] = useState(0);
   const [pendingImages, setPendingImages] = useState<string[]>([]);
@@ -348,23 +348,45 @@ export const ChatColumn = memo(function ChatColumn({
     }
   };
 
-  const handleCreateAgent = useCallback(
-    async (name: string, role: string, backend: string, model: string) => {
+  // "+" creates a working agent immediately — no form. Name and model are
+  // edited inline afterwards (double-click tab to rename, switcher for model).
+  const handleCreateAgent = useCallback(async () => {
+    if (creatingAgent) return;
+    setCreatingAgent(true);
+    try {
+      const res = await fetch("/api/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: `Agent ${agents.length + 1}`, role: "general" }),
+      });
+      const agent: AgentInfo = await res.json();
+      setAgents((prev) => [...prev, agent]);
+      setActiveAgentId(agent.id);
+    } catch {
+      // silently fail
+    } finally {
+      setCreatingAgent(false);
+    }
+  }, [agents.length, creatingAgent, setActiveAgentId]);
+
+  const handleRenameAgent = useCallback(
+    async (id: string) => {
+      const name = renameValue.trim();
+      setRenamingAgentId(null);
+      if (!name) return;
       try {
-        const res = await fetch("/api/agents", {
-          method: "POST",
+        const res = await fetch(`/api/agents/${id}`, {
+          method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, role, backend, model }),
+          body: JSON.stringify({ name }),
         });
-        const agent: AgentInfo = await res.json();
-        setAgents((prev) => [...prev, agent]);
-        setActiveAgentId(agent.id);
-        setShowNewAgent(false);
+        const updated: AgentInfo = await res.json();
+        setAgents((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
       } catch {
         // silently fail
       }
     },
-    [setActiveAgentId]
+    [renameValue]
   );
 
   const handleDeleteAgent = useCallback(
@@ -491,6 +513,11 @@ export const ChatColumn = memo(function ChatColumn({
             <button
               key={agent.id}
               onClick={() => setActiveAgentId(agent.id)}
+              onDoubleClick={() => {
+                setRenamingAgentId(agent.id);
+                setRenameValue(agent.name);
+              }}
+              title="Double-click to rename"
               style={{
                 background: agent.id === activeAgentId ? "var(--bg)" : "transparent",
                 border: "none",
@@ -521,7 +548,32 @@ export const ChatColumn = memo(function ChatColumn({
                   animation: streamingAgents.has(agent.id) ? "pulse 1s ease-in-out infinite" : undefined,
                 }}
               />
-              {agent.name}
+              {renamingAgentId === agent.id ? (
+                <input
+                  autoFocus
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onBlur={() => handleRenameAgent(agent.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleRenameAgent(agent.id);
+                    if (e.key === "Escape") setRenamingAgentId(null);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    background: "var(--bg)",
+                    border: "1px solid var(--border-light)",
+                    borderRadius: 3,
+                    color: "var(--text)",
+                    fontSize: "0.75rem",
+                    fontFamily: "inherit",
+                    outline: "none",
+                    width: 90,
+                    padding: "0 0.2rem",
+                  }}
+                />
+              ) : (
+                agent.name
+              )}
               {notifiedAgents.has(agent.id) && (
                 <span
                   style={{
@@ -568,7 +620,8 @@ export const ChatColumn = memo(function ChatColumn({
         </div>
 
         <button
-          onClick={() => setShowNewAgent(!showNewAgent)}
+          onClick={handleCreateAgent}
+          disabled={creatingAgent}
           style={{
             background: "none",
             border: "none",
@@ -576,23 +629,16 @@ export const ChatColumn = memo(function ChatColumn({
             padding: "0.35rem 0.5rem",
             fontSize: "0.75rem",
             color: "var(--text-muted)",
-            cursor: "pointer",
+            cursor: creatingAgent ? "default" : "pointer",
             fontFamily: "inherit",
             flexShrink: 0,
+            opacity: creatingAgent ? 0.5 : 1,
           }}
-          title="New agent"
+          title="New agent (double-click a tab to rename)"
         >
           +
         </button>
       </div>
-
-      {showNewAgent && (
-        <NewAgentForm
-          backends={backends}
-          onSubmit={handleCreateAgent}
-          onCancel={() => setShowNewAgent(false)}
-        />
-      )}
 
       {/* Messages area */}
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "0.75rem" }}>
@@ -616,7 +662,7 @@ export const ChatColumn = memo(function ChatColumn({
         )}
 
         {messages.map((msg, i) => (
-          <ChatMessage key={i} message={msg} onApproveSubagent={handleApproveSubagent} onOpenFile={onOpenFile} onOpenFocus={onOpenFocus} />
+          <ChatMessage key={i} message={msg} onApproveSubagent={handleApproveSubagent} onOpenFocus={onOpenFocus} />
         ))}
 
         {streaming && (
@@ -1077,154 +1123,6 @@ function EmptyState({
             {q}
           </button>
         ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── New Agent Form ─────────────────────────────────────────────────
-
-function NewAgentForm({
-  backends,
-  onSubmit,
-  onCancel,
-}: {
-  backends: BackendDef[];
-  onSubmit: (name: string, role: string, backend: string, model: string) => void;
-  onCancel: () => void;
-}) {
-  const [name, setName] = useState("");
-  const [role, setRole] = useState("general");
-  const [backend, setBackend] = useState("claude");
-  const [model, setModel] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const selectedBackend = backends.find((b) => b.id === backend);
-  const models = selectedBackend?.models || [];
-
-  useEffect(() => {
-    if (selectedBackend) {
-      setModel(selectedBackend.defaultModel);
-    }
-  }, [backend, selectedBackend]);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
-  const handleSubmit = () => {
-    if (name.trim()) {
-      onSubmit(name.trim(), role, backend, model || "");
-    }
-  };
-
-  const selectStyle: React.CSSProperties = {
-    background: "var(--bg)",
-    border: "1px solid var(--border)",
-    borderRadius: 3,
-    padding: "0.25rem 0.4rem",
-    fontSize: "0.75rem",
-    color: "var(--text)",
-    fontFamily: "inherit",
-    outline: "none",
-  };
-
-  return (
-    <div
-      style={{
-        padding: "0.5rem 0.6rem",
-        borderBottom: "1px solid var(--border)",
-        background: "rgba(255,255,255,0.015)",
-      }}
-    >
-      <div
-        style={{
-          fontSize: "0.75rem",
-          fontWeight: 600,
-          color: "var(--text-dim)",
-          marginBottom: "0.4rem",
-        }}
-      >
-        New Agent
-      </div>
-
-      <div style={{ display: "flex", gap: "0.35rem", marginBottom: "0.35rem" }}>
-        <input
-          ref={inputRef}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-          placeholder="Agent name..."
-          style={{
-            flex: 1,
-            background: "var(--bg)",
-            border: "1px solid var(--border)",
-            borderRadius: 3,
-            padding: "0.25rem 0.4rem",
-            fontSize: "0.75rem",
-            color: "var(--text)",
-            fontFamily: "inherit",
-            outline: "none",
-          }}
-        />
-        <select value={role} onChange={(e) => setRole(e.target.value)} style={selectStyle}>
-          <option value="general">General</option>
-          <option value="research">Research</option>
-          <option value="writer">Writer</option>
-          <option value="ops">Ops</option>
-        </select>
-      </div>
-
-      <div style={{ display: "flex", gap: "0.35rem", marginBottom: "0.35rem" }}>
-        <select value={backend} onChange={(e) => setBackend(e.target.value)} style={{ ...selectStyle, flex: 1 }}>
-          {backends.map((b) => (
-            <option key={b.id} value={b.id}>
-              {BACKEND_ICONS[b.id]} {b.label}
-            </option>
-          ))}
-        </select>
-        <select value={model} onChange={(e) => setModel(e.target.value)} style={{ ...selectStyle, flex: 1 }}>
-          {models.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div style={{ display: "flex", gap: "0.3rem" }}>
-        <button
-          onClick={handleSubmit}
-          disabled={!name.trim()}
-          style={{
-            background: name.trim() ? "var(--text)" : "var(--border)",
-            color: name.trim() ? "var(--bg)" : "var(--text-muted)",
-            border: "none",
-            borderRadius: 3,
-            padding: "0.2rem 0.5rem",
-            fontSize: "0.75rem",
-            fontWeight: 600,
-            cursor: name.trim() ? "pointer" : "default",
-            fontFamily: "inherit",
-          }}
-        >
-          Create
-        </button>
-        <button
-          onClick={onCancel}
-          style={{
-            background: "none",
-            border: "1px solid var(--border)",
-            borderRadius: 3,
-            padding: "0.2rem 0.5rem",
-            fontSize: "0.75rem",
-            color: "var(--text-muted)",
-            cursor: "pointer",
-            fontFamily: "inherit",
-          }}
-        >
-          Cancel
-        </button>
       </div>
     </div>
   );

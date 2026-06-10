@@ -48,7 +48,9 @@ let tray;
 const isMac = process.platform === "darwin";
 const isWin = process.platform === "win32";
 const isDev = process.env.NODE_ENV === "development";
-const PORT = isDev ? 3939 : 3000;
+// Dev uses the fixed `next dev` port; production picks a free port at
+// startup so we never collide with something already on 3000.
+let serverPort = isDev ? 3939 : null;
 const PROTOCOL = "cockpit";
 
 const APP_ROOT = app.isPackaged
@@ -198,20 +200,39 @@ function createTray() {
 }
 
 // ─── Next.js Server ────────────────────────────────────────────────
-function startNextServer() {
+function getFreePort() {
   return new Promise((resolve, reject) => {
-    // Spawn a detached Node process using Electron's bundled node.
-    // We use ELECTRON_RUN_AS_NODE=1 so `process.execPath` (the Electron
-    // binary) behaves as a plain Node interpreter, which avoids the asar
-    // symlink issue with `node_modules/.bin/next`.
-    const nextCli = path.join(APP_ROOT, "node_modules", "next", "dist", "bin", "next");
+    const srv = net.createServer();
+    srv.on("error", reject);
+    srv.listen(0, "127.0.0.1", () => {
+      const port = srv.address().port;
+      srv.close(() => resolve(port));
+    });
+  });
+}
 
-    nextServer = spawn(process.execPath, [nextCli, "start", "--port", String(PORT)], {
-      cwd: APP_ROOT,
+async function startNextServer() {
+  serverPort = await getFreePort();
+
+  return new Promise((resolve, reject) => {
+    // The app ships Next's standalone output (.next/standalone) — a
+    // self-contained server.js with its own traced node_modules. We run it
+    // with Electron's bundled Node via ELECTRON_RUN_AS_NODE=1, so no
+    // external node_modules (or symlinked .bin shims) are needed.
+    const serverJs = path.join(APP_ROOT, ".next", "standalone", "server.js");
+
+    if (!fs.existsSync(serverJs)) {
+      reject(new Error(`Server bundle missing at ${serverJs}`));
+      return;
+    }
+
+    nextServer = spawn(process.execPath, [serverJs], {
+      cwd: path.dirname(serverJs),
       env: {
         ...process.env,
         ELECTRON_RUN_AS_NODE: "1",
-        PORT: String(PORT),
+        PORT: String(serverPort),
+        HOSTNAME: "127.0.0.1",
         NODE_ENV: "production",
       },
       stdio: ["ignore", "pipe", "pipe"],
@@ -247,7 +268,7 @@ function startNextServer() {
       if (resolved) return;
       const sock = new net.Socket();
       sock
-        .connect(PORT, "127.0.0.1", () => {
+        .connect(serverPort, "127.0.0.1", () => {
           sock.destroy();
           if (!resolved) {
             resolved = true;
@@ -393,11 +414,11 @@ function createMainWindow() {
     mainWindow.maximize();
   }
 
-  mainWindow.loadURL(`http://localhost:${PORT}`);
+  mainWindow.loadURL(`http://localhost:${serverPort}`);
 
   // Open external links in default browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith("http") && !url.includes(`localhost:${PORT}`)) {
+    if (url.startsWith("http") && !url.includes(`localhost:${serverPort}`)) {
       shell.openExternal(url);
       return { action: "deny" };
     }
@@ -424,7 +445,7 @@ function createMainWindow() {
     console.error("[electron] renderer crashed:", details.reason);
     logCrash({ type: "renderProcessGone", reason: details.reason, exitCode: details.exitCode });
     if (!app.isQuitting) {
-      mainWindow.loadURL(`http://localhost:${PORT}`);
+      mainWindow.loadURL(`http://localhost:${serverPort}`);
     }
   });
 
@@ -540,12 +561,16 @@ if (process.defaultApp) {
 
 function handleDeepLink(url) {
   if (!url) return;
+  if (!serverPort) {
+    console.warn("[electron] deep link before server ready, ignoring:", url);
+    return;
+  }
   console.log("[electron] deep link:", url);
 
   try {
     const parsed = new URL(url);
     if (parsed.hostname === "oauth" && parsed.pathname.startsWith("/callback")) {
-      const forwardUrl = `http://localhost:${PORT}/api/datasources/callback${parsed.search}`;
+      const forwardUrl = `http://localhost:${serverPort}/api/datasources/callback${parsed.search}`;
 
       http.get(forwardUrl, (res) => {
         console.log("[electron] OAuth callback forwarded, status:", res.statusCode);
@@ -591,7 +616,7 @@ let dataInterval;
 
 function fetchJson(urlPath) {
   return new Promise((resolve, reject) => {
-    http.get(`http://localhost:${PORT}${urlPath}`, (res) => {
+    http.get(`http://localhost:${serverPort}${urlPath}`, (res) => {
       let body = "";
       res.on("data", (chunk) => (body += chunk));
       res.on("end", () => {

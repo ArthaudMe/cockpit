@@ -6,12 +6,8 @@ import { SKILLS } from "@/lib/skills-defs";
 import { RenderBlockRenderer } from "../renderers/RenderBlockRenderer";
 import { ActionCard } from "./ActionCard";
 import { SkillProposalCard } from "./SkillProposalCard";
-import { FileChip } from "./FileChip";
 import type { SubagentSuggestion, ActionBlock } from "@/lib/parser";
 import type { ContextFocus } from "../views/ContextualChatView";
-
-// Match file paths like src/lib/foo.ts, ./bar/baz.tsx, /abs/path.js, with optional :lineNumber
-const FILE_PATH_RE = /(?:^|\s)((?:\/|\.\/|\.\.\/|[a-zA-Z][\w-]*\/)[^\s:,;'")\]}>]+\.[a-zA-Z]{1,10}(?::(\d+))?)(?=[\s,;:'")\]}>]|$)/g;
 
 type Message = {
   role: "user" | "assistant";
@@ -116,33 +112,6 @@ function SimpleMarkdown({ content }: { content: string }) {
   return <>{elements}</>;
 }
 
-function extractFileRefs(text: string): { path: string; line?: number }[] {
-  const refs: { path: string; line?: number }[] = [];
-  const seen = new Set<string>();
-  let match;
-  const re = new RegExp(FILE_PATH_RE.source, "g");
-  while ((match = re.exec(text)) !== null) {
-    const raw = match[1].trim();
-    // Split off optional :lineNumber
-    const colonIdx = raw.lastIndexOf(":");
-    let filePath = raw;
-    let line: number | undefined;
-    if (colonIdx > 0) {
-      const afterColon = raw.slice(colonIdx + 1);
-      if (/^\d+$/.test(afterColon)) {
-        filePath = raw.slice(0, colonIdx);
-        line = parseInt(afterColon, 10);
-      }
-    }
-    const key = filePath + (line ? `:${line}` : "");
-    if (!seen.has(key)) {
-      seen.add(key);
-      refs.push({ path: filePath, line });
-    }
-  }
-  return refs;
-}
-
 async function executeActionRequest(action: ActionBlock) {
   const res = await fetch("/api/actions/execute", {
     method: "POST",
@@ -161,12 +130,10 @@ async function executeActionRequest(action: ActionBlock) {
 export const ChatMessage = memo(function ChatMessage({
   message,
   onApproveSubagent,
-  onOpenFile,
   onOpenFocus,
 }: {
   message: Message;
   onApproveSubagent?: (suggestion: SubagentSuggestion) => void;
-  onOpenFile?: (path: string) => void;
   onOpenFocus?: (focus: ContextFocus) => void;
 }) {
   if (message.role === "user") {
@@ -215,7 +182,6 @@ export const ChatMessage = memo(function ChatMessage({
   }
 
   const segments = parseResponse(message.content);
-  const fileRefs = onOpenFile ? extractFileRefs(message.content) : [];
 
   return (
     <div style={{ marginBottom: "0.5rem" }}>
@@ -351,26 +317,6 @@ export const ChatMessage = memo(function ChatMessage({
           );
         })}
 
-        {/* File reference chips */}
-        {fileRefs.length > 0 && onOpenFile && (
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "0.2rem",
-              marginTop: "0.3rem",
-            }}
-          >
-            {fileRefs.map((ref, i) => (
-              <FileChip
-                key={i}
-                path={ref.path}
-                line={ref.line}
-                onOpenFile={onOpenFile}
-              />
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );

@@ -247,6 +247,16 @@ export function listAgents(): AgentInfo[] {
   return Array.from(agents.values()).map((s) => s.info);
 }
 
+/**
+ * The agent used when no specific agent is addressed (e.g. focus-view
+ * chat). First created agent, or a fresh default if none exist yet.
+ */
+export function getDefaultAgent(): AgentInfo {
+  const first = agents.values().next();
+  if (!first.done) return first.value.info;
+  return createAgent("Pilot", "general");
+}
+
 export function getAgent(id: string): AgentInfo | null {
   return agents.get(id)?.info ?? null;
 }

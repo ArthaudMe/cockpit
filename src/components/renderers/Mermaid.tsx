@@ -19,7 +19,7 @@ export function RenderMermaid({
       <div
         style={{
           padding: "0.35rem 0.5rem",
-          fontSize: "0.6rem",
+          fontSize: "0.68rem",
           fontWeight: 600,
           color: "var(--text-dim)",
           textTransform: "uppercase",
@@ -31,7 +31,7 @@ export function RenderMermaid({
           gap: "0.35rem",
         }}
       >
-        <span style={{ fontSize: "0.55rem", opacity: 0.7 }}>◈</span>
+        <span style={{ fontSize: "0.65rem", opacity: 0.7 }}>◈</span>
         {title || "Diagram"}
       </div>
       <pre
@@ -39,7 +39,7 @@ export function RenderMermaid({
           margin: 0,
           padding: "0.6rem 0.75rem",
           background: "var(--surface)",
-          fontSize: "0.6rem",
+          fontSize: "0.68rem",
           fontFamily: "var(--font-mono, 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, monospace)",
           lineHeight: 1.6,
           color: "var(--text-dim)",

@@ -67,7 +67,7 @@ export function ActionCard({
       {/* Header */}
       <div
         style={{
-          fontSize: "0.5rem",
+          fontSize: "0.65rem",
           fontWeight: 600,
           color: "var(--text-muted)",
           textTransform: "uppercase",
@@ -94,7 +94,7 @@ export function ActionCard({
               style={{
                 display: "flex",
                 gap: "0.4rem",
-                fontSize: "0.6rem",
+                fontSize: "0.68rem",
                 lineHeight: 1.5,
               }}
             >
@@ -126,7 +126,7 @@ export function ActionCard({
       {result && (
         <div
           style={{
-            fontSize: "0.55rem",
+            fontSize: "0.65rem",
             padding: "0.35rem 0.5rem",
             borderRadius: 4,
             marginBottom: "0.4rem",
@@ -163,7 +163,7 @@ export function ActionCard({
               border: "none",
               borderRadius: 4,
               padding: "0.25rem 0.6rem",
-              fontSize: "0.5rem",
+              fontSize: "0.65rem",
               fontWeight: 600,
               cursor: "pointer",
               fontFamily: "inherit",
@@ -179,7 +179,7 @@ export function ActionCard({
               border: "1px solid var(--border)",
               borderRadius: 4,
               padding: "0.25rem 0.6rem",
-              fontSize: "0.5rem",
+              fontSize: "0.65rem",
               fontWeight: 600,
               cursor: "pointer",
               fontFamily: "inherit",
@@ -196,7 +196,7 @@ export function ActionCard({
             display: "flex",
             alignItems: "center",
             gap: "0.4rem",
-            fontSize: "0.55rem",
+            fontSize: "0.65rem",
             color: "var(--text-muted)",
           }}
         >

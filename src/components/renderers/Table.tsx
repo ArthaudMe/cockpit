@@ -24,7 +24,7 @@ export function RenderTable({
         <div
           style={{
             padding: "0.35rem 0.5rem",
-            fontSize: "0.6rem",
+            fontSize: "0.68rem",
             fontWeight: 600,
             color: "var(--text-dim)",
             textTransform: "uppercase",
@@ -37,7 +37,7 @@ export function RenderTable({
         </div>
       )}
       <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.6rem" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.68rem" }}>
           <thead>
             <tr style={{ background: "var(--surface)" }}>
               {columns.map((col, i) => (
