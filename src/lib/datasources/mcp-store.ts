@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { readJsonCached, invalidateFileCache } from "../fs-cache";
 
 const STORE_DIR = path.join(os.homedir(), ".cockpit");
 const STORE_PATH = path.join(STORE_DIR, "mcp-servers.json");
@@ -26,14 +27,9 @@ function ensureDir() {
   }
 }
 
+// Read on every datasource poll — cached by mtime instead of re-parsed.
 function read(): McpServerConfig[] {
-  try {
-    if (!fs.existsSync(STORE_PATH)) return [];
-    const raw = fs.readFileSync(STORE_PATH, "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return [];
-  }
+  return readJsonCached<McpServerConfig[]>(STORE_PATH, []);
 }
 
 function write(configs: McpServerConfig[]) {
@@ -41,6 +37,7 @@ function write(configs: McpServerConfig[]) {
   fs.writeFileSync(STORE_PATH, JSON.stringify(configs, null, 2), {
     mode: 0o600,
   });
+  invalidateFileCache(STORE_PATH);
 }
 
 export function getMcpServers(): McpServerConfig[] {

@@ -145,48 +145,54 @@ export async function fetchSlackMessages(): Promise<SlackMessage[]> {
     const channels = (channelsData.channels || []).filter(
       (c: any) => c.is_member
     );
-    const messages: SlackMessage[] = [];
     const oneDayAgo = Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000);
 
-    // Fetch recent messages from top channels
-    for (const channel of channels.slice(0, 8)) {
-      try {
-        const histRes = await fetch(
-          `https://slack.com/api/conversations.history?channel=${channel.id}&limit=5&oldest=${oneDayAgo}`,
-          { headers: { Authorization: `Bearer ${tokens.access_token}` } }
-        );
-        const histData = await histRes.json();
-        if (!histData.ok) continue;
-
-        for (const msg of (histData.messages || []).slice(0, 3)) {
-          if (msg.subtype) continue; // Skip bot/system messages
-
-          const author = await resolveUserName(
-            msg.user || "unknown",
-            tokens.access_token
+    // Fetch recent messages from top channels — in parallel
+    const histories = await Promise.all(
+      channels.slice(0, 8).map(async (channel: any) => {
+        try {
+          const histRes = await fetch(
+            `https://slack.com/api/conversations.history?channel=${channel.id}&limit=5&oldest=${oneDayAgo}`,
+            { headers: { Authorization: `Bearer ${tokens.access_token}` } }
           );
-          const ts = Number(msg.ts) * 1000;
-          const diffH = Math.round((Date.now() - ts) / 3_600_000);
-          const time =
-            diffH < 1
-              ? "just now"
-              : diffH < 24
-                ? `${diffH}h ago`
-                : `${Math.round(diffH / 24)}d ago`;
-
-          messages.push({
-            channel: `#${channel.name}`,
-            message: (msg.text || "").slice(0, 200),
-            author,
-            time,
-          });
+          const histData = await histRes.json();
+          if (!histData.ok) return [];
+          return (histData.messages || [])
+            .slice(0, 3)
+            .filter((msg: any) => !msg.subtype) // Skip bot/system messages
+            .map((msg: any) => ({ channel, msg }));
+        } catch {
+          return [];
         }
-      } catch {
-        continue;
-      }
-    }
+      })
+    );
+    const rawMessages = histories.flat();
 
-    // Sort by most recent
+    // Resolve all distinct author names in parallel (cache-backed)
+    const userIds = [...new Set<string>(rawMessages.map(({ msg }: any) => msg.user || "unknown"))];
+    const names = await Promise.all(
+      userIds.map((id) => resolveUserName(id, tokens.access_token))
+    );
+    const nameById = new Map(userIds.map((id, i) => [id, names[i]]));
+
+    const messages: SlackMessage[] = rawMessages.map(({ channel, msg }: any) => {
+      const ts = Number(msg.ts) * 1000;
+      const diffH = Math.round((Date.now() - ts) / 3_600_000);
+      const time =
+        diffH < 1
+          ? "just now"
+          : diffH < 24
+            ? `${diffH}h ago`
+            : `${Math.round(diffH / 24)}d ago`;
+
+      return {
+        channel: `#${channel.name}`,
+        message: (msg.text || "").slice(0, 200),
+        author: nameById.get(msg.user || "unknown") || msg.user || "unknown",
+        time,
+      };
+    });
+
     return messages.slice(0, 15);
   } catch {
     return [];

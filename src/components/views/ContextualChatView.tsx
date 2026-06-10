@@ -26,7 +26,7 @@ function ToolResult({ focus }: { focus: ContextFocus }) {
         <span style={{ color: "var(--blue)", fontSize: "0.65rem", fontWeight: 600 }}>
           ⎔ context_loaded
         </span>
-        <span style={{ fontSize: "0.6rem", color: "var(--text-muted)" }}>
+        <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
           {focus.source.toLowerCase()}
         </span>
       </div>
@@ -189,7 +189,7 @@ export function ContextualChatView({
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-          <span style={{ fontSize: "0.6rem", color: "var(--text-muted)", fontFamily: "inherit" }}>
+          <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "inherit" }}>
             {claudeConnected ? "claude-code" : "disconnected"}
           </span>
           <span

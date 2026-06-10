@@ -21,7 +21,7 @@ export function RenderCardGrid({
       {title && (
         <div
           style={{
-            fontSize: "0.6rem",
+            fontSize: "0.68rem",
             fontWeight: 600,
             color: "var(--text-dim)",
             textTransform: "uppercase",
@@ -58,7 +58,7 @@ export function RenderCardGrid({
               )}
             </div>
             {card.subtitle && (
-              <div style={{ fontSize: "0.55rem", color: "var(--text-muted)", marginTop: "0.15rem" }}>
+              <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: "0.15rem" }}>
                 {card.subtitle}
               </div>
             )}
@@ -67,7 +67,7 @@ export function RenderCardGrid({
                 {card.items.map((item, j) => (
                   <div
                     key={j}
-                    style={{ fontSize: "0.55rem", color: "var(--text-dim)", display: "flex", gap: "0.25rem" }}
+                    style={{ fontSize: "0.65rem", color: "var(--text-dim)", display: "flex", gap: "0.25rem" }}
                   >
                     <span style={{ color: "var(--accent)" }}>-</span>
                     {item}

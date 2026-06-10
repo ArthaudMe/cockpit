@@ -155,10 +155,19 @@ export async function exchangeCode(
   }
 }
 
-// In-memory cache to avoid redundant API calls from concurrent consumers
+// In-memory cache to avoid redundant API calls from concurrent consumers.
+// TTL sits just under the renderer's 60s poll so each poll refreshes once
+// and everything else (background tick, chat prompts, project inference)
+// rides on that result instead of re-hitting every connector API.
 let _cachedData: DatasourceData | null = null;
 let _cacheTime = 0;
-const DATA_CACHE_TTL = 30_000; // 30s — stale data is fine for background tick
+let _inFlight: Promise<DatasourceData> | null = null;
+const DATA_CACHE_TTL = 55_000;
+
+/** Latest cached snapshot without triggering a fetch (may be null early on). */
+export function getCachedData(): DatasourceData | null {
+  return _cachedData;
+}
 
 export async function fetchAllData(): Promise<DatasourceData> {
   // Return cached data if fresh enough
@@ -166,6 +175,15 @@ export async function fetchAllData(): Promise<DatasourceData> {
     return _cachedData;
   }
 
+  // Single-flight: concurrent callers share one fetch
+  if (_inFlight) return _inFlight;
+  _inFlight = doFetchAllData().finally(() => {
+    _inFlight = null;
+  });
+  return _inFlight;
+}
+
+async function doFetchAllData(): Promise<DatasourceData> {
   const connected = getConnectedServices();
   const granolaAvailable = isGranolaAvailable();
 

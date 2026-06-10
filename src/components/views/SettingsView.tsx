@@ -105,6 +105,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
   const [testingMcp, setTestingMcp] = useState<string | null>(null);
   const [mcpTestResult, setMcpTestResult] = useState<{ id: string; success: boolean; message: string } | null>(null);
   const [analyticsOn, setAnalyticsOn] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     setAnalyticsOn(isAnalyticsEnabled());
@@ -609,6 +610,112 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
           })}
         </div>
 
+        {/* ── AI Engines ── */}
+        <div style={{ ...sectionTitle, marginTop: "1.25rem" }}>AI Engines</div>
+        <div style={{ display: "flex", gap: "0.4rem", marginBottom: "0.75rem" }}>
+          {backends.map((b) => (
+            <div
+              key={b.id}
+              style={{
+                ...card,
+                flex: 1,
+                marginBottom: 0,
+                opacity: b.installed ? 1 : 0.5,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginBottom: "0.25rem" }}>
+                <span style={{ fontSize: "0.8rem" }}>{BACKEND_ICONS[b.id] || "?"}</span>
+                <span style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)" }}>
+                  {b.label}
+                </span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
+                <span
+                  className="dot"
+                  style={{
+                    background: b.installed ? "var(--green)" : "var(--red)",
+                    width: 5,
+                    height: 5,
+                  }}
+                />
+                <span style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>
+                  {b.installed ? b.version || "Ready" : "Not installed"}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Analytics ── */}
+        <div style={{ ...sectionTitle, marginTop: "1.25rem" }}>Analytics</div>
+        <div style={card}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)" }}>
+                Usage analytics
+              </div>
+              <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: "0.15rem", lineHeight: 1.4 }}>
+                Help improve Cockpit by sharing anonymous usage data (features used, session count). No personal data or chat content is ever sent.
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                const next = !analyticsOn;
+                setAnalyticsOn(next);
+                setAnalyticsEnabled(next);
+              }}
+              style={{
+                background: analyticsOn ? "var(--accent)" : "var(--border)",
+                border: "none",
+                borderRadius: 8,
+                width: 28,
+                height: 16,
+                position: "relative",
+                cursor: "pointer",
+                flexShrink: 0,
+                transition: "background 0.15s",
+                marginLeft: "0.75rem",
+              }}
+            >
+              <span style={{ position: "absolute", top: 2, left: analyticsOn ? 14 : 2, width: 12, height: 12, borderRadius: "50%", background: "var(--bg)", transition: "left 0.15s" }} />
+            </button>
+          </div>
+        </div>
+
+        {/* ── Advanced ── */}
+        <button
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          style={{
+            ...sectionTitle,
+            marginTop: "1.5rem",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            fontFamily: "inherit",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.4rem",
+            padding: 0,
+          }}
+        >
+          <span
+            style={{
+              display: "inline-block",
+              transform: showAdvanced ? "rotate(90deg)" : "none",
+              transition: "transform 0.15s",
+              fontSize: "0.68rem",
+            }}
+          >
+            ▶
+          </span>
+          Advanced
+          <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
+            — MCP servers, skills, agent management
+          </span>
+        </button>
+
+        {showAdvanced && (
+          <>
         {/* ── MCP Servers ── */}
         <div style={{ ...sectionTitle, marginTop: "1.25rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <span>MCP Servers</span>
@@ -853,42 +960,6 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
           </div>
         )}
 
-        {/* ── AI Engines ── */}
-        <div style={{ ...sectionTitle, marginTop: "1.25rem" }}>AI Engines</div>
-        <div style={{ display: "flex", gap: "0.4rem", marginBottom: "0.75rem" }}>
-          {backends.map((b) => (
-            <div
-              key={b.id}
-              style={{
-                ...card,
-                flex: 1,
-                marginBottom: 0,
-                opacity: b.installed ? 1 : 0.5,
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginBottom: "0.25rem" }}>
-                <span style={{ fontSize: "0.8rem" }}>{BACKEND_ICONS[b.id] || "?"}</span>
-                <span style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)" }}>
-                  {b.label}
-                </span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
-                <span
-                  className="dot"
-                  style={{
-                    background: b.installed ? "var(--green)" : "var(--red)",
-                    width: 5,
-                    height: 5,
-                  }}
-                />
-                <span style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>
-                  {b.installed ? b.version || "Ready" : "Not installed"}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-
         {/* ── Agents ── */}
         <div style={{ ...sectionTitle, marginTop: "1.25rem" }}>Agents</div>
         {agents.map((agent) => {
@@ -1029,41 +1100,8 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
           );
         })}
 
-        {/* ── Analytics ── */}
-        <div style={{ ...sectionTitle, marginTop: "1.25rem" }}>Analytics</div>
-        <div style={card}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div>
-              <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)" }}>
-                Usage analytics
-              </div>
-              <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: "0.15rem", lineHeight: 1.4 }}>
-                Help improve Cockpit by sharing anonymous usage data (features used, session count). No personal data or chat content is ever sent.
-              </div>
-            </div>
-            <button
-              onClick={() => {
-                const next = !analyticsOn;
-                setAnalyticsOn(next);
-                setAnalyticsEnabled(next);
-              }}
-              style={{
-                background: analyticsOn ? "var(--accent)" : "var(--border)",
-                border: "none",
-                borderRadius: 8,
-                width: 28,
-                height: 16,
-                position: "relative",
-                cursor: "pointer",
-                flexShrink: 0,
-                transition: "background 0.15s",
-                marginLeft: "0.75rem",
-              }}
-            >
-              <span style={{ position: "absolute", top: 2, left: analyticsOn ? 14 : 2, width: 12, height: 12, borderRadius: "50%", background: "var(--bg)", transition: "left 0.15s" }} />
-            </button>
-          </div>
-        </div>
+          </>
+        )}
 
         {/* Bottom spacer */}
         <div style={{ height: "2rem" }} />

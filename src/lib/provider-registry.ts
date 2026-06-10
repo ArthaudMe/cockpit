@@ -105,48 +105,6 @@ export const PROVIDERS: Record<string, ProviderDef> = {
     supportsHooks: false,
   },
 
-  gemini: {
-    id: "gemini",
-    label: "Gemini",
-    icon: "◈",
-    binary: "gemini",
-    versionArgs: ["--version"],
-    installHint: "npm install -g @anthropic-ai/gemini-cli",
-    models: [
-      { id: "gemini-2.5-pro", label: "2.5 Pro" },
-      { id: "gemini-2.5-flash", label: "2.5 Flash" },
-    ],
-    defaultModel: "gemini-2.5-pro",
-    buildArgs: (model, systemPrompt) => [
-      "--model", model,
-      "--system-instruction", systemPrompt,
-    ],
-    supportsPrewarm: false,
-    supportsHooks: false,
-  },
-
-  aider: {
-    id: "aider",
-    label: "Aider",
-    icon: "▸",
-    binary: "aider",
-    versionArgs: ["--version"],
-    installHint: "pip install aider-chat",
-    models: [
-      { id: "sonnet", label: "Sonnet" },
-      { id: "opus", label: "Opus" },
-      { id: "gpt-4o", label: "GPT-4o" },
-    ],
-    defaultModel: "sonnet",
-    buildArgs: (model, _systemPrompt) => [
-      "--model", model,
-      "--no-auto-commits",
-      "--yes",
-      "--message",
-    ],
-    supportsPrewarm: false,
-    supportsHooks: false,
-  },
 };
 
 export function getProvider(id: string): ProviderDef | undefined {

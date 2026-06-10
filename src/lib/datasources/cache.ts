@@ -17,12 +17,23 @@ function ensureCacheDir() {
   }
 }
 
-/** Write a successful datasource response to disk cache */
+// The offline-fallback cache doesn't need to track every poll — throttle
+// writes so the polled data route isn't doing disk I/O every 60s.
+let _lastWrite = 0;
+const WRITE_THROTTLE_MS = 5 * 60 * 1000;
+
+/** Write a successful datasource response to disk cache (throttled, async) */
 export function writeDatasourceCache(data: DatasourceData): void {
+  const now = Date.now();
+  if (now - _lastWrite < WRITE_THROTTLE_MS) return;
+  _lastWrite = now;
+
   try {
     ensureCacheDir();
-    const payload: CachedPayload = { data, cachedAt: Date.now() };
-    fs.writeFileSync(CACHE_PATH, JSON.stringify(payload), { mode: 0o600 });
+    const payload: CachedPayload = { data, cachedAt: now };
+    fs.promises
+      .writeFile(CACHE_PATH, JSON.stringify(payload), { mode: 0o600 })
+      .catch((err) => console.error("[cache] Failed to write datasource cache:", err));
   } catch (err) {
     console.error("[cache] Failed to write datasource cache:", err);
   }

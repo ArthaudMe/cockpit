@@ -48,7 +48,7 @@ function SourceBadge({ source }: { source: SearchSource }) {
         display: "inline-block",
         padding: "1px 5px",
         borderRadius: 3,
-        fontSize: "0.55rem",
+        fontSize: "0.65rem",
         fontWeight: 700,
         color: "#ffffff",
         background: badge.bg,
@@ -70,7 +70,7 @@ function LiveBadge() {
         display: "inline-block",
         padding: "1px 4px",
         borderRadius: 3,
-        fontSize: "0.5rem",
+        fontSize: "0.65rem",
         fontWeight: 600,
         color: "#a3e635",
         background: "rgba(163,230,53,0.12)",
@@ -374,7 +374,7 @@ export function CommandPalette({
               <div style={{ marginBottom: "0.4rem" }}>
                 Type to search across Calendar, Email, Slack, Linear, GitHub, Notion, and Granola
               </div>
-              <div style={{ fontSize: "0.6rem", color: "var(--text-dim)" }}>
+              <div style={{ fontSize: "0.68rem", color: "var(--text-dim)" }}>
                 Tip: use <span style={{ color: "var(--blue)" }}>in:slack</span>,{" "}
                 <span style={{ color: "var(--blue)" }}>in:linear</span>,{" "}
                 <span style={{ color: "var(--blue)" }}>in:github</span> to filter by source
@@ -394,7 +394,7 @@ export function CommandPalette({
             >
               <div>No results found</div>
               {!data.calendar?.length && !data.linearIssues?.length && !data.githubPRs?.length && !data.slackMessages?.length && !data.notionPages?.length && !data.granolaMeetings?.length && (
-                <div style={{ marginTop: "0.4rem", fontSize: "0.6rem", color: "var(--text-dim)" }}>
+                <div style={{ marginTop: "0.4rem", fontSize: "0.68rem", color: "var(--text-dim)" }}>
                   No datasources connected yet. Go to Settings to connect Slack, Linear, GitHub, and more.
                 </div>
               )}
@@ -416,7 +416,7 @@ export function CommandPalette({
                 <SourceBadge source={group.source} />
                 <span
                   style={{
-                    fontSize: "0.55rem",
+                    fontSize: "0.65rem",
                     color: "var(--text-dim)",
                   }}
                 >
@@ -528,7 +528,7 @@ export function CommandPalette({
               borderTop: "1px solid var(--border)",
               display: "flex",
               gap: "0.8rem",
-              fontSize: "0.55rem",
+              fontSize: "0.65rem",
               color: "var(--text-muted)",
             }}
           >
