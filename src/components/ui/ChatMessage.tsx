@@ -15,6 +15,16 @@ type Message = {
   images?: string[];
 };
 
+// Assistant output is untrusted. Only allow safe link schemes so a response
+// can't render e.g. a javascript: href (script execution inside Electron).
+function safeHref(url: string): string {
+  const trimmed = url.trim();
+  if (/^(https?:|mailto:)/i.test(trimmed)) return trimmed;
+  if (/^[/#]/.test(trimmed)) return trimmed; // relative path or anchor
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return trimmed; // no scheme → relative
+  return "#";
+}
+
 function SimpleMarkdown({ content }: { content: string }) {
   const lines = content.split("\n");
   const elements: React.ReactNode[] = [];
@@ -45,7 +55,13 @@ function SimpleMarkdown({ content }: { content: string }) {
         const linkMatch = m.match(/\[([^\]]+)\]\(([^)]+)\)/);
         if (linkMatch) {
           parts.push(
-            <a key={match.index} href={linkMatch[2]} style={{ color: "var(--accent)" }}>
+            <a
+              key={match.index}
+              href={safeHref(linkMatch[2])}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: "var(--accent)" }}
+            >
               {linkMatch[1]}
             </a>
           );

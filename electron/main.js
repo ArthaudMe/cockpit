@@ -437,13 +437,23 @@ function createMainWindow() {
 
   mainWindow.loadURL(`http://localhost:${serverPort}`);
 
-  // Open external links in default browser
+  // Open external links (window.open / target=_blank) in the default browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith("http") && !url.includes(`localhost:${serverPort}`)) {
       shell.openExternal(url);
       return { action: "deny" };
     }
     return { action: "allow" };
+  });
+
+  // Block in-window navigation away from the local app. A clicked link (or a
+  // malicious assistant-rendered href) must not replace the app with an
+  // external site — send it to the default browser instead.
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (!url.startsWith(`http://localhost:${serverPort}`)) {
+      event.preventDefault();
+      if (/^https?:/i.test(url)) shell.openExternal(url);
+    }
   });
 
   // Save window state on resize/move (debounced)
