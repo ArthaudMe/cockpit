@@ -70,7 +70,7 @@ export function SkillProposalCard({
           {proposal.slash && (
             <span
               style={{
-                fontSize: "0.55rem",
+                fontSize: "0.65rem",
                 color: "rgba(139, 92, 246, 0.8)",
                 fontWeight: 600,
               }}
@@ -107,7 +107,7 @@ export function SkillProposalCard({
           </summary>
           <pre
             style={{
-              fontSize: "0.55rem",
+              fontSize: "0.65rem",
               color: "var(--text-muted)",
               background: "rgba(0,0,0,0.2)",
               padding: "0.4rem",

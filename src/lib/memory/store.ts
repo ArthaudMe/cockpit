@@ -51,10 +51,6 @@ export class MemoryStore {
   private memory: string[] = [];
   private user: string[] = [];
 
-  /** Frozen snapshot captured at load time — injected into system prompt */
-  private frozenMemory: string[] = [];
-  private frozenUser: string[] = [];
-
   constructor() {
     this.loadFromDisk();
   }
@@ -91,10 +87,6 @@ export class MemoryStore {
         }
       }
     }
-
-    // Freeze snapshot for system prompt injection
-    this.frozenMemory = [...this.memory];
-    this.frozenUser = [...this.user];
   }
 
   /** Atomic write: write to temp, rename into place */
@@ -191,15 +183,15 @@ export class MemoryStore {
     return [...this[target]];
   }
 
-  /** Returns the frozen snapshot for system prompt injection */
+  /** Current entries formatted for system prompt injection */
   formatForSystemPrompt(): string {
     const memBlock =
-      this.frozenMemory.length > 0
-        ? this.frozenMemory.map((e) => `${DELIMITER} ${e}`).join("\n")
+      this.memory.length > 0
+        ? this.memory.map((e) => `${DELIMITER} ${e}`).join("\n")
         : "(empty)";
     const userBlock =
-      this.frozenUser.length > 0
-        ? this.frozenUser.map((e) => `${DELIMITER} ${e}`).join("\n")
+      this.user.length > 0
+        ? this.user.map((e) => `${DELIMITER} ${e}`).join("\n")
         : "(empty)";
 
     return `## Your Memory

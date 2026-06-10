@@ -2,12 +2,11 @@ import { describe, it, expect } from "vitest";
 import { PROVIDERS, getProviderDefs, listProviders } from "../provider-registry";
 
 describe("provider-registry", () => {
-  it("has all expected providers", () => {
+  it("has exactly the supported providers", () => {
     expect(PROVIDERS.claude).toBeDefined();
     expect(PROVIDERS.codex).toBeDefined();
     expect(PROVIDERS.ollama).toBeDefined();
-    expect(PROVIDERS.gemini).toBeDefined();
-    expect(PROVIDERS.aider).toBeDefined();
+    expect(Object.keys(PROVIDERS)).toHaveLength(3);
   });
 
   it("each provider has required fields", () => {

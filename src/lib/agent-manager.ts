@@ -1,5 +1,7 @@
 import { spawn, type ChildProcess } from "child_process";
 import { buildSystemPrompt } from "./context";
+import { getCachedData } from "./datasources/manager";
+import { buildPromptPrelude } from "./prompt-prelude";
 import { randomBytes } from "crypto";
 import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync } from "fs";
 import { join } from "path";
@@ -62,7 +64,11 @@ function loadPersistedAgents(): PersistedAgent[] {
   }
 }
 
+// Suppresses redundant per-agent writes while restoring from disk
+let restoring = false;
+
 function savePersistedAgents() {
+  if (restoring) return;
   const persisted: PersistedAgent[] = Array.from(agents.values()).map((s) => ({
     id: s.info.id,
     name: s.info.name,
@@ -91,7 +97,9 @@ const ROLE_PROMPTS: Record<AgentRole, string> = {
 };
 
 function getBaseContext() {
-  return buildSystemPrompt();
+  // Use the latest datasource snapshot if one is cached (no fetch here —
+  // warmAgent must stay synchronous). The 60s data poll keeps it warm.
+  return buildSystemPrompt(getCachedData() ?? undefined);
 }
 
 interface AgentStateExt extends AgentState {
@@ -141,13 +149,18 @@ function spawnForBackend(
 }
 
 function warmAgent(state: AgentStateExt) {
-  const { backend, model, systemPrompt } = state.info;
+  const { backend, model } = state.info;
   const def = getProviderOrThrow(backend);
 
   if (state.warmProc) {
     state.warmProc.kill();
     state.warmProc = null;
   }
+
+  // Rebuild the prompt on every (re)warm so memory updates, new skills and
+  // fresh datasource context reach the agent without an app restart.
+  state.info.systemPrompt = buildAgentSystemPrompt(state.info.role, state.customPrompt);
+  const systemPrompt = state.info.systemPrompt;
 
   if (def.supportsPrewarm) {
     // Set up hooks for Claude
@@ -190,7 +203,8 @@ export function createAgent(
   customPrompt?: string | null,
   backend: AgentBackend = "claude",
   model?: string,
-  id?: string
+  id?: string,
+  opts?: { prewarm?: boolean }
 ): AgentInfo {
   const agentId = id || genId();
   const def = getProviderOrThrow(backend);
@@ -218,11 +232,11 @@ export function createAgent(
     }
   });
 
-  const proc = warmAgent(state);
-  if (proc) {
+  const proc = opts?.prewarm === false ? null : warmAgent(state);
+  if (proc?.pid) {
     console.log("[agent-manager] created agent %s (%s) backend=%s model=%s pid=%d", name, agentId, backend, resolvedModel, proc.pid);
   } else {
-    console.log("[agent-manager] created agent %s (%s) backend=%s model=%s (no prewarm)", name, agentId, backend, resolvedModel);
+    console.log("[agent-manager] created agent %s (%s) backend=%s model=%s (not prewarmed)", name, agentId, backend, resolvedModel);
   }
 
   savePersistedAgents();
@@ -231,6 +245,16 @@ export function createAgent(
 
 export function listAgents(): AgentInfo[] {
   return Array.from(agents.values()).map((s) => s.info);
+}
+
+/**
+ * The agent used when no specific agent is addressed (e.g. focus-view
+ * chat). First created agent, or a fresh default if none exist yet.
+ */
+export function getDefaultAgent(): AgentInfo {
+  const first = agents.values().next();
+  if (!first.done) return first.value.info;
+  return createAgent("Pilot", "general");
 }
 
 export function getAgent(id: string): AgentInfo | null {
@@ -375,10 +399,9 @@ export function sendToAgent(
   state.activeRequests = (state.activeRequests || 0) + 1;
   state.info.busy = true;
 
-  let prompt = message;
-  if (focusContext) {
-    prompt = `[Context:\n${focusContext}]\n\n${message}`;
-  }
+  // One-shot CLI calls have no session memory — carry recent turns and
+  // relevant history along with the message.
+  let prompt = buildPromptPrelude({ message, focusContext, agentId: id });
   if (hasImages && backend !== "claude") {
     prompt = `[${images!.length} image(s) attached]\n\n${prompt}`;
   }
@@ -404,27 +427,33 @@ export function sendToAgent(
 
 // ─── Boot ───────────────────────────────────────────────────────────
 
+// Restore agents from disk. Only the first agent is pre-warmed: warming
+// every restored agent would spawn N idle CLI processes at boot; the others
+// warm up after their first message.
+function restoreAgents() {
+  const saved = loadPersistedAgents();
+  if (saved.length === 0) {
+    createAgent("Pilot", "general");
+    return;
+  }
+
+  restoring = true;
+  try {
+    saved.forEach((a, i) => {
+      createAgent(a.name, a.role, a.customPrompt, a.backend, a.model, a.id, {
+        prewarm: i === 0,
+      });
+    });
+  } finally {
+    restoring = false;
+  }
+  console.log("[agent-manager] restored %d agents from disk", saved.length);
+}
+
 // Start the event server, then restore agents
 startEventServer()
-  .then(() => {
-    const saved = loadPersistedAgents();
-    if (saved.length > 0) {
-      for (const a of saved) {
-        createAgent(a.name, a.role, a.customPrompt, a.backend, a.model, a.id);
-      }
-      console.log("[agent-manager] restored %d agents from disk", saved.length);
-    } else {
-      createAgent("Pilot", "general");
-    }
-  })
+  .then(restoreAgents)
   .catch((err) => {
     console.error("[agent-manager] event server failed, booting without hooks:", err);
-    const saved = loadPersistedAgents();
-    if (saved.length > 0) {
-      for (const a of saved) {
-        createAgent(a.name, a.role, a.customPrompt, a.backend, a.model, a.id);
-      }
-    } else {
-      createAgent("Pilot", "general");
-    }
+    restoreAgents();
   });

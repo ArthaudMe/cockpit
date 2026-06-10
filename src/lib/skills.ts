@@ -1,8 +1,9 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
+import { writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { SKILLS, type SkillId, type SkillDef } from "./skills-defs";
 import { loadCustomSkills } from "./skills-custom";
+import { readJsonCached, invalidateFileCache } from "./fs-cache";
 
 export type { SkillId, SkillCategory, SkillDef } from "./skills-defs";
 export { SKILLS } from "./skills-defs";
@@ -15,20 +16,15 @@ const SKILLS_FILE = join(COCKPIT_DIR, "skills.json");
 const DEFAULT_ENABLED: SkillId[] = SKILLS.map((s) => s.id);
 
 export function loadEnabledSkills(): SkillId[] {
-  try {
-    if (!existsSync(SKILLS_FILE)) return DEFAULT_ENABLED;
-    const raw = readFileSync(SKILLS_FILE, "utf-8");
-    const data = JSON.parse(raw);
-    return data.enabled || DEFAULT_ENABLED;
-  } catch {
-    return DEFAULT_ENABLED;
-  }
+  const data = readJsonCached<{ enabled?: SkillId[] } | null>(SKILLS_FILE, null);
+  return data?.enabled || DEFAULT_ENABLED;
 }
 
 export function saveEnabledSkills(enabled: SkillId[]) {
   try {
     mkdirSync(COCKPIT_DIR, { recursive: true });
     writeFileSync(SKILLS_FILE, JSON.stringify({ enabled }, null, 2));
+    invalidateFileCache(SKILLS_FILE);
   } catch (err) {
     console.error("[skills] failed to save:", err);
   }

@@ -77,7 +77,7 @@ export class ErrorBoundary extends Component<Props, State> {
           {this.state.error && (
             <pre
               style={{
-                fontSize: "0.6rem",
+                fontSize: "0.68rem",
                 color: "#666",
                 background: "#111",
                 border: "1px solid #222",

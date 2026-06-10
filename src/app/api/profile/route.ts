@@ -2,37 +2,25 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { invalidateFileCache } from "@/lib/fs-cache";
+import { loadProfile } from "@/lib/context";
 
 const PROFILE_PATH = path.join(os.homedir(), ".cockpit", "profile.json");
 
-type Profile = {
-  name: string;
-  role: string;
-  company: string;
-};
-
-function readProfile(): Profile {
-  try {
-    const data = fs.readFileSync(PROFILE_PATH, "utf-8");
-    return JSON.parse(data);
-  } catch {
-    return { name: "", role: "", company: "" };
-  }
-}
-
-function writeProfile(profile: Profile) {
+function writeProfile(profile: ReturnType<typeof loadProfile>) {
   const dir = path.dirname(PROFILE_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(PROFILE_PATH, JSON.stringify(profile, null, 2));
+  invalidateFileCache(PROFILE_PATH);
 }
 
 export async function GET() {
-  return NextResponse.json(readProfile());
+  return NextResponse.json(loadProfile());
 }
 
 export async function PATCH(req: NextRequest) {
   const body = await req.json();
-  const current = readProfile();
+  const current = loadProfile();
   const updated = { ...current, ...body };
   writeProfile(updated);
   return NextResponse.json(updated);
