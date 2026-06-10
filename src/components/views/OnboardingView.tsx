@@ -383,7 +383,7 @@ function DatasourceCard({
 function WelcomeScreen({ onContinue }: { onContinue: () => void }) {
   return (
     <div style={fullscreen}>
-      <div style={{ maxWidth: 400, width: "100%", textAlign: "center" }}>
+      <div style={{ maxWidth: 640, width: "100%", textAlign: "center" }}>
         <div
           style={{
             width: 48,
@@ -439,6 +439,26 @@ function WelcomeScreen({ onContinue }: { onContinue: () => void }) {
           }}
         >
           We&apos;ll detect what&apos;s installed
+        </div>
+
+        {/* App screenshot */}
+        <div
+          style={{
+            marginTop: "2.5rem",
+            borderRadius: 8,
+            overflow: "hidden",
+            border: "1px solid var(--border)",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+          }}
+        >
+          <img
+            src="/cockpit-screenshot.png"
+            alt="Cockpit dashboard"
+            style={{
+              width: "100%",
+              display: "block",
+            }}
+          />
         </div>
       </div>
     </div>
