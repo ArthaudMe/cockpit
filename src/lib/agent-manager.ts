@@ -233,10 +233,10 @@ export function createAgent(
   });
 
   const proc = opts?.prewarm === false ? null : warmAgent(state);
-  if (proc) {
+  if (proc?.pid) {
     console.log("[agent-manager] created agent %s (%s) backend=%s model=%s pid=%d", name, agentId, backend, resolvedModel, proc.pid);
   } else {
-    console.log("[agent-manager] created agent %s (%s) backend=%s model=%s (no prewarm)", name, agentId, backend, resolvedModel);
+    console.log("[agent-manager] created agent %s (%s) backend=%s model=%s (not prewarmed)", name, agentId, backend, resolvedModel);
   }
 
   savePersistedAgents();
