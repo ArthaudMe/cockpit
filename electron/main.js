@@ -200,11 +200,25 @@ function createTray() {
 }
 
 // ─── Next.js Server ────────────────────────────────────────────────
-function getFreePort() {
+// OAuth redirect URIs are pre-registered with providers as
+// http://localhost:3939/api/datasources/callback (exact match, port
+// included) — so production prefers the same port as dev. If it's taken
+// we fall back to a dynamic port: everything still works except adding
+// NEW OAuth connections (existing tokens refresh fine).
+const PREFERRED_PORT = 3939;
+
+function getFreePort(preferred) {
   return new Promise((resolve, reject) => {
     const srv = net.createServer();
-    srv.on("error", reject);
-    srv.listen(0, "127.0.0.1", () => {
+    srv.on("error", (err) => {
+      if (preferred) {
+        // Preferred port busy — retry with an OS-assigned one
+        getFreePort().then(resolve, reject);
+      } else {
+        reject(err);
+      }
+    });
+    srv.listen(preferred || 0, "127.0.0.1", () => {
       const port = srv.address().port;
       srv.close(() => resolve(port));
     });
@@ -212,7 +226,14 @@ function getFreePort() {
 }
 
 async function startNextServer() {
-  serverPort = await getFreePort();
+  serverPort = await getFreePort(PREFERRED_PORT);
+  if (serverPort !== PREFERRED_PORT) {
+    console.warn(
+      "[electron] port %d busy — using %d; adding new OAuth connections won't work this session",
+      PREFERRED_PORT,
+      serverPort
+    );
+  }
 
   return new Promise((resolve, reject) => {
     // The app ships Next's standalone output (.next/standalone) — a
