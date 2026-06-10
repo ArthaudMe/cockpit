@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAgent, deleteAgent, updateAgent } from "@/lib/agent-manager";
+import { getAgent, deleteAgent, updateAgent, ensureAgentRuntimeStarted } from "@/lib/agent-manager";
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  await ensureAgentRuntimeStarted();
   const { id } = await params;
   const agent = getAgent(id);
   if (!agent) {
@@ -17,6 +18,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  await ensureAgentRuntimeStarted();
   const { id } = await params;
   const body = await req.json();
 
@@ -31,6 +33,7 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  await ensureAgentRuntimeStarted();
   const { id } = await params;
   const deleted = deleteAgent(id);
   if (!deleted) {
