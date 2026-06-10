@@ -10,6 +10,8 @@
     "dev": "next dev --port 3939",
     "build": "next build",
     "start": "next start",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
     "electron:dev": "cross-env NODE_ENV=development electron .",
     "electron:build": "next build && electron-builder",
     "electron:start": "electron .",

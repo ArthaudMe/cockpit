@@ -15,8 +15,21 @@ export function isGranolaAvailable(): boolean {
   return fs.existsSync(GRANOLA_CACHE_PATH);
 }
 
+// Granola's cache file can be tens of MB; parsing it blocks the event loop
+// for the whole JSON.parse. Only re-parse when the file actually changed.
+let _cached: { mtimeMs: number; size: number; meetings: GranolaMeeting[] } | null = null;
+
 export function fetchGranolaMeetings(): GranolaMeeting[] {
-  if (!isGranolaAvailable()) return [];
+  let stat;
+  try {
+    stat = fs.statSync(GRANOLA_CACHE_PATH);
+  } catch {
+    return [];
+  }
+
+  if (_cached && _cached.mtimeMs === stat.mtimeMs && _cached.size === stat.size) {
+    return _cached.meetings;
+  }
 
   try {
     const raw = fs.readFileSync(GRANOLA_CACHE_PATH, "utf-8");
@@ -24,7 +37,7 @@ export function fetchGranolaMeetings(): GranolaMeeting[] {
     const documents = data?.cache?.state?.documents;
     if (!documents || typeof documents !== "object") return [];
 
-    const meetings: GranolaMeeting[] = [];
+    const withDates: { meeting: GranolaMeeting; createdAt: number }[] = [];
     const now = Date.now();
     const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
 
@@ -44,8 +57,7 @@ export function fetchGranolaMeetings(): GranolaMeeting[] {
         attendees.push(doc.people.creator.name || doc.people.creator.email || "");
       }
 
-      const created = new Date(doc.created_at);
-      const diffH = Math.round((now - created.getTime()) / 3_600_000);
+      const diffH = Math.round((now - createdAt) / 3_600_000);
       const time =
         diffH < 1
           ? "just now"
@@ -53,17 +65,24 @@ export function fetchGranolaMeetings(): GranolaMeeting[] {
             ? `${diffH}h ago`
             : `${Math.round(diffH / 24)}d ago`;
 
-      meetings.push({
-        title: doc.title || "Untitled meeting",
-        time,
-        attendees,
-        notes: doc.notes_markdown?.slice(0, 500),
-        summary: doc.summary?.slice(0, 300),
+      withDates.push({
+        createdAt,
+        meeting: {
+          title: doc.title || "Untitled meeting",
+          time,
+          attendees,
+          notes: doc.notes_markdown?.slice(0, 500),
+          summary: doc.summary?.slice(0, 300),
+        },
       });
     }
 
     // Sort by recency (most recent first)
-    return meetings.slice(0, 15);
+    withDates.sort((a, b) => b.createdAt - a.createdAt);
+    const meetings = withDates.slice(0, 15).map((m) => m.meeting);
+
+    _cached = { mtimeMs: stat.mtimeMs, size: stat.size, meetings };
+    return meetings;
   } catch {
     return [];
   }

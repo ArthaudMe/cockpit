@@ -45,7 +45,22 @@ function slugify(name: string): string {
     .slice(0, 40);
 }
 
+// Loaded on every system prompt build — cache the directory scan and only
+// re-read when a skill mutation happens here (or the TTL lapses, to pick
+// up files edited outside the app).
+let _skillsCache: CustomSkillDef[] | null = null;
+let _skillsCacheTime = 0;
+const SKILLS_CACHE_TTL = 30_000;
+
+function invalidateSkillsCache() {
+  _skillsCache = null;
+}
+
 export function loadCustomSkills(): CustomSkillDef[] {
+  if (_skillsCache && Date.now() - _skillsCacheTime < SKILLS_CACHE_TTL) {
+    return _skillsCache;
+  }
+
   ensureDir();
   const skills: CustomSkillDef[] = [];
 
@@ -68,6 +83,8 @@ export function loadCustomSkills(): CustomSkillDef[] {
     // Dir read failed
   }
 
+  _skillsCache = skills;
+  _skillsCacheTime = Date.now();
   return skills;
 }
 
@@ -108,6 +125,7 @@ export function saveCustomSkill(cmd: SkillCreateCommand): {
       JSON.stringify(skill, null, 2),
       { mode: 0o600 },
     );
+    invalidateSkillsCache();
     return { ok: true, skill };
   } catch (err) {
     return { ok: false, error: `Failed to save: ${(err as Error).message}` };
@@ -147,6 +165,7 @@ export function updateCustomSkill(cmd: SkillCreateCommand): {
     writeFileSync(filePath, JSON.stringify(updated, null, 2), {
       mode: 0o600,
     });
+    invalidateSkillsCache();
     return { ok: true, skill: updated };
   } catch (err) {
     return { ok: false, error: `Failed to update: ${(err as Error).message}` };
@@ -162,6 +181,7 @@ export function deleteCustomSkill(id: string): {
 
   try {
     unlinkSync(filePath);
+    invalidateSkillsCache();
     return { ok: true };
   } catch (err) {
     return { ok: false, error: `Failed to delete: ${(err as Error).message}` };

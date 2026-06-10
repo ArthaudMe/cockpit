@@ -1,26 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
 import fg from "fast-glob";
 
+// QuickOpen fires a request per (debounced) keystroke — walking the whole
+// tree each time is wasteful. Cache the file list per cwd for a few seconds;
+// scoring against the query stays per-request.
+const listCache = new Map<string, { entries: string[]; time: number }>();
+const LIST_CACHE_TTL = 15_000;
+
+async function listFiles(cwd: string): Promise<string[]> {
+  const hit = listCache.get(cwd);
+  if (hit && Date.now() - hit.time < LIST_CACHE_TTL) return hit.entries;
+
+  const entries = await fg("**/*", {
+    cwd,
+    ignore: [
+      "**/node_modules/**",
+      "**/.git/**",
+      "**/.next/**",
+      "**/dist/**",
+      "**/build/**",
+      "**/.cache/**",
+      "**/coverage/**",
+    ],
+    dot: false,
+    onlyFiles: true,
+    absolute: true,
+  });
+
+  listCache.set(cwd, { entries, time: Date.now() });
+  return entries;
+}
+
 export async function GET(req: NextRequest) {
   const query = req.nextUrl.searchParams.get("q") || "";
   const cwd = req.nextUrl.searchParams.get("cwd") || process.cwd();
 
   try {
-    const entries = await fg("**/*", {
-      cwd,
-      ignore: [
-        "**/node_modules/**",
-        "**/.git/**",
-        "**/.next/**",
-        "**/dist/**",
-        "**/build/**",
-        "**/.cache/**",
-        "**/coverage/**",
-      ],
-      dot: false,
-      onlyFiles: true,
-      absolute: true,
-    });
+    const entries = await listFiles(cwd);
 
     let results = entries;
 

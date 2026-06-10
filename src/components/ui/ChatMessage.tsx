@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { parseResponse } from "@/lib/parser";
 import { SKILLS } from "@/lib/skills-defs";
 import { RenderBlockRenderer } from "../renderers/RenderBlockRenderer";
@@ -154,7 +155,10 @@ async function executeActionRequest(action: ActionBlock) {
   return res.json();
 }
 
-export function ChatMessage({
+// Memoized: during streaming the whole list re-renders on every chunk,
+// but only the message being streamed changes — the rest must not re-run
+// parseResponse/extractFileRefs.
+export const ChatMessage = memo(function ChatMessage({
   message,
   onApproveSubagent,
   onOpenFile,
@@ -370,4 +374,4 @@ export function ChatMessage({
       </div>
     </div>
   );
-}
+});

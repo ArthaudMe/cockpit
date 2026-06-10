@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { type Context, buildContextFromLiveData } from "@/lib/context-client";
 import type { DatasourceData } from "@/lib/datasources/types";
 import { Header } from "@/components/layout/Header";
@@ -22,7 +22,6 @@ import {
   focusSlackMessage,
   focusCompetitor,
   focusTodo,
-  focusMeeting,
 } from "@/lib/focus";
 import type { NotificationItem } from "@/components/layout/NotificationBell";
 
@@ -453,6 +452,11 @@ export default function Home() {
     [handleOpenFocus],
   );
 
+  const hasAnyDatasource = useMemo(
+    () => Object.values(contextData.connected).some(Boolean),
+    [contextData.connected],
+  );
+
   // Show onboarding if no backends are connected (and we're done checking)
   if (!claudeStatus.checking && !claudeStatus.connected) {
     return (
@@ -522,13 +526,13 @@ export default function Home() {
             inferredProjects={inferredProjects}
             inferLoading={projectsLoading}
             onRefresh={() => fetchProjects(true)}
-            hasAnyDatasource={Object.values(contextData.connected).some(Boolean)}
+            hasAnyDatasource={hasAnyDatasource}
             onSettingsClick={handleSettingsClick}
           />
           <FeedColumn
             feed={contextData.company_feed}
             onOpenFocus={handleOpenFocus}
-            hasAnyDatasource={Object.values(contextData.connected).some(Boolean)}
+            hasAnyDatasource={hasAnyDatasource}
             onSettingsClick={handleSettingsClick}
           />
         </div>
@@ -543,11 +547,11 @@ export default function Home() {
             />
           ) : (
             <ChatColumn
-              context={contextData}
               inputValue={chatInput}
               onInputChange={setChatInput}
               claudeConnected={claudeStatus.connected}
               onOpenFile={handleOpenFile}
+              onOpenFocus={handleOpenFocus}
             />
           )}
         </div>

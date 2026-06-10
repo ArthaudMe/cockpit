@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import type { Context } from "@/lib/context-client";
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
 import { ChatMessage } from "../ui/ChatMessage";
 import { usePersistedState } from "@/lib/use-persisted-state";
 import { SKILLS, expandSlashCommand } from "@/lib/skills-defs";
@@ -37,15 +36,26 @@ const BACKEND_ICONS: Record<string, string> = {
   ollama: "○",
 };
 
-export function ChatColumn({
-  context,
+// Cap per-agent history so state and localStorage don't grow unboundedly.
+const MAX_MESSAGES_PER_AGENT = 200;
+
+// Strip base64 images before persisting — a few screenshots would blow
+// through the ~5MB localStorage quota and silently kill persistence.
+function stripImagesForPersist(byAgent: Record<string, Message[]>): Record<string, Message[]> {
+  const out: Record<string, Message[]> = {};
+  for (const [id, msgs] of Object.entries(byAgent)) {
+    out[id] = msgs.map((m) => (m.images ? { role: m.role, content: m.content } : m));
+  }
+  return out;
+}
+
+export const ChatColumn = memo(function ChatColumn({
   inputValue,
   onInputChange,
   claudeConnected,
   onOpenFile,
   onOpenFocus,
 }: {
-  context: Context;
   inputValue: string;
   onInputChange: (v: string) => void;
   claudeConnected: boolean;
@@ -60,7 +70,7 @@ export function ChatColumn({
   );
   const [messagesByAgent, setMessagesByAgent] = usePersistedState<
     Record<string, Message[]>
-  >("cockpit-chat-agents", {});
+  >("cockpit-chat-agents", {}, { serialize: stripImagesForPersist });
   const [streamingAgents, setStreamingAgents] = useState<Set<string>>(new Set());
   const [notifiedAgents, setNotifiedAgents] = useState<Set<string>>(new Set());
   const [showNewAgent, setShowNewAgent] = useState(false);
@@ -130,10 +140,16 @@ export function ChatColumn({
 
   const setMessagesFor = useCallback(
     (agentId: string, updater: (prev: Message[]) => Message[]) => {
-      setMessagesByAgent((prev) => ({
-        ...prev,
-        [agentId]: updater(prev[agentId] || []),
-      }));
+      setMessagesByAgent((prev) => {
+        const next = updater(prev[agentId] || []);
+        return {
+          ...prev,
+          [agentId]:
+            next.length > MAX_MESSAGES_PER_AGENT
+              ? next.slice(-MAX_MESSAGES_PER_AGENT)
+              : next,
+        };
+      });
     },
     [setMessagesByAgent]
   );
@@ -868,7 +884,7 @@ export function ChatColumn({
       </div>
     </div>
   );
-}
+});
 
 // ─── Backend Switcher (Emdash-style popover) ────────────────────────
 

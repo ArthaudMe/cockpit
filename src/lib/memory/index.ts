@@ -11,7 +11,6 @@ import { getMemoryStore, type MemoryCommand } from "./store";
 
 /**
  * Build the memory section for the system prompt.
- * Uses the frozen snapshot captured at store creation time.
  */
 export function buildMemoryPromptSection(): string {
   return getMemoryStore().formatForSystemPrompt();

@@ -1,8 +1,8 @@
 import { spawn, type ChildProcess } from "child_process";
-import { getContext, buildSystemPrompt } from "./context";
+import { buildSystemPrompt } from "./context";
 import { fetchAllData } from "./datasources/manager";
-import type { DatasourceData } from "./datasources/types";
 import { buildAgentEnv } from "./agent-env";
+import { buildPromptPrelude } from "./prompt-prelude";
 
 /**
  * Pre-warms a `claude -p` process with the system prompt baked in.
@@ -12,35 +12,24 @@ import { buildAgentEnv } from "./agent-env";
  * expensive startup (binary load, auth, model init) happens in the background.
  * When a request arrives, we just write the user message and close stdin —
  * response starts immediately.
+ *
+ * Live data caching lives in datasources/manager (fetchAllData); this module
+ * deliberately has no second cache layer.
  */
 
-// Cache live datasource data with TTL
-let cachedLiveData: DatasourceData | undefined;
-let cacheTimestamp = 0;
-const CACHE_TTL = 30_000; // 30 seconds
-
-async function getLiveData(): Promise<DatasourceData | undefined> {
-  const now = Date.now();
-  if (cachedLiveData && now - cacheTimestamp < CACHE_TTL) {
-    return cachedLiveData;
-  }
-  try {
-    cachedLiveData = await fetchAllData();
-    cacheTimestamp = now;
-    return cachedLiveData;
-  } catch {
-    return cachedLiveData; // Return stale data on error
-  }
-}
-
-function getSystemPrompt(liveData?: DatasourceData, userMessage?: string): string {
-  return buildSystemPrompt(getContext(), liveData, userMessage);
-}
-
-// Initial system prompt (without live data for fast startup)
-let currentSystemPrompt = getSystemPrompt();
+// Built without live data initially; refreshed before each preheat.
+let currentSystemPrompt = buildSystemPrompt();
 
 let warmProc: ChildProcess | null = null;
+
+async function refreshSystemPrompt(): Promise<void> {
+  try {
+    const live = await fetchAllData();
+    currentSystemPrompt = buildSystemPrompt(live);
+  } catch {
+    // Keep the previous prompt on fetch failure
+  }
+}
 
 function spawnWarm(): ChildProcess {
   const proc = spawn(
@@ -79,8 +68,9 @@ export function preheat() {
  * Get a ready-to-go claude process. Writes the user message to stdin
  * and returns the process (stdout is already streaming the response).
  *
- * Any focus context is prepended to the user message rather than
- * the system prompt, so the warm process can be reused regardless of context.
+ * Message-dependent context (focus, history) is prepended to the user
+ * message rather than the system prompt, so the warm process can be
+ * reused regardless of context.
  */
 export function send(userMessage: string, focusContext?: string): ChildProcess {
   let proc: ChildProcess;
@@ -94,35 +84,20 @@ export function send(userMessage: string, focusContext?: string): ChildProcess {
     proc = spawnWarm();
   }
 
-  // Build the full user prompt — include focus context if present
-  let prompt = userMessage;
-  if (focusContext) {
-    prompt = `[The user is currently focused on this section of their cockpit:\n${focusContext}]\n\n${userMessage}`;
-  }
+  const prompt = buildPromptPrelude({ message: userMessage, focusContext });
 
   proc.stdin!.write(prompt);
   proc.stdin!.end();
 
   // Immediately start warming the next process with fresh data
   setTimeout(async () => {
-    const live = await getLiveData();
-    if (live) currentSystemPrompt = getSystemPrompt(live);
+    await refreshSystemPrompt();
     preheat();
   }, 50);
 
   return proc;
 }
 
-// Auto-preheat on module load (async refresh of live data)
-preheat();
-getLiveData().then((live) => {
-  if (live) {
-    currentSystemPrompt = getSystemPrompt(live);
-    // Kill stale warm process so next one gets fresh context
-    if (warmProc) {
-      warmProc.kill();
-      warmProc = null;
-    }
-    preheat();
-  }
-});
+// Auto-preheat on first import: refresh live data once, then spawn a
+// single warm process (instead of spawn → kill → respawn).
+refreshSystemPrompt().finally(preheat);

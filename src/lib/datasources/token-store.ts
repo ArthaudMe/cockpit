@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import type { ServiceId, TokenSet } from "./types";
+import { readJsonCached, invalidateFileCache } from "../fs-cache";
 
 const STORE_DIR = path.join(os.homedir(), ".cockpit");
 const STORE_PATH = path.join(STORE_DIR, "tokens.json");
@@ -14,14 +15,10 @@ function ensureDir() {
   }
 }
 
+// Token reads happen many times per datasource poll (once per connector),
+// so they go through the mtime-keyed cache instead of hitting disk each time.
 function read(): TokenStore {
-  try {
-    if (!fs.existsSync(STORE_PATH)) return {};
-    const raw = fs.readFileSync(STORE_PATH, "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
+  return readJsonCached<TokenStore>(STORE_PATH, {});
 }
 
 function write(store: TokenStore) {
@@ -29,6 +26,7 @@ function write(store: TokenStore) {
   fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2), {
     mode: 0o600,
   });
+  invalidateFileCache(STORE_PATH);
 }
 
 export function getTokens(service: ServiceId): TokenSet | null {
@@ -58,17 +56,13 @@ export function getConnectedServices(): ServiceId[] {
 const DISABLED_PATH = path.join(STORE_DIR, "disabled-services.json");
 
 function readDisabled(): ServiceId[] {
-  try {
-    if (!fs.existsSync(DISABLED_PATH)) return [];
-    return JSON.parse(fs.readFileSync(DISABLED_PATH, "utf-8"));
-  } catch {
-    return [];
-  }
+  return readJsonCached<ServiceId[]>(DISABLED_PATH, []);
 }
 
 function writeDisabled(disabled: ServiceId[]) {
   ensureDir();
   fs.writeFileSync(DISABLED_PATH, JSON.stringify(disabled), { mode: 0o600 });
+  invalidateFileCache(DISABLED_PATH);
 }
 
 export function disableService(service: ServiceId) {

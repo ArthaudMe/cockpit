@@ -22,9 +22,13 @@ export function getActionLog(): ActionLogEntry[] {
   }
 }
 
+// Keep the log bounded — it's fully read and rewritten on every action.
+const MAX_LOG_ENTRIES = 500;
+
 export function logAction(entry: ActionLogEntry): void {
   ensureDir();
-  const log = getActionLog();
+  let log = getActionLog();
   log.push(entry);
+  if (log.length > MAX_LOG_ENTRIES) log = log.slice(-MAX_LOG_ENTRIES);
   fs.writeFileSync(LOG_PATH, JSON.stringify(log, null, 2), { mode: 0o600 });
 }
