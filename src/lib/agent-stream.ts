@@ -42,9 +42,11 @@ export function streamAgentResponse(
             combined.includes("please run /login") ||
             combined.includes("authentication")
           ) {
+            // Trigger login flow automatically
+            fetch("http://localhost:" + (process.env.PORT || "3939") + "/api/authenticate-claude", { method: "POST" }).catch(() => {});
             controller.enqueue(
               encoder.encode(
-                `\n\n**Claude CLI is not authenticated.** Open Terminal and run:\n\n\`\`\`\nclaude login\n\`\`\`\n\nThen restart Cockpit.`
+                `\n\n**Claude CLI is not authenticated.** A browser window should open for you to log in. If not, open Terminal and run \`claude login\`, then restart Cockpit.`
               )
             );
           } else {
