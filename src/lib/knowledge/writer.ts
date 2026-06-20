@@ -31,7 +31,7 @@ function today(): string {
 }
 
 function ensureDir(dir: string) {
-  mkdirSync(dir, { recursive: true });
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
 }
 
 function readJsonArray(filePath: string): unknown[] {
@@ -46,7 +46,7 @@ function readJsonArray(filePath: string): unknown[] {
 }
 
 function writeJsonArray(filePath: string, data: unknown[]) {
-  writeFileSync(filePath, JSON.stringify(data, null, 2));
+  writeFileSync(filePath, JSON.stringify(data, null, 2), { mode: 0o600 });
 }
 
 function mergeById(

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getAgent } from "@/lib/agent-manager";
+import { getAgent, ensureAgentRuntimeStarted } from "@/lib/agent-manager";
 import { streamAgentResponse } from "@/lib/agent-stream";
 
 export const maxDuration = 300;
@@ -8,6 +8,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  await ensureAgentRuntimeStarted();
   const { id } = await params;
   const agent = getAgent(id);
   if (!agent) {
