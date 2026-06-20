@@ -188,7 +188,7 @@ export function buildContextFromLiveData(live: DatasourceData, userName?: string
   });
 
   return {
-    user: "Arthaud",
+    user: userName || "User",
     projects: [],
     calendar,
     usage_analytics: {},

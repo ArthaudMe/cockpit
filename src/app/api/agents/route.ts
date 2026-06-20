@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAgent, listAgents, type AgentRole, type AgentBackend } from "@/lib/agent-manager";
+import { createAgent, listAgents, ensureAgentRuntimeStarted, type AgentRole, type AgentBackend } from "@/lib/agent-manager";
 
 export async function GET() {
+  await ensureAgentRuntimeStarted();
   return NextResponse.json(listAgents());
 }
 
 export async function POST(req: NextRequest) {
+  await ensureAgentRuntimeStarted();
   const { name, role, systemPrompt, backend, model } = await req.json();
 
   if (!name || typeof name !== "string") {

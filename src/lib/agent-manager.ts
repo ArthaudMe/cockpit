@@ -450,10 +450,23 @@ function restoreAgents() {
   console.log("[agent-manager] restored %d agents from disk", saved.length);
 }
 
-// Start the event server, then restore agents
-startEventServer()
-  .then(restoreAgents)
-  .catch((err) => {
-    console.error("[agent-manager] event server failed, booting without hooks:", err);
-    restoreAgents();
-  });
+// ─── Runtime boot (lazy) ────────────────────────────────────────────
+//
+// IMPORTANT: nothing here runs at module import. `next build` imports every
+// route module to collect metadata — if we started the event server and
+// spawned warm CLI processes at import, builds would bind ports, create
+// hook temp dirs, and depend on local agent state. Instead the runtime is
+// started on first use, from request handlers, via ensureAgentRuntimeStarted().
+
+let _runtimePromise: Promise<void> | null = null;
+
+export function ensureAgentRuntimeStarted(): Promise<void> {
+  if (_runtimePromise) return _runtimePromise;
+  _runtimePromise = startEventServer()
+    .then(restoreAgents)
+    .catch((err) => {
+      console.error("[agent-manager] event server failed, booting without hooks:", err);
+      restoreAgents();
+    });
+  return _runtimePromise;
+}

@@ -6,7 +6,7 @@ import {
   mkdirSync,
   existsSync,
 } from "fs";
-import { join } from "path";
+import { join, resolve, sep } from "path";
 import { homedir } from "os";
 import type { SkillDef, SkillCategory } from "./skills-defs";
 
@@ -43,6 +43,27 @@ function slugify(name: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 40);
+}
+
+// Skill IDs become filenames. `extractAndProcessSkills` runs automatically on
+// every assistant response, so a prompt-injected reply could otherwise supply
+// an `id` like "../../../etc/whatever" and write attacker-controlled JSON
+// outside the skills dir. IDs are constrained to this shape, and the resolved
+// path is asserted to stay inside CUSTOM_SKILLS_DIR before any read/write.
+const VALID_ID = /^custom-[a-z0-9-]{1,60}$/;
+
+function isValidSkillId(id: string): boolean {
+  return VALID_ID.test(id);
+}
+
+/** Resolve `<dir>/<id>.json`, or null if the id is invalid or escapes the dir. */
+function skillFilePath(id: string): string | null {
+  if (!isValidSkillId(id)) return null;
+  const resolved = resolve(CUSTOM_SKILLS_DIR, `${id}.json`);
+  const base = resolve(CUSTOM_SKILLS_DIR);
+  if (resolved !== join(base, `${id}.json`)) return null;
+  if (!resolved.startsWith(base + sep)) return null;
+  return resolved;
 }
 
 // Loaded on every system prompt build — cache the directory scan and only
@@ -99,8 +120,13 @@ export function saveCustomSkill(cmd: SkillCreateCommand): {
 
   ensureDir();
 
-  const id = cmd.id || `custom-${slugify(cmd.name)}`;
+  // Always derive the id from the name on create — never trust a model- or
+  // user-supplied id for a path. (Updates address an existing validated id.)
+  const id = `custom-${slugify(cmd.name)}`;
   const slash = cmd.slash || `/${slugify(cmd.name)}`;
+
+  const filePath = skillFilePath(id);
+  if (!filePath) return { ok: false, error: "Invalid skill name" };
 
   // Validate slash doesn't conflict with built-in skills
   // (caller should check against SKILLS array)
@@ -120,11 +146,7 @@ export function saveCustomSkill(cmd: SkillCreateCommand): {
   };
 
   try {
-    writeFileSync(
-      join(CUSTOM_SKILLS_DIR, `${id}.json`),
-      JSON.stringify(skill, null, 2),
-      { mode: 0o600 },
-    );
+    writeFileSync(filePath, JSON.stringify(skill, null, 2), { mode: 0o600 });
     invalidateSkillsCache();
     return { ok: true, skill };
   } catch (err) {
@@ -139,7 +161,8 @@ export function updateCustomSkill(cmd: SkillCreateCommand): {
 } {
   if (!cmd.id) return { ok: false, error: "Missing skill id for update" };
 
-  const filePath = join(CUSTOM_SKILLS_DIR, `${cmd.id}.json`);
+  const filePath = skillFilePath(cmd.id);
+  if (!filePath) return { ok: false, error: "Invalid skill id" };
   if (!existsSync(filePath))
     return { ok: false, error: `Skill "${cmd.id}" not found` };
 
@@ -176,7 +199,8 @@ export function deleteCustomSkill(id: string): {
   ok: boolean;
   error?: string;
 } {
-  const filePath = join(CUSTOM_SKILLS_DIR, `${id}.json`);
+  const filePath = skillFilePath(id);
+  if (!filePath) return { ok: false, error: "Invalid skill id" };
   if (!existsSync(filePath)) return { ok: false, error: `Skill "${id}" not found` };
 
   try {

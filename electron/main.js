@@ -200,11 +200,25 @@ function createTray() {
 }
 
 // ─── Next.js Server ────────────────────────────────────────────────
-function getFreePort() {
+// OAuth redirect URIs are pre-registered with providers as
+// http://localhost:3939/api/datasources/callback (exact match, port
+// included) — so production prefers the same port as dev. If it's taken
+// we fall back to a dynamic port: everything still works except adding
+// NEW OAuth connections (existing tokens refresh fine).
+const PREFERRED_PORT = 3939;
+
+function getFreePort(preferred) {
   return new Promise((resolve, reject) => {
     const srv = net.createServer();
-    srv.on("error", reject);
-    srv.listen(0, "127.0.0.1", () => {
+    srv.on("error", (err) => {
+      if (preferred) {
+        // Preferred port busy — retry with an OS-assigned one
+        getFreePort().then(resolve, reject);
+      } else {
+        reject(err);
+      }
+    });
+    srv.listen(preferred || 0, "127.0.0.1", () => {
       const port = srv.address().port;
       srv.close(() => resolve(port));
     });
@@ -212,7 +226,14 @@ function getFreePort() {
 }
 
 async function startNextServer() {
-  serverPort = await getFreePort();
+  serverPort = await getFreePort(PREFERRED_PORT);
+  if (serverPort !== PREFERRED_PORT) {
+    console.warn(
+      "[electron] port %d busy — using %d; adding new OAuth connections won't work this session",
+      PREFERRED_PORT,
+      serverPort
+    );
+  }
 
   return new Promise((resolve, reject) => {
     // The app ships Next's standalone output (.next/standalone) — a
@@ -416,13 +437,23 @@ function createMainWindow() {
 
   mainWindow.loadURL(`http://localhost:${serverPort}`);
 
-  // Open external links in default browser
+  // Open external links (window.open / target=_blank) in the default browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith("http") && !url.includes(`localhost:${serverPort}`)) {
       shell.openExternal(url);
       return { action: "deny" };
     }
     return { action: "allow" };
+  });
+
+  // Block in-window navigation away from the local app. A clicked link (or a
+  // malicious assistant-rendered href) must not replace the app with an
+  // external site — send it to the default browser instead.
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (!url.startsWith(`http://localhost:${serverPort}`)) {
+      event.preventDefault();
+      if (/^https?:/i.test(url)) shell.openExternal(url);
+    }
   });
 
   // Save window state on resize/move (debounced)

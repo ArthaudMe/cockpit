@@ -81,10 +81,11 @@ function scheduleWrite(date: string) {
     .then(() => {
       if (!dayCache || dayCache.date !== date) return;
       const dateDir = join(HISTORY_DIR, date);
-      mkdirSync(dateDir, { recursive: true });
+      mkdirSync(dateDir, { recursive: true, mode: 0o700 });
       return writeFile(
         dayFilePath(date),
-        JSON.stringify(dayCache.messages, null, 2)
+        JSON.stringify(dayCache.messages, null, 2),
+        { mode: 0o600 }
       );
     })
     .catch((err) => {

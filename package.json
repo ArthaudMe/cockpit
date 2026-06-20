@@ -1,7 +1,7 @@
 {
   "name": "cockpit",
   "version": "0.1.0",
-  "description": "Pilot your company — desktop cockpit with AI co-pilot",
+  "description": "Pilot your company \u2014 desktop cockpit with AI co-pilot",
   "author": "Emdash",
   "private": true,
   "packageManager": "pnpm@10.33.2",
@@ -15,7 +15,8 @@
     "electron:dev": "cross-env NODE_ENV=development electron .",
     "electron:build": "next build && node scripts/prepare-standalone.js && electron-builder",
     "electron:start": "electron .",
-    "electron:publish": "next build && node scripts/prepare-standalone.js && electron-builder --publish always"
+    "electron:publish": "next build && node scripts/prepare-standalone.js && electron-builder --publish always",
+    "lint": "next lint"
   },
   "dependencies": {
     "electron-updater": "^6.8.3"
@@ -59,12 +60,12 @@
     "dmg": {
       "background": "build/dmg-background.png",
       "window": {
-        "width": 660,
-        "height": 440
+        "width": 540,
+        "height": 380
       },
       "contents": [
-        { "x": 190, "y": 150 },
-        { "x": 470, "y": 150, "type": "link", "path": "/Applications" }
+        { "x": 160, "y": 170 },
+        { "x": 380, "y": 170, "type": "link", "path": "/Applications" }
       ]
     },
     "publish": {
@@ -81,5 +82,9 @@
       "icon": "build/icon.png",
       "category": "Utility"
     }
+  },
+  "engines": {
+    "node": ">=20.12.0",
+    "pnpm": ">=9"
   }
 }
