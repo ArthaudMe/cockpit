@@ -65,6 +65,28 @@ Command center for your company. Desktop AI co-pilot that connects to your live 
 - **React error boundary + global error listeners**; Electron process-level handlers log to `~/.cockpit/crash-log.json`
 - **Renderer crash recovery** — auto-reload on `render-process-gone` / `unresponsive`
 
+### Search
+- **Command palette** (Cmd+K) — instant client-side search across cached data, then live API search with LIVE badge
+- **Live search providers** — Gmail, Google Calendar, Linear, GitHub, Notion, Slack (via `search.messages`)
+- **Source filtering** — `in:slack`, `in:linear`, `in:github`, etc.
+- **Grouped results** — by source with color-coded badges, keyboard navigation, shift+Enter to open URL
+
+### Write-Back Actions
+- **Action cards** — LLM proposes actions via `cockpit_action` JSON, user reviews and approves inline
+- **6 action types** — `linear_create_issue`, `github_comment_pr`, `slack_send_message`, `calendar_create_event`, `gmail_draft`, `notion_update_page`
+- **Action log** — all executed actions persisted to `~/.cockpit/action-log.json`
+
+### Memory
+- **Hermes-style memory** — two bounded markdown files (MEMORY.md + USER.md) in `~/.cockpit/memories/`
+- **Frozen snapshot** — loaded at session start, injected into system prompt
+- **LLM-driven writes** — model outputs `cockpit_memory` JSON blocks to add/replace/remove entries
+- **Content scanning** — injection pattern detection
+
+### Analytics
+- **PostHog integration** — opt-in anonymous usage analytics (opt-out by default)
+- **Events tracked** — `app_opened`, `chat_message_sent`, `panel_clicked`, `datasource_connected`
+- **Privacy-first** — no personal data or chat content sent
+
 ### Desktop App
 - **Electron shell** — Mac (DMG), Windows (NSIS), Linux (AppImage) targets
 - **Standalone server bundle** — the app ships Next.js standalone output (self-contained `server.js`), not `node_modules`; runs on a dynamically allocated localhost port
