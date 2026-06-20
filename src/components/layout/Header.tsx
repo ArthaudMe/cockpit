@@ -85,6 +85,7 @@ export function Header({
         <button
           onClick={onRetryConnection}
           disabled={claudeStatus.checking}
+          aria-label={claudeStatus.connected ? "Claude CLI connected" : "Retry Claude CLI connection"}
           style={{
             display: "flex",
             alignItems: "center",
@@ -123,6 +124,7 @@ export function Header({
         {onSettingsClick && (
           <button
             onClick={onSettingsClick}
+            aria-label="Open settings"
             style={{
               background: "none",
               border: "1px solid var(--border)",

@@ -391,6 +391,7 @@ export const ChatColumn = memo(function ChatColumn({
 
   const handleDeleteAgent = useCallback(
     async (id: string) => {
+      if (!confirm("Delete this agent and its chat history?")) return;
       await fetch(`/api/agents/${id}`, { method: "DELETE" });
       setAgents((prev) => prev.filter((a) => a.id !== id));
       setMessagesByAgent((prev) => {

@@ -6,6 +6,33 @@ import type { McpResourceItem } from "../types";
 
 const MAX_RESOURCE_TEXT = 2000;
 const CONNECT_TIMEOUT = 15_000;
+const RESOURCE_FETCH_TIMEOUT = 30_000;
+
+// Environment variables that could enable code injection via dynamic linker
+const DANGEROUS_ENV_KEYS = new Set([
+  "LD_PRELOAD",
+  "LD_LIBRARY_PATH",
+  "DYLD_INSERT_LIBRARIES",
+  "DYLD_LIBRARY_PATH",
+  "DYLD_FRAMEWORK_PATH",
+  "SHLIB_PATH",
+  "LIBPATH",
+  "NODE_OPTIONS",
+  "ELECTRON_RUN_AS_NODE",
+]);
+
+function sanitizeEnv(
+  env: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!env) return undefined;
+  const safe: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (!DANGEROUS_ENV_KEYS.has(key.toUpperCase()) && typeof value === "string") {
+      safe[key] = value;
+    }
+  }
+  return { ...process.env, ...safe } as Record<string, string>;
+}
 
 const clientCache = new Map<string, Client>();
 
@@ -15,7 +42,7 @@ async function createTransport(config: McpServerConfig) {
     return new StdioClientTransport({
       command: config.command,
       args: config.args,
-      env: config.env ? { ...process.env, ...config.env } as Record<string, string> : undefined,
+      env: sanitizeEnv(config.env),
       stderr: "ignore",
     });
   }
@@ -67,6 +94,17 @@ export async function disconnectAll() {
 }
 
 export async function fetchMcpResources(
+  config: McpServerConfig,
+): Promise<McpResourceItem[]> {
+  return Promise.race([
+    fetchMcpResourcesInner(config),
+    new Promise<McpResourceItem[]>((_, reject) =>
+      setTimeout(() => reject(new Error("MCP resource fetch timeout")), RESOURCE_FETCH_TIMEOUT),
+    ),
+  ]);
+}
+
+async function fetchMcpResourcesInner(
   config: McpServerConfig,
 ): Promise<McpResourceItem[]> {
   const client = await getOrCreateClient(config);

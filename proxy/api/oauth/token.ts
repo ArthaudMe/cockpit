@@ -151,6 +151,7 @@ export default async function handler(
     // Forward the provider's response as-is
     return res.status(response.ok ? 200 : 400).json(data);
   } catch (err) {
-    return res.status(500).json({ error: `Proxy error: ${(err as Error).message}` });
+    console.error("[proxy] token exchange error:", (err as Error).message);
+    return res.status(500).json({ error: "Token exchange failed" });
   }
 }

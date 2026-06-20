@@ -84,9 +84,17 @@ async function executeGitHubCommentPR(
     return { success: false, message: "Missing required params: owner, repo, pull_number, body" };
   }
 
+  // Validate path segments to prevent URL injection
+  const ownerStr = String(owner);
+  const repoStr = String(repo);
+  const prNum = Number(pull_number);
+  if (!/^[\w.-]+$/.test(ownerStr) || !/^[\w.-]+$/.test(repoStr) || !Number.isInteger(prNum) || prNum < 1) {
+    return { success: false, message: "Invalid owner, repo, or pull_number format" };
+  }
+
   try {
     const res = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/issues/${pull_number}/comments`,
+      `https://api.github.com/repos/${encodeURIComponent(ownerStr)}/${encodeURIComponent(repoStr)}/issues/${prNum}/comments`,
       {
         method: "POST",
         headers: {

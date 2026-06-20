@@ -18,10 +18,18 @@ export async function GET() {
   return NextResponse.json(loadProfile());
 }
 
+const ALLOWED_FIELDS = new Set(["name", "role", "company"]);
+
 export async function PATCH(req: NextRequest) {
   const body = await req.json();
   const current = loadProfile();
-  const updated = { ...current, ...body };
+  const filtered: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(body)) {
+    if (ALLOWED_FIELDS.has(key) && typeof value === "string") {
+      filtered[key] = value.slice(0, 255);
+    }
+  }
+  const updated = { ...current, ...filtered };
   writeProfile(updated);
   return NextResponse.json(updated);
 }

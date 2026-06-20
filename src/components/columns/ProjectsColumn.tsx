@@ -120,6 +120,7 @@ export function ProjectsColumn({
   }, [createName]);
 
   const handleDelete = useCallback(async (id: string) => {
+    if (!confirm("Delete this project?")) return;
     await fetch(`/api/projects/${id}`, { method: "DELETE" });
     setManualProjects((prev) => prev.filter((p) => p.id !== id));
   }, []);
