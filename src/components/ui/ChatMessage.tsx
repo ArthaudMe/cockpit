@@ -1,21 +1,29 @@
 "use client";
 
+import { memo } from "react";
 import { parseResponse } from "@/lib/parser";
 import { SKILLS } from "@/lib/skills-defs";
 import { RenderBlockRenderer } from "../renderers/RenderBlockRenderer";
 import { ActionCard } from "./ActionCard";
-import { FileChip } from "./FileChip";
+import { SkillProposalCard } from "./SkillProposalCard";
 import type { SubagentSuggestion, ActionBlock } from "@/lib/parser";
 import type { ContextFocus } from "../views/ContextualChatView";
-
-// Match file paths like src/lib/foo.ts, ./bar/baz.tsx, /abs/path.js, with optional :lineNumber
-const FILE_PATH_RE = /(?:^|\s)((?:\/|\.\/|\.\.\/|[a-zA-Z][\w-]*\/)[^\s:,;'")\]}>]+\.[a-zA-Z]{1,10}(?::(\d+))?)(?=[\s,;:'")\]}>]|$)/g;
 
 type Message = {
   role: "user" | "assistant";
   content: string;
   images?: string[];
 };
+
+// Assistant output is untrusted. Only allow safe link schemes so a response
+// can't render e.g. a javascript: href (script execution inside Electron).
+function safeHref(url: string): string {
+  const trimmed = url.trim();
+  if (/^(https?:|mailto:)/i.test(trimmed)) return trimmed;
+  if (/^[/#]/.test(trimmed)) return trimmed; // relative path or anchor
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return trimmed; // no scheme → relative
+  return "#";
+}
 
 function SimpleMarkdown({ content }: { content: string }) {
   const lines = content.split("\n");
@@ -47,7 +55,13 @@ function SimpleMarkdown({ content }: { content: string }) {
         const linkMatch = m.match(/\[([^\]]+)\]\(([^)]+)\)/);
         if (linkMatch) {
           parts.push(
-            <a key={match.index} href={linkMatch[2]} style={{ color: "var(--accent)" }}>
+            <a
+              key={match.index}
+              href={safeHref(linkMatch[2])}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: "var(--accent)" }}
+            >
               {linkMatch[1]}
             </a>
           );
@@ -80,7 +94,7 @@ function SimpleMarkdown({ content }: { content: string }) {
         items.push(<li key={i}>{inlineFormat(lines[i].replace(/^[-*] /, ""))}</li>);
         i++;
       }
-      elements.push(<ul key={`ul-${i}`} style={{ paddingLeft: "1.2em", margin: "0.3em 0", fontSize: "0.7rem" }}>{items}</ul>);
+      elements.push(<ul key={`ul-${i}`} style={{ paddingLeft: "1.2em", margin: "0.3em 0", fontSize: "0.75rem" }}>{items}</ul>);
       continue;
     } else if (line.match(/^\d+\. /)) {
       const items: React.ReactNode[] = [];
@@ -88,7 +102,7 @@ function SimpleMarkdown({ content }: { content: string }) {
         items.push(<li key={i}>{inlineFormat(lines[i].replace(/^\d+\. /, ""))}</li>);
         i++;
       }
-      elements.push(<ol key={`ol-${i}`} style={{ paddingLeft: "1.2em", margin: "0.3em 0", fontSize: "0.7rem" }}>{items}</ol>);
+      elements.push(<ol key={`ol-${i}`} style={{ paddingLeft: "1.2em", margin: "0.3em 0", fontSize: "0.75rem" }}>{items}</ol>);
       continue;
     } else if (line.startsWith("```")) {
       const codeLines: string[] = [];
@@ -98,47 +112,20 @@ function SimpleMarkdown({ content }: { content: string }) {
         i++;
       }
       elements.push(
-        <pre key={`code-${i}`} style={{ background: "var(--surface)", border: "1px solid var(--border)", padding: "0.6em", borderRadius: 4, overflow: "auto", margin: "0.4em 0", fontSize: "0.65rem" }}>
+        <pre key={`code-${i}`} style={{ background: "var(--surface)", border: "1px solid var(--border)", padding: "0.6em", borderRadius: 4, overflow: "auto", margin: "0.4em 0", fontSize: "0.75rem" }}>
           <code>{codeLines.join("\n")}</code>
         </pre>
       );
     } else if (line.trim() === "") {
       // skip
     } else {
-      elements.push(<p key={i} style={{ margin: "0.3em 0", lineHeight: 1.5, fontSize: "0.7rem", overflowWrap: "break-word", wordBreak: "break-word" }}>{inlineFormat(line)}</p>);
+      elements.push(<p key={i} style={{ margin: "0.3em 0", lineHeight: 1.5, fontSize: "0.75rem", overflowWrap: "break-word", wordBreak: "break-word" }}>{inlineFormat(line)}</p>);
     }
 
     i++;
   }
 
   return <>{elements}</>;
-}
-
-function extractFileRefs(text: string): { path: string; line?: number }[] {
-  const refs: { path: string; line?: number }[] = [];
-  const seen = new Set<string>();
-  let match;
-  const re = new RegExp(FILE_PATH_RE.source, "g");
-  while ((match = re.exec(text)) !== null) {
-    const raw = match[1].trim();
-    // Split off optional :lineNumber
-    const colonIdx = raw.lastIndexOf(":");
-    let filePath = raw;
-    let line: number | undefined;
-    if (colonIdx > 0) {
-      const afterColon = raw.slice(colonIdx + 1);
-      if (/^\d+$/.test(afterColon)) {
-        filePath = raw.slice(0, colonIdx);
-        line = parseInt(afterColon, 10);
-      }
-    }
-    const key = filePath + (line ? `:${line}` : "");
-    if (!seen.has(key)) {
-      seen.add(key);
-      refs.push({ path: filePath, line });
-    }
-  }
-  return refs;
 }
 
 async function executeActionRequest(action: ActionBlock) {
@@ -153,15 +140,16 @@ async function executeActionRequest(action: ActionBlock) {
   return res.json();
 }
 
-export function ChatMessage({
+// Memoized: during streaming the whole list re-renders on every chunk,
+// but only the message being streamed changes — the rest must not re-run
+// parseResponse/extractFileRefs.
+export const ChatMessage = memo(function ChatMessage({
   message,
   onApproveSubagent,
-  onOpenFile,
   onOpenFocus,
 }: {
   message: Message;
   onApproveSubagent?: (suggestion: SubagentSuggestion) => void;
-  onOpenFile?: (path: string) => void;
   onOpenFocus?: (focus: ContextFocus) => void;
 }) {
   if (message.role === "user") {
@@ -174,7 +162,7 @@ export function ChatMessage({
             color: "var(--bg)",
             padding: "0.4rem 0.6rem",
             borderRadius: "4px 4px 1px 4px",
-            fontSize: "0.7rem",
+            fontSize: "0.75rem",
             lineHeight: 1.4,
           }}
         >
@@ -210,7 +198,6 @@ export function ChatMessage({
   }
 
   const segments = parseResponse(message.content);
-  const fileRefs = onOpenFile ? extractFileRefs(message.content) : [];
 
   return (
     <div style={{ marginBottom: "0.5rem" }}>
@@ -219,7 +206,7 @@ export function ChatMessage({
           if (seg.type === "skill_active") {
             const skill = SKILLS.find((s) => s.slash === seg.skillSlash);
             return (
-              <div key={i} style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", background: "rgba(255,255,255,0.06)", border: "1px solid var(--border)", borderRadius: 3, padding: "0.15rem 0.45rem", marginBottom: "0.4rem", fontSize: "0.5rem", color: "var(--accent)", fontWeight: 600 }}>
+              <div key={i} style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", background: "rgba(255,255,255,0.06)", border: "1px solid var(--border)", borderRadius: 3, padding: "0.15rem 0.45rem", marginBottom: "0.4rem", fontSize: "0.75rem", color: "var(--accent)", fontWeight: 600 }}>
                 <span>{skill?.icon || "◆"}</span>
                 {skill?.name || seg.skillSlash}
               </div>
@@ -230,14 +217,14 @@ export function ChatMessage({
             const s = seg.suggestion;
             return (
               <div key={i} style={{ margin: "0.4rem 0", border: "1px solid var(--border-light)", borderRadius: 6, padding: "0.6rem 0.75rem", background: "var(--surface)" }}>
-                <div style={{ fontSize: "0.5rem", fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.3rem" }}>Suggested subagent</div>
-                <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)", marginBottom: "0.15rem" }}>
+                <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.3rem" }}>Suggested subagent</div>
+                <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text)", marginBottom: "0.15rem" }}>
                   {s.name}
-                  <span style={{ fontSize: "0.45rem", background: "rgba(255,255,255,0.06)", padding: "0.1rem 0.3rem", borderRadius: 3, color: "var(--text-muted)", marginLeft: "0.4rem", fontWeight: 400 }}>{s.role}</span>
+                  <span style={{ fontSize: "0.75rem", background: "rgba(255,255,255,0.06)", padding: "0.1rem 0.3rem", borderRadius: 3, color: "var(--text-muted)", marginLeft: "0.4rem", fontWeight: 400 }}>{s.role}</span>
                 </div>
-                <div style={{ fontSize: "0.55rem", color: "var(--text-dim)", marginBottom: "0.5rem", lineHeight: 1.4 }}>{s.task}</div>
+                <div style={{ fontSize: "0.75rem", color: "var(--text-dim)", marginBottom: "0.5rem", lineHeight: 1.4 }}>{s.task}</div>
                 {onApproveSubagent && (
-                  <button onClick={() => onApproveSubagent(s)} style={{ background: "var(--accent)", color: "var(--bg)", border: "none", borderRadius: 4, padding: "0.25rem 0.6rem", fontSize: "0.5rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                  <button onClick={() => onApproveSubagent(s)} style={{ background: "var(--accent)", color: "var(--bg)", border: "none", borderRadius: 4, padding: "0.25rem 0.6rem", fontSize: "0.75rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
                     Spawn agent
                   </button>
                 )}
@@ -269,7 +256,7 @@ export function ChatMessage({
                 />
                 <span
                   style={{
-                    fontSize: "0.55rem",
+                    fontSize: "0.75rem",
                     color: "var(--text-muted)",
                     fontFamily: "inherit",
                     letterSpacing: "0.03em",
@@ -335,6 +322,10 @@ export function ChatMessage({
             );
           }
 
+          if (seg.type === "skill_proposal") {
+            return <SkillProposalCard key={i} proposal={seg.proposal} />;
+          }
+
           return (
             <div key={i} style={{ color: "var(--text)" }}>
               <SimpleMarkdown content={seg.content} />
@@ -342,27 +333,7 @@ export function ChatMessage({
           );
         })}
 
-        {/* File reference chips */}
-        {fileRefs.length > 0 && onOpenFile && (
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "0.2rem",
-              marginTop: "0.3rem",
-            }}
-          >
-            {fileRefs.map((ref, i) => (
-              <FileChip
-                key={i}
-                path={ref.path}
-                line={ref.line}
-                onOpenFile={onOpenFile}
-              />
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );
-}
+});

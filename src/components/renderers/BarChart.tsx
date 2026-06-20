@@ -24,7 +24,7 @@ export function RenderBarChart({
         <div
           style={{
             padding: "0.35rem 0.5rem",
-            fontSize: "0.6rem",
+            fontSize: "0.68rem",
             fontWeight: 600,
             color: "var(--text-dim)",
             textTransform: "uppercase",
@@ -55,7 +55,7 @@ export function RenderBarChart({
                 width: 60,
                 flexShrink: 0,
                 textAlign: "right",
-                fontSize: "0.55rem",
+                fontSize: "0.65rem",
                 color: "var(--text-dim)",
               }}
             >
@@ -76,7 +76,7 @@ export function RenderBarChart({
               <span
                 style={{
                   flexShrink: 0,
-                  fontSize: "0.55rem",
+                  fontSize: "0.65rem",
                   fontWeight: 600,
                   color: "var(--text)",
                 }}

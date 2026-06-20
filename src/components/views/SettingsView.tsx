@@ -62,6 +62,8 @@ type DatasourceInfo = {
   icon: string;
   connected: boolean;
   needsOAuth: boolean;
+  needsScopeUpgrade?: boolean;
+  scopeUpgradeReason?: string;
 };
 
 type McpServer = {
@@ -76,12 +78,23 @@ type McpServer = {
   addedAt: number;
 };
 
+type CustomSkillInfo = {
+  id: string;
+  name: string;
+  slash: string;
+  icon: string;
+  description: string;
+  custom: true;
+};
+
 export function SettingsView({ onBack }: { onBack: () => void }) {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [backends, setBackends] = useState<BackendStatus[]>([]);
   const [backendDefs, setBackendDefs] = useState<BackendDef[]>([]);
   const [profile, setProfile] = useState<Profile>({ name: "", role: "", company: "" });
   const [skills, setSkills] = useState<SkillInfo[]>([]);
+  const [customSkills, setCustomSkills] = useState<CustomSkillInfo[]>([]);
+  const [showAddSkill, setShowAddSkill] = useState(false);
   const [editingAgent, setEditingAgent] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editingField, setEditingField] = useState<string | null>(null);
@@ -92,6 +105,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
   const [testingMcp, setTestingMcp] = useState<string | null>(null);
   const [mcpTestResult, setMcpTestResult] = useState<{ id: string; success: boolean; message: string } | null>(null);
   const [analyticsOn, setAnalyticsOn] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     setAnalyticsOn(isAnalyticsEnabled());
@@ -130,6 +144,13 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
       .then((data: SkillInfo[]) => setSkills(data))
       .catch(() => {});
 
+    fetch("/api/skills/custom")
+      .then((r) => r.json())
+      .then((data: CustomSkillInfo[]) => {
+        if (Array.isArray(data)) setCustomSkills(data);
+      })
+      .catch(() => {});
+
     fetchDatasources();
 
     fetch("/api/datasources/mcp")
@@ -141,8 +162,8 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
   // Poll for datasource status while connecting, with 2-minute timeout
   useEffect(() => {
     if (!connecting) return;
-    const interval = setInterval(fetchDatasources, 2000);
-    const timeout = setTimeout(() => setConnecting(null), 120_000);
+    const interval = setInterval(fetchDatasources, 3000);
+    const timeout = setTimeout(() => setConnecting(null), 60_000);
     return () => { clearInterval(interval); clearTimeout(timeout); };
   }, [connecting, fetchDatasources]);
 
@@ -172,13 +193,34 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
       setConnecting(serviceId);
       const res = await fetch(`/api/datasources/connect?service=${serviceId}`);
       const data = await res.json();
-      if (data.url) {
+      if (data.reconnected) {
+        // Auto-detected service re-enabled — refresh immediately
+        fetchDatasources();
+        setConnecting(null);
+      } else if (data.url) {
         window.open(data.url, "_blank", "width=600,height=700");
       }
     } catch {
       setConnecting(null);
     }
-  }, []);
+  }, [fetchDatasources]);
+
+  // Poll for connection status while an OAuth flow is in progress
+  useEffect(() => {
+    if (!connecting) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/datasources");
+        const data: { datasources: DatasourceInfo[] } = await res.json();
+        setDatasources(data.datasources);
+        const target = data.datasources.find((d) => d.id === connecting);
+        if (target?.connected) {
+          setConnecting(null);
+        }
+      } catch {}
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [connecting]);
 
   const handleDisconnect = useCallback(async (serviceId: string) => {
     try {
@@ -273,6 +315,28 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
     } catch {}
   }, []);
 
+  const handleAddCustomSkill = useCallback(async (skill: { name: string; slash: string; icon: string; description: string; promptInstruction: string }) => {
+    try {
+      const res = await fetch("/api/skills/custom", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "create", ...skill }),
+      });
+      const result = await res.json();
+      if (result.ok && result.skill) {
+        setCustomSkills((prev) => [...prev, result.skill]);
+        setShowAddSkill(false);
+      }
+    } catch {}
+  }, []);
+
+  const handleDeleteCustomSkill = useCallback(async (id: string) => {
+    try {
+      await fetch(`/api/skills/custom?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      setCustomSkills((prev) => prev.filter((s) => s.id !== id));
+    } catch {}
+  }, []);
+
   const handleSwitchBackend = useCallback(
     async (agentId: string, backend: string, model: string) => {
       try {
@@ -289,7 +353,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
   );
 
   const sectionTitle: React.CSSProperties = {
-    fontSize: "0.55rem",
+    fontSize: "0.65rem",
     fontWeight: 700,
     letterSpacing: "0.08em",
     textTransform: "uppercase",
@@ -330,13 +394,13 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
             color: "var(--text-muted)",
             cursor: "pointer",
             fontFamily: "inherit",
-            fontSize: "0.7rem",
+            fontSize: "0.8rem",
             padding: "0 0.2rem",
           }}
         >
           ←
         </button>
-        <span style={{ fontSize: "0.6rem", fontWeight: 600, color: "var(--text)" }}>Settings</span>
+        <span style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)" }}>Settings</span>
       </div>
 
       {/* Content */}
@@ -355,7 +419,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontSize: "0.75rem",
+                fontSize: "0.8rem",
                 fontWeight: 700,
                 flexShrink: 0,
               }}
@@ -370,7 +434,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                 onStartEdit={() => setEditingField("name")}
                 onSave={(v) => saveProfile({ name: v })}
                 onCancel={() => setEditingField(null)}
-                style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--text)" }}
+                style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text)" }}
               />
               <EditableField
                 value={profile.role}
@@ -379,7 +443,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                 onStartEdit={() => setEditingField("role")}
                 onSave={(v) => saveProfile({ role: v })}
                 onCancel={() => setEditingField(null)}
-                style={{ fontSize: "0.5rem", color: "var(--text-muted)", marginTop: "0.1rem" }}
+                style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: "0.1rem" }}
               />
             </div>
           </div>
@@ -390,7 +454,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
               borderTop: "1px solid var(--border)",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.5rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.65rem" }}>
               <span style={{ color: "var(--text-muted)" }}>Company:</span>
               <EditableField
                 value={profile.company}
@@ -399,7 +463,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                 onStartEdit={() => setEditingField("company")}
                 onSave={(v) => saveProfile({ company: v })}
                 onCancel={() => setEditingField(null)}
-                style={{ fontSize: "0.5rem", color: "var(--text-dim)" }}
+                style={{ fontSize: "0.65rem", color: "var(--text-dim)" }}
                 inline
               />
             </div>
@@ -410,7 +474,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
         <div style={{ ...sectionTitle, marginTop: "1.25rem" }}>Connected Tools</div>
         <div
           style={{
-            fontSize: "0.45rem",
+            fontSize: "0.65rem",
             color: "var(--text-muted)",
             marginBottom: "0.5rem",
             lineHeight: 1.5,
@@ -428,7 +492,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
               color: "var(--text)",
               cursor: "pointer",
               fontFamily: "inherit",
-              fontSize: "0.45rem",
+              fontSize: "0.65rem",
               padding: "0.2rem 0.5rem",
               transition: "all 0.15s",
               marginTop: "0.35rem",
@@ -437,12 +501,12 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
               <div key={ds.id} style={card}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                    <span style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>{ds.icon}</span>
+                    <span style={{ fontSize: "0.8rem", color: "var(--text-dim)" }}>{ds.icon}</span>
                     <div>
-                      <div style={{ fontSize: "0.6rem", fontWeight: 600, color: "var(--text)" }}>
+                      <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)" }}>
                         {ds.name}
                       </div>
-                      <div style={{ fontSize: "0.45rem", color: "var(--text-muted)" }}>
+                      <div style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>
                         {ds.description}
                       </div>
                     </div>
@@ -462,22 +526,54 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                     }}
                   />
                 </div>
+                {ds.connected && ds.needsScopeUpgrade && (
+                  <div
+                    style={{
+                      marginTop: "0.3rem",
+                      padding: "0.25rem 0.4rem",
+                      background: "rgba(255,180,50,0.08)",
+                      border: "1px solid rgba(255,180,50,0.2)",
+                      borderRadius: 4,
+                      fontSize: "0.65rem",
+                      color: "var(--yellow)",
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    {ds.scopeUpgradeReason || "Reconnect to enable write actions"}
+                  </div>
+                )}
                 <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
                   {ds.connected ? (
-                    <button
-                      onClick={() => handleDisconnect(ds.id)}
-                      style={actionBtn}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = "var(--red)";
-                        e.currentTarget.style.color = "var(--red)";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = "var(--border)";
-                        e.currentTarget.style.color = "var(--text)";
-                      }}
-                    >
-                      Disconnect
-                    </button>
+                    <>
+                      <button
+                        onClick={() => handleDisconnect(ds.id)}
+                        style={actionBtn}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = "var(--red)";
+                          e.currentTarget.style.color = "var(--red)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = "var(--border)";
+                          e.currentTarget.style.color = "var(--text)";
+                        }}
+                      >
+                        Disconnect
+                      </button>
+                      {ds.needsScopeUpgrade && (
+                        <button
+                          onClick={() => !isConnecting && handleConnect(ds.id)}
+                          disabled={isConnecting}
+                          style={{
+                            ...actionBtn,
+                            borderColor: "var(--yellow)",
+                            color: "var(--yellow)",
+                            cursor: isConnecting ? "wait" : "pointer",
+                          }}
+                        >
+                          {isConnecting ? "Waiting..." : "Reconnect"}
+                        </button>
+                      )}
+                    </>
                   ) : ds.needsOAuth ? (
                     <button
                       onClick={() => !isConnecting && handleConnect(ds.id)}
@@ -492,12 +588,19 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                       {isConnecting ? "Waiting..." : "Connect"}
                     </button>
                   ) : (
-                    <span style={{ fontSize: "0.4rem", color: "var(--text-muted)", marginTop: "0.35rem" }}>
-                      Auto-detected
-                    </span>
+                    <button
+                      onClick={() => handleConnect(ds.id)}
+                      style={{
+                        ...actionBtn,
+                        borderColor: "var(--accent)",
+                        color: "var(--accent)",
+                      }}
+                    >
+                      Reconnect
+                    </button>
                   )}
-                  {ds.connected && (
-                    <span style={{ fontSize: "0.4rem", color: "var(--green)", marginTop: "0.35rem" }}>
+                  {ds.connected && !ds.needsScopeUpgrade && (
+                    <span style={{ fontSize: "0.65rem", color: "var(--green)", marginTop: "0.35rem" }}>
                       Connected
                     </span>
                   )}
@@ -507,6 +610,112 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
           })}
         </div>
 
+        {/* ── AI Engines ── */}
+        <div style={{ ...sectionTitle, marginTop: "1.25rem" }}>AI Engines</div>
+        <div style={{ display: "flex", gap: "0.4rem", marginBottom: "0.75rem" }}>
+          {backends.map((b) => (
+            <div
+              key={b.id}
+              style={{
+                ...card,
+                flex: 1,
+                marginBottom: 0,
+                opacity: b.installed ? 1 : 0.5,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginBottom: "0.25rem" }}>
+                <span style={{ fontSize: "0.8rem" }}>{BACKEND_ICONS[b.id] || "?"}</span>
+                <span style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)" }}>
+                  {b.label}
+                </span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
+                <span
+                  className="dot"
+                  style={{
+                    background: b.installed ? "var(--green)" : "var(--red)",
+                    width: 5,
+                    height: 5,
+                  }}
+                />
+                <span style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>
+                  {b.installed ? b.version || "Ready" : "Not installed"}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Analytics ── */}
+        <div style={{ ...sectionTitle, marginTop: "1.25rem" }}>Analytics</div>
+        <div style={card}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)" }}>
+                Usage analytics
+              </div>
+              <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: "0.15rem", lineHeight: 1.4 }}>
+                Help improve Cockpit by sharing anonymous usage data (features used, session count). No personal data or chat content is ever sent.
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                const next = !analyticsOn;
+                setAnalyticsOn(next);
+                setAnalyticsEnabled(next);
+              }}
+              style={{
+                background: analyticsOn ? "var(--accent)" : "var(--border)",
+                border: "none",
+                borderRadius: 8,
+                width: 28,
+                height: 16,
+                position: "relative",
+                cursor: "pointer",
+                flexShrink: 0,
+                transition: "background 0.15s",
+                marginLeft: "0.75rem",
+              }}
+            >
+              <span style={{ position: "absolute", top: 2, left: analyticsOn ? 14 : 2, width: 12, height: 12, borderRadius: "50%", background: "var(--bg)", transition: "left 0.15s" }} />
+            </button>
+          </div>
+        </div>
+
+        {/* ── Advanced ── */}
+        <button
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          style={{
+            ...sectionTitle,
+            marginTop: "1.5rem",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            fontFamily: "inherit",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.4rem",
+            padding: 0,
+          }}
+        >
+          <span
+            style={{
+              display: "inline-block",
+              transform: showAdvanced ? "rotate(90deg)" : "none",
+              transition: "transform 0.15s",
+              fontSize: "0.68rem",
+            }}
+          >
+            ▶
+          </span>
+          Advanced
+          <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
+            — MCP servers, skills, agent management
+          </span>
+        </button>
+
+        {showAdvanced && (
+          <>
         {/* ── MCP Servers ── */}
         <div style={{ ...sectionTitle, marginTop: "1.25rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <span>MCP Servers</span>
@@ -519,7 +728,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
               color: "var(--text-muted)",
               cursor: "pointer",
               fontFamily: "inherit",
-              fontSize: "0.4rem",
+              fontSize: "0.65rem",
               padding: "0.1rem 0.4rem",
               textTransform: "none",
               letterSpacing: 0,
@@ -531,7 +740,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
         </div>
         <div
           style={{
-            fontSize: "0.45rem",
+            fontSize: "0.65rem",
             color: "var(--text-muted)",
             marginBottom: "0.5rem",
             lineHeight: 1.5,
@@ -549,12 +758,12 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
             <div key={server.id} style={card}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                  <span style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>{"\u{1F50C}"}</span>
+                  <span style={{ fontSize: "0.8rem", color: "var(--text-dim)" }}>{"\u{1F50C}"}</span>
                   <div>
-                    <div style={{ fontSize: "0.6rem", fontWeight: 600, color: "var(--text)" }}>
+                    <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)" }}>
                       {server.name}
                     </div>
-                    <div style={{ fontSize: "0.45rem", color: "var(--text-muted)" }}>
+                    <div style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>
                       {server.transport === "stdio"
                         ? `${server.command} ${(server.args || []).join(" ")}`
                         : server.url}
@@ -589,7 +798,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                     color: isTesting ? "var(--yellow)" : "var(--text)",
                     cursor: isTesting ? "wait" : "pointer",
                     fontFamily: "inherit",
-                    fontSize: "0.45rem",
+                    fontSize: "0.65rem",
                     padding: "0.15rem 0.4rem",
                   }}
                 >
@@ -604,7 +813,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                     color: "var(--text)",
                     cursor: "pointer",
                     fontFamily: "inherit",
-                    fontSize: "0.45rem",
+                    fontSize: "0.65rem",
                     padding: "0.15rem 0.4rem",
                   }}
                   onMouseEnter={(e) => {
@@ -619,7 +828,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                   Remove
                 </button>
                 {testResult && (
-                  <span style={{ fontSize: "0.4rem", color: testResult.success ? "var(--green)" : "var(--red)" }}>
+                  <span style={{ fontSize: "0.65rem", color: testResult.success ? "var(--green)" : "var(--red)" }}>
                     {testResult.message}
                   </span>
                 )}
@@ -629,7 +838,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
         })}
 
         {mcpServers.length === 0 && !showAddMcp && (
-          <div style={{ ...card, textAlign: "center", color: "var(--text-muted)", fontSize: "0.45rem", padding: "0.8rem" }}>
+          <div style={{ ...card, textAlign: "center", color: "var(--text-muted)", fontSize: "0.65rem", padding: "0.8rem" }}>
             No MCP servers configured
           </div>
         )}
@@ -637,7 +846,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
         {/* ── Skills ── */}
         <div style={{ ...sectionTitle, marginTop: "1.25rem" }}>
           Skills
-          <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, marginLeft: "0.4rem", fontSize: "0.45rem" }}>
+          <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, marginLeft: "0.4rem", fontSize: "0.65rem" }}>
             {skills.filter((s) => s.enabled).length}/{skills.length} active
           </span>
         </div>
@@ -646,10 +855,10 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
             <div key={skill.id} style={{ ...card, opacity: skill.enabled ? 1 : 0.5, transition: "opacity 0.15s" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flex: 1, minWidth: 0 }}>
-                  <span style={{ fontSize: "0.75rem", flexShrink: 0 }}>{skill.icon}</span>
+                  <span style={{ fontSize: "0.8rem", flexShrink: 0 }}>{skill.icon}</span>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: "0.55rem", fontWeight: 600, color: "var(--text)" }}>{skill.name}</div>
-                    <div style={{ fontSize: "0.4rem", color: "var(--text-muted)", marginTop: "0.05rem" }}>{skill.slash} — {skill.description}</div>
+                    <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)" }}>{skill.name}</div>
+                    <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: "0.05rem" }}>{skill.slash} — {skill.description}</div>
                   </div>
                 </div>
                 <button
@@ -673,41 +882,83 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
           ))}
         </div>
 
-        {/* ── AI Engines ── */}
-        <div style={{ ...sectionTitle, marginTop: "1.25rem" }}>AI Engines</div>
-        <div style={{ display: "flex", gap: "0.4rem", marginBottom: "0.75rem" }}>
-          {backends.map((b) => (
-            <div
-              key={b.id}
-              style={{
-                ...card,
-                flex: 1,
-                marginBottom: 0,
-                opacity: b.installed ? 1 : 0.5,
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginBottom: "0.25rem" }}>
-                <span style={{ fontSize: "0.7rem" }}>{BACKEND_ICONS[b.id] || "?"}</span>
-                <span style={{ fontSize: "0.6rem", fontWeight: 600, color: "var(--text)" }}>
-                  {b.label}
-                </span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
-                <span
-                  className="dot"
-                  style={{
-                    background: b.installed ? "var(--green)" : "var(--red)",
-                    width: 5,
-                    height: 5,
-                  }}
-                />
-                <span style={{ fontSize: "0.45rem", color: "var(--text-muted)" }}>
-                  {b.installed ? b.version || "Ready" : "Not installed"}
-                </span>
-              </div>
-            </div>
-          ))}
+        {/* ── Custom Skills ── */}
+        <div style={{ ...sectionTitle, marginTop: "1rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span>Custom Skills</span>
+          <button
+            onClick={() => setShowAddSkill(true)}
+            style={{
+              background: "none",
+              border: "1px solid var(--border)",
+              borderRadius: 4,
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              fontSize: "0.65rem",
+              padding: "0.1rem 0.4rem",
+              textTransform: "none",
+              letterSpacing: 0,
+              fontWeight: 400,
+            }}
+          >
+            + Create
+          </button>
         </div>
+        <div
+          style={{
+            fontSize: "0.65rem",
+            color: "var(--text-muted)",
+            marginBottom: "0.5rem",
+            lineHeight: 1.5,
+          }}
+        >
+          Create reusable skills with custom prompts. The AI can also propose skills during conversations.
+        </div>
+
+        {showAddSkill && <AddSkillForm onAdd={handleAddCustomSkill} onCancel={() => setShowAddSkill(false)} card={card} />}
+
+        {customSkills.map((skill) => (
+          <div key={skill.id} style={{ ...card, borderColor: "rgba(168,139,250,0.2)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: "0.8rem", flexShrink: 0 }}>{skill.icon}</span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "#a78bfa" }}>{skill.name}</div>
+                  <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: "0.05rem" }}>{skill.slash} — {skill.description}</div>
+                </div>
+              </div>
+              <button
+                onClick={() => handleDeleteCustomSkill(skill.id)}
+                style={{
+                  background: "none",
+                  border: "1px solid var(--border)",
+                  borderRadius: 4,
+                  color: "var(--text-muted)",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  fontSize: "0.65rem",
+                  padding: "0.1rem 0.35rem",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = "var(--red)";
+                  e.currentTarget.style.color = "var(--red)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = "var(--border)";
+                  e.currentTarget.style.color = "var(--text-muted)";
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        ))}
+
+        {customSkills.length === 0 && !showAddSkill && (
+          <div style={{ ...card, textAlign: "center", color: "var(--text-muted)", fontSize: "0.65rem", padding: "0.8rem" }}>
+            No custom skills yet — create one or let the AI propose one during chat
+          </div>
+        )}
 
         {/* ── Agents ── */}
         <div style={{ ...sectionTitle, marginTop: "1.25rem" }}>Agents</div>
@@ -742,7 +993,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                         border: "1px solid var(--border-light)",
                         borderRadius: 3,
                         padding: "0.15rem 0.3rem",
-                        fontSize: "0.6rem",
+                        fontSize: "0.65rem",
                         color: "var(--text)",
                         fontFamily: "inherit",
                         outline: "none",
@@ -751,7 +1002,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                     />
                   ) : (
                     <span
-                      style={{ fontSize: "0.6rem", fontWeight: 600, color: "var(--text)", cursor: "pointer" }}
+                      style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)", cursor: "pointer" }}
                       onClick={() => {
                         setEditingAgent(agent.id);
                         setEditName(agent.name);
@@ -763,7 +1014,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                   )}
                   <span
                     style={{
-                      fontSize: "0.45rem",
+                      fontSize: "0.65rem",
                       background: "rgba(255,255,255,0.06)",
                       padding: "0.1rem 0.3rem",
                       borderRadius: 3,
@@ -783,7 +1034,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                       color: "var(--text-muted)",
                       cursor: "pointer",
                       fontFamily: "inherit",
-                      fontSize: "0.5rem",
+                      fontSize: "0.65rem",
                       padding: "0.1rem 0.3rem",
                       opacity: 0.5,
                       transition: "opacity 0.1s",
@@ -814,7 +1065,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                   gap: "0.35rem",
                 }}
               >
-                <span style={{ fontSize: "0.5rem", color: "var(--text-muted)", flexShrink: 0 }}>
+                <span style={{ fontSize: "0.65rem", color: "var(--text-muted)", flexShrink: 0 }}>
                   Engine:
                 </span>
                 <select
@@ -828,7 +1079,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                     border: "1px solid var(--border)",
                     borderRadius: 3,
                     padding: "0.15rem 0.3rem",
-                    fontSize: "0.5rem",
+                    fontSize: "0.65rem",
                     color: "var(--text)",
                     fontFamily: "inherit",
                     outline: "none",
@@ -849,41 +1100,8 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
           );
         })}
 
-        {/* ── Analytics ── */}
-        <div style={{ ...sectionTitle, marginTop: "1.25rem" }}>Analytics</div>
-        <div style={card}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div>
-              <div style={{ fontSize: "0.6rem", fontWeight: 600, color: "var(--text)" }}>
-                Usage analytics
-              </div>
-              <div style={{ fontSize: "0.45rem", color: "var(--text-muted)", marginTop: "0.15rem", lineHeight: 1.4 }}>
-                Help improve Cockpit by sharing anonymous usage data (features used, session count). No personal data or chat content is ever sent.
-              </div>
-            </div>
-            <button
-              onClick={() => {
-                const next = !analyticsOn;
-                setAnalyticsOn(next);
-                setAnalyticsEnabled(next);
-              }}
-              style={{
-                background: analyticsOn ? "var(--accent)" : "var(--border)",
-                border: "none",
-                borderRadius: 8,
-                width: 28,
-                height: 16,
-                position: "relative",
-                cursor: "pointer",
-                flexShrink: 0,
-                transition: "background 0.15s",
-                marginLeft: "0.75rem",
-              }}
-            >
-              <span style={{ position: "absolute", top: 2, left: analyticsOn ? 14 : 2, width: 12, height: 12, borderRadius: "50%", background: "var(--bg)", transition: "left 0.15s" }} />
-            </button>
-          </div>
-        </div>
+          </>
+        )}
 
         {/* Bottom spacer */}
         <div style={{ height: "2rem" }} />
@@ -914,7 +1132,7 @@ function AddMcpForm({
     border: "1px solid var(--border)",
     borderRadius: 4,
     padding: "0.25rem 0.4rem",
-    fontSize: "0.5rem",
+    fontSize: "0.65rem",
     color: "var(--text)",
     fontFamily: "inherit",
     outline: "none",
@@ -922,7 +1140,7 @@ function AddMcpForm({
   };
 
   const labelStyle: React.CSSProperties = {
-    fontSize: "0.45rem",
+    fontSize: "0.65rem",
     color: "var(--text-muted)",
     marginBottom: "0.2rem",
     display: "block",
@@ -934,7 +1152,7 @@ function AddMcpForm({
 
   return (
     <div style={{ ...card, marginBottom: "0.6rem" }}>
-      <div style={{ fontSize: "0.55rem", fontWeight: 600, color: "var(--text)", marginBottom: "0.5rem" }}>
+      <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)", marginBottom: "0.5rem" }}>
         Add MCP Server
       </div>
 
@@ -952,7 +1170,7 @@ function AddMcpForm({
         <label style={labelStyle}>Transport</label>
         <div style={{ display: "flex", gap: "0.5rem" }}>
           {(["stdio", "sse"] as const).map((t) => (
-            <label key={t} style={{ fontSize: "0.45rem", color: "var(--text)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.2rem" }}>
+            <label key={t} style={{ fontSize: "0.65rem", color: "var(--text)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.2rem" }}>
               <input
                 type="radio"
                 name="transport"
@@ -1019,7 +1237,7 @@ function AddMcpForm({
             color: "var(--bg)",
             cursor: canSubmit ? "pointer" : "not-allowed",
             fontFamily: "inherit",
-            fontSize: "0.45rem",
+            fontSize: "0.65rem",
             padding: "0.25rem 0.6rem",
             fontWeight: 600,
           }}
@@ -1035,7 +1253,131 @@ function AddMcpForm({
             color: "var(--text-muted)",
             cursor: "pointer",
             fontFamily: "inherit",
-            fontSize: "0.45rem",
+            fontSize: "0.65rem",
+            padding: "0.25rem 0.6rem",
+          }}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Add Custom Skill Form ───────────────────────────────────────────
+
+function AddSkillForm({
+  onAdd,
+  onCancel,
+  card,
+}: {
+  onAdd: (skill: { name: string; slash: string; icon: string; description: string; promptInstruction: string }) => void;
+  onCancel: () => void;
+  card: React.CSSProperties;
+}) {
+  const [name, setName] = useState("");
+  const [slash, setSlash] = useState("");
+  const [icon, setIcon] = useState("★");
+  const [description, setDescription] = useState("");
+  const [promptInstruction, setPromptInstruction] = useState("");
+
+  const inputStyle: React.CSSProperties = {
+    background: "var(--bg)",
+    border: "1px solid var(--border)",
+    borderRadius: 4,
+    padding: "0.25rem 0.4rem",
+    fontSize: "0.65rem",
+    color: "var(--text)",
+    fontFamily: "inherit",
+    outline: "none",
+    width: "100%",
+  };
+
+  const labelStyle: React.CSSProperties = {
+    fontSize: "0.65rem",
+    color: "var(--text-muted)",
+    marginBottom: "0.2rem",
+    display: "block",
+  };
+
+  const canSubmit = name.trim() && promptInstruction.trim();
+
+  return (
+    <div style={{ ...card, marginBottom: "0.6rem", borderColor: "rgba(168,139,250,0.3)" }}>
+      <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "#a78bfa", marginBottom: "0.5rem" }}>
+        Create Custom Skill
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.4rem", marginBottom: "0.4rem" }}>
+        <div>
+          <label style={labelStyle}>Name</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Weekly Report" style={inputStyle} />
+        </div>
+        <div style={{ width: 50 }}>
+          <label style={labelStyle}>Icon</label>
+          <input value={icon} onChange={(e) => setIcon(e.target.value)} style={{ ...inputStyle, textAlign: "center" }} maxLength={2} />
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.4rem", marginBottom: "0.4rem" }}>
+        <div>
+          <label style={labelStyle}>Slash command</label>
+          <input value={slash} onChange={(e) => setSlash(e.target.value)} placeholder="/report" style={inputStyle} />
+        </div>
+        <div>
+          <label style={labelStyle}>Description</label>
+          <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What this skill does" style={inputStyle} />
+        </div>
+      </div>
+
+      <div style={{ marginBottom: "0.4rem" }}>
+        <label style={labelStyle}>Prompt instruction</label>
+        <textarea
+          value={promptInstruction}
+          onChange={(e) => setPromptInstruction(e.target.value)}
+          placeholder="Instructions for the AI when this skill is activated..."
+          rows={3}
+          style={{ ...inputStyle, resize: "vertical", minHeight: 60 }}
+        />
+      </div>
+
+      <div style={{ display: "flex", gap: "0.35rem", marginTop: "0.5rem" }}>
+        <button
+          onClick={() => {
+            if (!canSubmit) return;
+            onAdd({
+              name: name.trim(),
+              slash: slash.trim() || `/${name.trim().toLowerCase().replace(/\s+/g, "-")}`,
+              icon,
+              description: description.trim() || `Custom skill: ${name.trim()}`,
+              promptInstruction: promptInstruction.trim(),
+            });
+          }}
+          disabled={!canSubmit}
+          style={{
+            background: canSubmit ? "#a78bfa" : "var(--border)",
+            border: "none",
+            borderRadius: 4,
+            color: "var(--bg)",
+            cursor: canSubmit ? "pointer" : "not-allowed",
+            fontFamily: "inherit",
+            fontSize: "0.65rem",
+            padding: "0.25rem 0.6rem",
+            fontWeight: 600,
+          }}
+        >
+          Create Skill
+        </button>
+        <button
+          onClick={onCancel}
+          style={{
+            background: "none",
+            border: "1px solid var(--border)",
+            borderRadius: 4,
+            color: "var(--text-muted)",
+            cursor: "pointer",
+            fontFamily: "inherit",
+            fontSize: "0.65rem",
             padding: "0.25rem 0.6rem",
           }}
         >

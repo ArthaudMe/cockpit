@@ -1,4 +1,9 @@
 import { spawn } from "child_process";
+import { createHash } from "crypto";
+import { mkdirSync, writeFileSync, rmSync } from "fs";
+import { join } from "path";
+import { homedir } from "os";
+import { readJsonCached, invalidateFileCache } from "@/lib/fs-cache";
 import type {
   DatasourceData,
   LinearIssue,
@@ -62,6 +67,47 @@ interface ProjectMapping {
 let cachedResult: InferredProject[] | null = null;
 let cacheTimestamp = 0;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// The LLM clustering (mappings) only depends on the *names* of Linear
+// projects / GitHub repos / Slack channels, so it's persisted to disk keyed
+// by a hash of those names. App restarts and routine polls reuse it instead
+// of spawning a multi-second `claude -p` call; the LLM re-runs only when a
+// source appears/disappears or the user forces a refresh.
+const MAPPINGS_CACHE_PATH = join(homedir(), ".cockpit", "cache", "project-mappings.json");
+
+interface PersistedMappings {
+  key: string;
+  mappings: ProjectMapping[];
+  savedAt: number;
+}
+
+function signalsKey(signals: SignalSummary): string {
+  const names = {
+    linear: [...signals.linearProjects.keys()].sort(),
+    github: [...signals.githubRepos.keys()].sort(),
+    slack: [...signals.slackChannels.keys()].sort(),
+  };
+  return createHash("sha256").update(JSON.stringify(names)).digest("hex").slice(0, 24);
+}
+
+function loadPersistedMappings(key: string): ProjectMapping[] | null {
+  const stored = readJsonCached<PersistedMappings | null>(MAPPINGS_CACHE_PATH, null);
+  if (stored && stored.key === key && Array.isArray(stored.mappings)) {
+    return stored.mappings;
+  }
+  return null;
+}
+
+function savePersistedMappings(key: string, mappings: ProjectMapping[]) {
+  try {
+    mkdirSync(join(homedir(), ".cockpit", "cache"), { recursive: true, mode: 0o700 });
+    const payload: PersistedMappings = { key, mappings, savedAt: Date.now() };
+    writeFileSync(MAPPINGS_CACHE_PATH, JSON.stringify(payload), { mode: 0o600 });
+    invalidateFileCache(MAPPINGS_CACHE_PATH);
+  } catch (err) {
+    console.error("[projects/infer] failed to persist mappings:", err);
+  }
+}
 
 // ─── Heuristic grouping ─────────────────────────────────────────────
 
@@ -418,19 +464,28 @@ export async function inferProjects(data: DatasourceData): Promise<InferredProje
   // Start with heuristic projects (instant)
   let projects = heuristicProjects(signals);
 
-  // Try LLM refinement
-  try {
-    const prompt = buildClusteringPrompt(signals);
-    const result = await askClaude(prompt);
-    const jsonStr = result.replace(/```json?\n?/g, "").replace(/```\n?/g, "").trim();
-    const mappings: ProjectMapping[] = JSON.parse(jsonStr);
+  // Reuse the persisted clustering when the source names haven't changed —
+  // assembly always runs against the fresh data.
+  const key = signalsKey(signals);
+  const persisted = loadPersistedMappings(key);
+  if (persisted && persisted.length > 0) {
+    projects = persisted.map((m) => assembleProject(m, signals));
+  } else {
+    // Try LLM refinement
+    try {
+      const prompt = buildClusteringPrompt(signals);
+      const result = await askClaude(prompt);
+      const jsonStr = result.replace(/```json?\n?/g, "").replace(/```\n?/g, "").trim();
+      const mappings: ProjectMapping[] = JSON.parse(jsonStr);
 
-    if (Array.isArray(mappings) && mappings.length > 0) {
-      projects = mappings.map((m) => assembleProject(m, signals));
+      if (Array.isArray(mappings) && mappings.length > 0) {
+        projects = mappings.map((m) => assembleProject(m, signals));
+        savePersistedMappings(key, mappings);
+      }
+    } catch (err) {
+      console.error("[projects/infer] LLM clustering failed, using heuristic:", err);
+      // Fall through with heuristic projects
     }
-  } catch (err) {
-    console.error("[projects/infer] LLM clustering failed, using heuristic:", err);
-    // Fall through with heuristic projects
   }
 
   cachedResult = projects;
@@ -438,8 +493,14 @@ export async function inferProjects(data: DatasourceData): Promise<InferredProje
   return projects;
 }
 
-/** Force-clear the cache so the next call re-infers */
+/** Force-clear the caches so the next call re-runs the LLM clustering */
 export function clearInferCache() {
   cachedResult = null;
   cacheTimestamp = 0;
+  try {
+    rmSync(MAPPINGS_CACHE_PATH, { force: true });
+    invalidateFileCache(MAPPINGS_CACHE_PATH);
+  } catch {
+    // ignore
+  }
 }

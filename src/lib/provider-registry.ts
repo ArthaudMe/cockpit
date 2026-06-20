@@ -40,9 +40,9 @@ export const PROVIDERS: Record<string, ProviderDef> = {
     versionArgs: ["--version"],
     installHint: "npm install -g @anthropic-ai/claude-code",
     models: [
-      { id: "claude-sonnet-4-6", label: "Sonnet (fast)" },
-      { id: "claude-opus-4-6", label: "Opus (smart)" },
-      { id: "claude-haiku-4-5-20251001", label: "Haiku (instant)" },
+      { id: "claude-opus-4-8", label: "Opus 4.8 (smart)" },
+      { id: "claude-sonnet-4-6", label: "Sonnet 4.6 (fast)" },
+      { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5 (instant)" },
     ],
     defaultModel: "claude-sonnet-4-6",
     buildArgs: (model, systemPrompt, opts) => {
@@ -51,6 +51,7 @@ export const PROVIDERS: Record<string, ProviderDef> = {
         "--output-format", "text",
         "--model", model,
         "--append-system-prompt", systemPrompt,
+        "--strict-mcp-config",
       ];
       if (opts?.images) {
         for (const img of opts.images) {
@@ -72,11 +73,11 @@ export const PROVIDERS: Record<string, ProviderDef> = {
     versionArgs: ["--version"],
     installHint: "npm install -g @openai/codex",
     models: [
+      { id: "gpt-5.5", label: "GPT-5.5 (smart)" },
       { id: "o4-mini", label: "o4-mini (fast)" },
-      { id: "o3", label: "o3 (smart)" },
-      { id: "gpt-4.1", label: "GPT-4.1" },
+      { id: "o3", label: "o3 (reasoning)" },
     ],
-    defaultModel: "o4-mini",
+    defaultModel: "gpt-5.5",
     buildArgs: (model, systemPrompt) => [
       "-q",
       "--model", model,
@@ -105,48 +106,6 @@ export const PROVIDERS: Record<string, ProviderDef> = {
     supportsHooks: false,
   },
 
-  gemini: {
-    id: "gemini",
-    label: "Gemini",
-    icon: "◈",
-    binary: "gemini",
-    versionArgs: ["--version"],
-    installHint: "npm install -g @anthropic-ai/gemini-cli",
-    models: [
-      { id: "gemini-2.5-pro", label: "2.5 Pro" },
-      { id: "gemini-2.5-flash", label: "2.5 Flash" },
-    ],
-    defaultModel: "gemini-2.5-pro",
-    buildArgs: (model, systemPrompt) => [
-      "--model", model,
-      "--system-instruction", systemPrompt,
-    ],
-    supportsPrewarm: false,
-    supportsHooks: false,
-  },
-
-  aider: {
-    id: "aider",
-    label: "Aider",
-    icon: "▸",
-    binary: "aider",
-    versionArgs: ["--version"],
-    installHint: "pip install aider-chat",
-    models: [
-      { id: "sonnet", label: "Sonnet" },
-      { id: "opus", label: "Opus" },
-      { id: "gpt-4o", label: "GPT-4o" },
-    ],
-    defaultModel: "sonnet",
-    buildArgs: (model, _systemPrompt) => [
-      "--model", model,
-      "--no-auto-commits",
-      "--yes",
-      "--message",
-    ],
-    supportsPrewarm: false,
-    supportsHooks: false,
-  },
 };
 
 export function getProvider(id: string): ProviderDef | undefined {

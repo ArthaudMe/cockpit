@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import type { Context } from "@/lib/context-client";
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
 import { ChatMessage } from "../ui/ChatMessage";
 import { usePersistedState } from "@/lib/use-persisted-state";
 import { SKILLS, expandSlashCommand } from "@/lib/skills-defs";
@@ -37,19 +36,28 @@ const BACKEND_ICONS: Record<string, string> = {
   ollama: "○",
 };
 
-export function ChatColumn({
-  context,
+// Cap per-agent history so state and localStorage don't grow unboundedly.
+const MAX_MESSAGES_PER_AGENT = 200;
+
+// Strip base64 images before persisting — a few screenshots would blow
+// through the ~5MB localStorage quota and silently kill persistence.
+function stripImagesForPersist(byAgent: Record<string, Message[]>): Record<string, Message[]> {
+  const out: Record<string, Message[]> = {};
+  for (const [id, msgs] of Object.entries(byAgent)) {
+    out[id] = msgs.map((m) => (m.images ? { role: m.role, content: m.content } : m));
+  }
+  return out;
+}
+
+export const ChatColumn = memo(function ChatColumn({
   inputValue,
   onInputChange,
   claudeConnected,
-  onOpenFile,
   onOpenFocus,
 }: {
-  context: Context;
   inputValue: string;
   onInputChange: (v: string) => void;
   claudeConnected: boolean;
-  onOpenFile?: (path: string) => void;
   onOpenFocus?: (focus: ContextFocus) => void;
 }) {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
@@ -60,10 +68,12 @@ export function ChatColumn({
   );
   const [messagesByAgent, setMessagesByAgent] = usePersistedState<
     Record<string, Message[]>
-  >("cockpit-chat-agents", {});
+  >("cockpit-chat-agents", {}, { serialize: stripImagesForPersist });
   const [streamingAgents, setStreamingAgents] = useState<Set<string>>(new Set());
   const [notifiedAgents, setNotifiedAgents] = useState<Set<string>>(new Set());
-  const [showNewAgent, setShowNewAgent] = useState(false);
+  const [creatingAgent, setCreatingAgent] = useState(false);
+  const [renamingAgentId, setRenamingAgentId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [slashSelected, setSlashSelected] = useState(0);
   const [pendingImages, setPendingImages] = useState<string[]>([]);
@@ -130,10 +140,16 @@ export function ChatColumn({
 
   const setMessagesFor = useCallback(
     (agentId: string, updater: (prev: Message[]) => Message[]) => {
-      setMessagesByAgent((prev) => ({
-        ...prev,
-        [agentId]: updater(prev[agentId] || []),
-      }));
+      setMessagesByAgent((prev) => {
+        const next = updater(prev[agentId] || []);
+        return {
+          ...prev,
+          [agentId]:
+            next.length > MAX_MESSAGES_PER_AGENT
+              ? next.slice(-MAX_MESSAGES_PER_AGENT)
+              : next,
+        };
+      });
     },
     [setMessagesByAgent]
   );
@@ -332,23 +348,45 @@ export function ChatColumn({
     }
   };
 
-  const handleCreateAgent = useCallback(
-    async (name: string, role: string, backend: string, model: string) => {
+  // "+" creates a working agent immediately — no form. Name and model are
+  // edited inline afterwards (double-click tab to rename, switcher for model).
+  const handleCreateAgent = useCallback(async () => {
+    if (creatingAgent) return;
+    setCreatingAgent(true);
+    try {
+      const res = await fetch("/api/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: `Agent ${agents.length + 1}`, role: "general" }),
+      });
+      const agent: AgentInfo = await res.json();
+      setAgents((prev) => [...prev, agent]);
+      setActiveAgentId(agent.id);
+    } catch {
+      // silently fail
+    } finally {
+      setCreatingAgent(false);
+    }
+  }, [agents.length, creatingAgent, setActiveAgentId]);
+
+  const handleRenameAgent = useCallback(
+    async (id: string) => {
+      const name = renameValue.trim();
+      setRenamingAgentId(null);
+      if (!name) return;
       try {
-        const res = await fetch("/api/agents", {
-          method: "POST",
+        const res = await fetch(`/api/agents/${id}`, {
+          method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, role, backend, model }),
+          body: JSON.stringify({ name }),
         });
-        const agent: AgentInfo = await res.json();
-        setAgents((prev) => [...prev, agent]);
-        setActiveAgentId(agent.id);
-        setShowNewAgent(false);
+        const updated: AgentInfo = await res.json();
+        setAgents((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
       } catch {
         // silently fail
       }
     },
-    [setActiveAgentId]
+    [renameValue]
   );
 
   const handleDeleteAgent = useCallback(
@@ -475,12 +513,17 @@ export function ChatColumn({
             <button
               key={agent.id}
               onClick={() => setActiveAgentId(agent.id)}
+              onDoubleClick={() => {
+                setRenamingAgentId(agent.id);
+                setRenameValue(agent.name);
+              }}
+              title="Double-click to rename"
               style={{
                 background: agent.id === activeAgentId ? "var(--bg)" : "transparent",
                 border: "none",
                 borderRight: "1px solid var(--border)",
                 padding: "0.35rem 0.6rem",
-                fontSize: "0.55rem",
+                fontSize: "0.75rem",
                 fontWeight: agent.id === activeAgentId ? 600 : 400,
                 color: agent.id === activeAgentId ? "var(--text)" : "var(--text-dim)",
                 cursor: "pointer",
@@ -505,11 +548,36 @@ export function ChatColumn({
                   animation: streamingAgents.has(agent.id) ? "pulse 1s ease-in-out infinite" : undefined,
                 }}
               />
-              {agent.name}
+              {renamingAgentId === agent.id ? (
+                <input
+                  autoFocus
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onBlur={() => handleRenameAgent(agent.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleRenameAgent(agent.id);
+                    if (e.key === "Escape") setRenamingAgentId(null);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    background: "var(--bg)",
+                    border: "1px solid var(--border-light)",
+                    borderRadius: 3,
+                    color: "var(--text)",
+                    fontSize: "0.75rem",
+                    fontFamily: "inherit",
+                    outline: "none",
+                    width: 90,
+                    padding: "0 0.2rem",
+                  }}
+                />
+              ) : (
+                agent.name
+              )}
               {notifiedAgents.has(agent.id) && (
                 <span
                   style={{
-                    fontSize: "0.4rem",
+                    fontSize: "0.75rem",
                     background: "var(--blue)",
                     color: "var(--bg)",
                     borderRadius: "50%",
@@ -525,7 +593,7 @@ export function ChatColumn({
                   !
                 </span>
               )}
-              <span style={{ fontSize: "0.45rem", color: "var(--text-muted)" }}>
+              <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
                 {BACKEND_ICONS[agent.backend] || "?"} {shortModel(agent.model)}
               </span>
               {agents.length > 1 && (
@@ -535,7 +603,7 @@ export function ChatColumn({
                     handleDeleteAgent(agent.id);
                   }}
                   style={{
-                    fontSize: "0.5rem",
+                    fontSize: "0.75rem",
                     color: "var(--text-muted)",
                     cursor: "pointer",
                     marginLeft: "0.15rem",
@@ -552,31 +620,25 @@ export function ChatColumn({
         </div>
 
         <button
-          onClick={() => setShowNewAgent(!showNewAgent)}
+          onClick={handleCreateAgent}
+          disabled={creatingAgent}
           style={{
             background: "none",
             border: "none",
             borderLeft: "1px solid var(--border)",
             padding: "0.35rem 0.5rem",
-            fontSize: "0.65rem",
+            fontSize: "0.75rem",
             color: "var(--text-muted)",
-            cursor: "pointer",
+            cursor: creatingAgent ? "default" : "pointer",
             fontFamily: "inherit",
             flexShrink: 0,
+            opacity: creatingAgent ? 0.5 : 1,
           }}
-          title="New agent"
+          title="New agent (double-click a tab to rename)"
         >
           +
         </button>
       </div>
-
-      {showNewAgent && (
-        <NewAgentForm
-          backends={backends}
-          onSubmit={handleCreateAgent}
-          onCancel={() => setShowNewAgent(false)}
-        />
-      )}
 
       {/* Messages area */}
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "0.75rem" }}>
@@ -591,7 +653,7 @@ export function ChatColumn({
               alignItems: "center",
               justifyContent: "center",
               height: "100%",
-              fontSize: "0.55rem",
+              fontSize: "0.75rem",
               color: "var(--text-muted)",
             }}
           >
@@ -600,13 +662,13 @@ export function ChatColumn({
         )}
 
         {messages.map((msg, i) => (
-          <ChatMessage key={i} message={msg} onApproveSubagent={handleApproveSubagent} onOpenFile={onOpenFile} onOpenFocus={onOpenFocus} />
+          <ChatMessage key={i} message={msg} onApproveSubagent={handleApproveSubagent} onOpenFocus={onOpenFocus} />
         ))}
 
         {streaming && (
           <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", padding: "0.25rem 0" }}>
             <span className="dot dot-green" style={{ animation: "spin 1s linear infinite" }} />
-            <span style={{ fontSize: "0.5rem", color: "var(--text-muted)" }}>thinking...</span>
+            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>thinking...</span>
           </div>
         )}
       </div>
@@ -629,7 +691,7 @@ export function ChatColumn({
               zIndex: 101,
             }}
           >
-            <div style={{ padding: "0.35rem 0.5rem", borderBottom: "1px solid var(--border)", fontSize: "0.45rem", color: "var(--text-muted)" }}>
+            <div style={{ padding: "0.35rem 0.5rem", borderBottom: "1px solid var(--border)", fontSize: "0.75rem", color: "var(--text-muted)" }}>
               Skills — Tab to select
             </div>
             {slashMatches.map((skill, idx) => (
@@ -650,13 +712,13 @@ export function ChatColumn({
                   textAlign: "left",
                 }}
               >
-                <span style={{ fontSize: "0.7rem", width: 16, textAlign: "center" }}>{skill.icon}</span>
+                <span style={{ fontSize: "0.75rem", width: 16, textAlign: "center" }}>{skill.icon}</span>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: "0.6rem", color: "var(--text)", fontWeight: 500 }}>
+                  <div style={{ fontSize: "0.75rem", color: "var(--text)", fontWeight: 500 }}>
                     {skill.slash}
                     <span style={{ color: "var(--text-muted)", fontWeight: 400, marginLeft: "0.4rem" }}>{skill.name}</span>
                   </div>
-                  <div style={{ fontSize: "0.45rem", color: "var(--text-dim)", marginTop: "0.1rem" }}>{skill.description}</div>
+                  <div style={{ fontSize: "0.75rem", color: "var(--text-dim)", marginTop: "0.1rem" }}>{skill.description}</div>
                 </div>
               </button>
             ))}
@@ -714,7 +776,7 @@ export function ChatColumn({
                     background: "rgba(0,0,0,0.7)",
                     color: "#fff",
                     border: "none",
-                    fontSize: "0.45rem",
+                    fontSize: "0.75rem",
                     cursor: "pointer",
                     display: "flex",
                     alignItems: "center",
@@ -758,7 +820,7 @@ export function ChatColumn({
                 border: "1px solid var(--border)",
                 borderRadius: 3,
                 padding: "0.15rem 0.4rem",
-                fontSize: "0.5rem",
+                fontSize: "0.75rem",
                 color: "var(--text-dim)",
                 cursor: "pointer",
                 fontFamily: "inherit",
@@ -769,9 +831,9 @@ export function ChatColumn({
                 transition: "all 0.1s",
               }}
             >
-              <span style={{ fontSize: "0.6rem" }}>{BACKEND_ICONS[activeAgent.backend] || "?"}</span>
+              <span style={{ fontSize: "0.75rem" }}>{BACKEND_ICONS[activeAgent.backend] || "?"}</span>
               {shortModel(activeAgent.model)}
-              <span style={{ fontSize: "0.4rem", opacity: 0.6 }}>▼</span>
+              <span style={{ fontSize: "0.75rem", opacity: 0.6 }}>▼</span>
             </button>
           )}
 
@@ -784,7 +846,7 @@ export function ChatColumn({
               border: "1px solid var(--border)",
               borderRadius: 3,
               padding: "0.15rem 0.35rem",
-              fontSize: "0.6rem",
+              fontSize: "0.75rem",
               color: "var(--text-dim)",
               cursor: claudeConnected && activeAgent ? "pointer" : "default",
               fontFamily: "inherit",
@@ -827,7 +889,7 @@ export function ChatColumn({
               border: "none",
               outline: "none",
               color: "var(--text)",
-              fontSize: "0.7rem",
+              fontSize: "0.75rem",
               fontFamily: "inherit",
               maxHeight: 180,
               overflow: "auto",
@@ -857,7 +919,7 @@ export function ChatColumn({
                 (inputValue.trim() || pendingImages.length > 0) && !streaming && claudeConnected && activeAgent
                   ? "pointer"
                   : "default",
-              fontSize: "0.6rem",
+              fontSize: "0.75rem",
               fontWeight: 700,
               flexShrink: 0,
             }}
@@ -868,7 +930,7 @@ export function ChatColumn({
       </div>
     </div>
   );
-}
+});
 
 // ─── Backend Switcher (Emdash-style popover) ────────────────────────
 
@@ -919,7 +981,7 @@ function BackendSwitcher({
         style={{
           padding: "0.5rem 0.6rem",
           borderBottom: "1px solid var(--border)",
-          fontSize: "0.6rem",
+          fontSize: "0.75rem",
           fontWeight: 600,
           color: "var(--text-dim)",
         }}
@@ -935,7 +997,7 @@ function BackendSwitcher({
             <div
               style={{
                 padding: "0.4rem 0.6rem 0.2rem",
-                fontSize: "0.5rem",
+                fontSize: "0.75rem",
                 fontWeight: 600,
                 color: "var(--text-muted)",
                 textTransform: "uppercase",
@@ -945,7 +1007,7 @@ function BackendSwitcher({
                 gap: "0.3rem",
               }}
             >
-              <span style={{ fontSize: "0.6rem" }}>{BACKEND_ICONS[backend.id] || "?"}</span>
+              <span style={{ fontSize: "0.75rem" }}>{BACKEND_ICONS[backend.id] || "?"}</span>
               {backend.label}
             </div>
 
@@ -966,7 +1028,7 @@ function BackendSwitcher({
                     border: "none",
                     cursor: "pointer",
                     fontFamily: "inherit",
-                    fontSize: "0.6rem",
+                    fontSize: "0.75rem",
                     color: isActive ? "var(--text)" : "var(--text-dim)",
                     transition: "background 0.1s",
                   }}
@@ -979,7 +1041,7 @@ function BackendSwitcher({
                 >
                   <span>{model.label}</span>
                   {isActive && (
-                    <span style={{ color: "var(--green)", fontSize: "0.7rem" }}>✓</span>
+                    <span style={{ color: "var(--green)", fontSize: "0.75rem" }}>✓</span>
                   )}
                 </button>
               );
@@ -1011,15 +1073,15 @@ function EmptyState({
         gap: "0.75rem",
       }}
     >
-      <div style={{ fontSize: "0.7rem", color: "var(--text-dim)", textAlign: "center" }}>
+      <div style={{ fontSize: "0.75rem", color: "var(--text-dim)", textAlign: "center" }}>
         {agent.name}
-        <span style={{ fontSize: "0.5rem", color: "var(--text-muted)", marginLeft: "0.4rem" }}>
+        <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginLeft: "0.4rem" }}>
           {BACKEND_ICONS[agent.backend]} {agent.backend}
         </span>
       </div>
       <div
         style={{
-          fontSize: "0.55rem",
+          fontSize: "0.75rem",
           color: "var(--text-muted)",
           textAlign: "center",
           maxWidth: "80%",
@@ -1052,7 +1114,7 @@ function EmptyState({
               border: "1px solid var(--border)",
               borderRadius: 3,
               padding: "0.25rem 0.5rem",
-              fontSize: "0.55rem",
+              fontSize: "0.75rem",
               color: "var(--text-dim)",
               cursor: "pointer",
               fontFamily: "inherit",
@@ -1061,154 +1123,6 @@ function EmptyState({
             {q}
           </button>
         ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── New Agent Form ─────────────────────────────────────────────────
-
-function NewAgentForm({
-  backends,
-  onSubmit,
-  onCancel,
-}: {
-  backends: BackendDef[];
-  onSubmit: (name: string, role: string, backend: string, model: string) => void;
-  onCancel: () => void;
-}) {
-  const [name, setName] = useState("");
-  const [role, setRole] = useState("general");
-  const [backend, setBackend] = useState("claude");
-  const [model, setModel] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const selectedBackend = backends.find((b) => b.id === backend);
-  const models = selectedBackend?.models || [];
-
-  useEffect(() => {
-    if (selectedBackend) {
-      setModel(selectedBackend.defaultModel);
-    }
-  }, [backend, selectedBackend]);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
-  const handleSubmit = () => {
-    if (name.trim()) {
-      onSubmit(name.trim(), role, backend, model || "");
-    }
-  };
-
-  const selectStyle: React.CSSProperties = {
-    background: "var(--bg)",
-    border: "1px solid var(--border)",
-    borderRadius: 3,
-    padding: "0.25rem 0.4rem",
-    fontSize: "0.55rem",
-    color: "var(--text)",
-    fontFamily: "inherit",
-    outline: "none",
-  };
-
-  return (
-    <div
-      style={{
-        padding: "0.5rem 0.6rem",
-        borderBottom: "1px solid var(--border)",
-        background: "rgba(255,255,255,0.015)",
-      }}
-    >
-      <div
-        style={{
-          fontSize: "0.55rem",
-          fontWeight: 600,
-          color: "var(--text-dim)",
-          marginBottom: "0.4rem",
-        }}
-      >
-        New Agent
-      </div>
-
-      <div style={{ display: "flex", gap: "0.35rem", marginBottom: "0.35rem" }}>
-        <input
-          ref={inputRef}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-          placeholder="Agent name..."
-          style={{
-            flex: 1,
-            background: "var(--bg)",
-            border: "1px solid var(--border)",
-            borderRadius: 3,
-            padding: "0.25rem 0.4rem",
-            fontSize: "0.55rem",
-            color: "var(--text)",
-            fontFamily: "inherit",
-            outline: "none",
-          }}
-        />
-        <select value={role} onChange={(e) => setRole(e.target.value)} style={selectStyle}>
-          <option value="general">General</option>
-          <option value="research">Research</option>
-          <option value="writer">Writer</option>
-          <option value="ops">Ops</option>
-        </select>
-      </div>
-
-      <div style={{ display: "flex", gap: "0.35rem", marginBottom: "0.35rem" }}>
-        <select value={backend} onChange={(e) => setBackend(e.target.value)} style={{ ...selectStyle, flex: 1 }}>
-          {backends.map((b) => (
-            <option key={b.id} value={b.id}>
-              {BACKEND_ICONS[b.id]} {b.label}
-            </option>
-          ))}
-        </select>
-        <select value={model} onChange={(e) => setModel(e.target.value)} style={{ ...selectStyle, flex: 1 }}>
-          {models.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div style={{ display: "flex", gap: "0.3rem" }}>
-        <button
-          onClick={handleSubmit}
-          disabled={!name.trim()}
-          style={{
-            background: name.trim() ? "var(--text)" : "var(--border)",
-            color: name.trim() ? "var(--bg)" : "var(--text-muted)",
-            border: "none",
-            borderRadius: 3,
-            padding: "0.2rem 0.5rem",
-            fontSize: "0.5rem",
-            fontWeight: 600,
-            cursor: name.trim() ? "pointer" : "default",
-            fontFamily: "inherit",
-          }}
-        >
-          Create
-        </button>
-        <button
-          onClick={onCancel}
-          style={{
-            background: "none",
-            border: "1px solid var(--border)",
-            borderRadius: 3,
-            padding: "0.2rem 0.5rem",
-            fontSize: "0.5rem",
-            color: "var(--text-muted)",
-            cursor: "pointer",
-            fontFamily: "inherit",
-          }}
-        >
-          Cancel
-        </button>
       </div>
     </div>
   );

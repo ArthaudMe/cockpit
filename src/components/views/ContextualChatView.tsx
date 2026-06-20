@@ -23,10 +23,10 @@ function ToolResult({ focus }: { focus: ContextFocus }) {
   return (
     <div className="agent-tool-result">
       <div className="agent-tool-header">
-        <span style={{ color: "var(--blue)", fontSize: "0.55rem", fontWeight: 600 }}>
+        <span style={{ color: "var(--blue)", fontSize: "0.65rem", fontWeight: 600 }}>
           ⎔ context_loaded
         </span>
-        <span style={{ fontSize: "0.5rem", color: "var(--text-muted)" }}>
+        <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
           {focus.source.toLowerCase()}
         </span>
       </div>
@@ -55,7 +55,7 @@ function AgentThinking() {
         <span className="agent-thinking-dot" style={{ animationDelay: "0.2s" }} />
         <span className="agent-thinking-dot" style={{ animationDelay: "0.4s" }} />
       </span>
-      <span style={{ fontSize: "0.55rem", color: "var(--text-muted)" }}>
+      <span style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>
         Claude is thinking...
       </span>
     </div>
@@ -189,7 +189,7 @@ export function ContextualChatView({
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-          <span style={{ fontSize: "0.5rem", color: "var(--text-muted)", fontFamily: "inherit" }}>
+          <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "inherit" }}>
             {claudeConnected ? "claude-code" : "disconnected"}
           </span>
           <span
@@ -209,7 +209,7 @@ export function ContextualChatView({
 
         {/* Subtitle / meta */}
         {focus.subtitle && (
-          <div style={{ fontSize: "0.55rem", color: "var(--text-dim)", marginBottom: "0.6rem", paddingLeft: "0.2rem" }}>
+          <div style={{ fontSize: "0.65rem", color: "var(--text-dim)", marginBottom: "0.6rem", paddingLeft: "0.2rem" }}>
             {focus.subtitle}
           </div>
         )}

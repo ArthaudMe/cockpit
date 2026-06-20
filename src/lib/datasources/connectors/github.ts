@@ -1,5 +1,7 @@
 import type { OAuthConfig, TokenSet, GitHubPR, GitHubNotification } from "../types";
 import { getTokens } from "../token-store";
+import { isProxyEnabled, proxyExchangeCode } from "../oauth-proxy";
+import CREDENTIALS from "../credentials";
 
 export const GITHUB_OAUTH: OAuthConfig = {
   authUrl: "https://github.com/login/oauth/authorize",
@@ -11,7 +13,7 @@ export const GITHUB_OAUTH: OAuthConfig = {
 
 export function getGitHubAuthUrl(redirectUri: string, state: string): string {
   const params = new URLSearchParams({
-    client_id: process.env.GITHUB_CLIENT_ID || "",
+    client_id: CREDENTIALS.GITHUB_CLIENT_ID,
     redirect_uri: redirectUri,
     scope: GITHUB_OAUTH.scopes.join(" "),
     state,
@@ -23,21 +25,27 @@ export async function exchangeGitHubCode(
   code: string,
   redirectUri: string
 ): Promise<TokenSet> {
-  const res = await fetch(GITHUB_OAUTH.tokenUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({
-      code,
-      client_id: process.env.GITHUB_CLIENT_ID || "",
-      client_secret: process.env.GITHUB_CLIENT_SECRET || "",
-      redirect_uri: redirectUri,
-    }),
-  });
-  const data = await res.json();
-  if (data.error) throw new Error(data.error_description || data.error);
+  let data: any;
+
+  if (isProxyEnabled()) {
+    data = await proxyExchangeCode("github", code, redirectUri);
+  } else {
+    const res = await fetch(GITHUB_OAUTH.tokenUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        code,
+        client_id: CREDENTIALS.GITHUB_CLIENT_ID,
+        client_secret: process.env.GITHUB_CLIENT_SECRET || "",
+        redirect_uri: redirectUri,
+      }),
+    });
+    data = await res.json();
+    if (data.error) throw new Error(data.error_description || data.error);
+  }
 
   return {
     access_token: data.access_token,
@@ -56,16 +64,24 @@ export async function fetchGitHubPRs(): Promise<GitHubPR[]> {
   if (!tokens) return [];
 
   try {
-    // Fetch PRs where user is involved
+    const headers = {
+      Authorization: `Bearer ${tokens.access_token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    };
+
+    // Get the user's orgs to track all team contributions
+    const orgsRes = await fetch("https://api.github.com/user/orgs?per_page=10", { headers });
+    const orgs = orgsRes.ok ? await orgsRes.json() : [];
+    const orgNames: string[] = orgs.map((o: any) => o.login);
+
+    // Build query: all open PRs across user's orgs + their own repos
+    const orgFilter = orgNames.length > 0
+      ? orgNames.map((o: string) => `org:${o}`).join("+")
+      : "involves:@me";
     const res = await fetch(
-      "https://api.github.com/search/issues?q=is:pr+is:open+involves:@me&sort=updated&per_page=15",
-      {
-        headers: {
-          Authorization: `Bearer ${tokens.access_token}`,
-          Accept: "application/vnd.github+json",
-          "X-GitHub-Api-Version": "2022-11-28",
-        },
-      }
+      `https://api.github.com/search/issues?q=is:pr+is:open+${orgFilter}&sort=updated&per_page=25`,
+      { headers }
     );
     if (!res.ok) return [];
     const data = await res.json();

@@ -85,13 +85,10 @@ export function FeedColumn({
   const [visibleCount, setVisibleCount] = useState(0);
   const [filter, setFilter] = useState<string | null>(null);
 
-  // Animate feed items appearing one by one
+  // Show all items immediately (avoids dozens of rapid re-renders)
   useEffect(() => {
-    if (visibleCount < feed.length) {
-      const timer = setTimeout(() => setVisibleCount((c) => c + 1), 80);
-      return () => clearTimeout(timer);
-    }
-  }, [visibleCount, feed.length]);
+    setVisibleCount(feed.length);
+  }, [feed.length]);
 
   const filteredFeed = filter ? feed.filter((f) => f.type === filter) : feed;
   const types = Array.from(new Set(feed.map((f) => f.type)));
@@ -109,7 +106,7 @@ export function FeedColumn({
             textAlign: "center",
           }}
         >
-          <span style={{ fontSize: "0.55rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
+          <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
             Connect your tools to see live activity from your team
           </span>
           <button
@@ -121,7 +118,7 @@ export function FeedColumn({
               color: "var(--accent)",
               cursor: "pointer",
               fontFamily: "inherit",
-              fontSize: "0.5rem",
+              fontSize: "0.75rem",
               padding: "0.25rem 0.6rem",
               transition: "all 0.15s",
             }}
@@ -179,10 +176,10 @@ export function FeedColumn({
           }}
         >
           <div style={{ display: "flex", alignItems: "flex-start", gap: "0.35rem" }}>
-            <span style={{ fontSize: "0.6rem", flexShrink: 0, lineHeight: 1.4 }}>{item.icon}</span>
+            <span style={{ fontSize: "0.75rem", flexShrink: 0, lineHeight: 1.4 }}>{item.icon}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.3rem" }}>
-                <span style={{ fontSize: "0.6rem", fontWeight: 600, color: TYPE_COLOR[item.type] || "var(--text)" }}>
+                <span style={{ fontSize: "0.75rem", fontWeight: 600, color: TYPE_COLOR[item.type] || "var(--text)" }}>
                   {item.actor}
                 </span>
                 <span className="feed-time">{item.time}</span>
@@ -216,7 +213,7 @@ export function FeedColumn({
             animation: "pulse 2s ease-in-out infinite",
           }}
         />
-        <span style={{ fontSize: "0.5rem", color: "var(--text-muted)" }}>
+        <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
           Live — updates automatically
         </span>
       </div>

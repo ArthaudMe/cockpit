@@ -20,15 +20,30 @@ interface HookConfig {
   agentId: string;
 }
 
-const HOOK_DIRS = new Map<string, string>();
+const HOOK_DIRS = new Map<string, { dir: string; port: number; token: string }>();
 
 /**
  * Create a temp directory with Claude hook settings for an agent.
  * Returns the path to use as the working directory when spawning Claude,
  * so it picks up the .claude/settings.local.json.
+ *
+ * Agents respawn after every message; the hook dir is reused across
+ * respawns (it only depends on agentId/port/token) instead of leaking a
+ * fresh temp dir each time.
  */
 export function setupClaudeHooks(config: HookConfig): string {
-  const hookDir = join(tmpdir(), `cockpit-hooks-${randomBytes(4).toString("hex")}`);
+  const existing = HOOK_DIRS.get(config.agentId);
+  if (
+    existing &&
+    existing.port === config.port &&
+    existing.token === config.token &&
+    existsSync(existing.dir)
+  ) {
+    return existing.dir;
+  }
+
+  const hookDir =
+    existing?.dir ?? join(tmpdir(), `cockpit-hooks-${randomBytes(4).toString("hex")}`);
   const claudeDir = join(hookDir, ".claude");
 
   mkdirSync(claudeDir, { recursive: true });
@@ -57,7 +72,7 @@ export function setupClaudeHooks(config: HookConfig): string {
     JSON.stringify(settings, null, 2)
   );
 
-  HOOK_DIRS.set(config.agentId, hookDir);
+  HOOK_DIRS.set(config.agentId, { dir: hookDir, port: config.port, token: config.token });
   console.log("[claude-hooks] set up hooks for agent %s at %s", config.agentId, hookDir);
 
   return hookDir;
@@ -67,10 +82,10 @@ export function setupClaudeHooks(config: HookConfig): string {
  * Clean up hook directory for an agent.
  */
 export function cleanupClaudeHooks(agentId: string) {
-  const hookDir = HOOK_DIRS.get(agentId);
-  if (hookDir && existsSync(hookDir)) {
+  const entry = HOOK_DIRS.get(agentId);
+  if (entry && existsSync(entry.dir)) {
     try {
-      rmSync(hookDir, { recursive: true });
+      rmSync(entry.dir, { recursive: true });
       HOOK_DIRS.delete(agentId);
     } catch {
       // ignore cleanup errors

@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cockpit — Pilot your company from one screen</title>
+  <meta name="description" content="A desktop app that connects to Slack, Calendar, Linear, GitHub, and Notion — so founders can see everything, ask anything, and act instantly.">
+  <link rel="icon" type="image/png" href="/icon.png">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+    :root {
+      --bg: #0a0a0a;
+      --surface: #141414;
+      --border: #2a2a2a;
+      --border-light: #3a3a3a;
+      --text: #e8e8e8;
+      --text-dim: #888;
+      --text-muted: #666;
+      --accent: #fff;
+      --green: #44ff88;
+      --purple: #a78bfa;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'JetBrains Mono', 'SF Mono', Monaco, Inconsolata, monospace;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* Animated background glow */
+    .bg-glow {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+
+    .bg-glow::before,
+    .bg-glow::after {
+      content: '';
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.07;
+      animation: glow-drift 20s ease-in-out infinite alternate;
+    }
+
+    .bg-glow::before {
+      width: 600px;
+      height: 600px;
+      background: var(--green);
+      top: -200px;
+      right: -100px;
+      animation-duration: 25s;
+    }
+
+    .bg-glow::after {
+      width: 500px;
+      height: 500px;
+      background: var(--purple);
+      bottom: 10%;
+      left: -100px;
+      animation-duration: 20s;
+      animation-delay: -10s;
+    }
+
+    @keyframes glow-drift {
+      0% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(60px, 40px) scale(1.1); }
+      66% { transform: translate(-40px, 20px) scale(0.95); }
+      100% { transform: translate(30px, -30px) scale(1.05); }
+    }
+
+    /* Grid overlay */
+    .bg-grid {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+      background-size: 60px 60px;
+      mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, black 20%, transparent 70%);
+      -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, black 20%, transparent 70%);
+    }
+
+    header, .container, footer {
+      position: relative;
+      z-index: 1;
+    }
+
+    .container {
+      max-width: 900px;
+      width: 100%;
+      padding: 0 2rem;
+    }
+
+    /* Header */
+    header {
+      width: 100%;
+      padding: 1.5rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      max-width: 900px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 1.275rem;
+      font-weight: 600;
+      color: var(--text);
+      text-decoration: none;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .logo img {
+      width: 32px;
+      height: 32px;
+      border-radius: 4px;
+    }
+
+    .gh-link {
+      font-size: 1.1rem;
+      color: var(--text-muted);
+      text-decoration: none;
+      border: 1px solid var(--border);
+      padding: 0.3rem 0.7rem;
+      border-radius: 4px;
+      transition: all 0.15s;
+    }
+    .gh-link:hover {
+      border-color: var(--border-light);
+      color: var(--text-dim);
+    }
+
+    /* Hero */
+    .hero {
+      padding: 6rem 0 3rem;
+      text-align: center;
+    }
+
+    .hero h1 {
+      font-size: 3.4rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.2;
+      margin-bottom: 1.2rem;
+    }
+
+    .hero p {
+      font-size: 1.36rem;
+      color: var(--text-dim);
+      line-height: 1.7;
+      max-width: 640px;
+      margin: 0 auto 2.5rem;
+    }
+
+    .download-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      border-radius: 6px;
+      padding: 0.75rem 1.8rem;
+      font-family: inherit;
+      font-size: 1.275rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.15s;
+    }
+    .download-btn:hover {
+      opacity: 0.85;
+      transform: translateY(-1px);
+    }
+
+    .download-meta {
+      font-size: 1.19rem;
+      color: var(--text-dim);
+      margin-top: 1rem;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+    }
+
+    /* Screenshot */
+    .hero-screenshot {
+      margin-top: 3rem;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow: 0 12px 48px rgba(0,0,0,0.5);
+    }
+
+    .hero-screenshot img {
+      width: 100%;
+      display: block;
+    }
+
+    /* Features */
+    .features {
+      padding: 3rem 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    .feature {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1.4rem;
+    }
+
+    .feature-icon {
+      font-size: 1.7rem;
+      margin-bottom: 0.6rem;
+    }
+
+    .feature h3 {
+      font-size: 1.19rem;
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+      color: var(--text);
+    }
+
+    .feature p {
+      font-size: 1.02rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    /* How it works */
+    .how-it-works {
+      padding: 3rem 0 2rem;
+    }
+
+    .how-it-works h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 1.5rem;
+      text-align: center;
+    }
+
+    .steps {
+      display: flex;
+      flex-direction: column;
+      gap: 1.2rem;
+    }
+
+    .step {
+      display: flex;
+      gap: 1rem;
+      align-items: flex-start;
+    }
+
+    .step-num {
+      flex-shrink: 0;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 1px solid var(--border-light);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.935rem;
+      font-weight: 600;
+      color: var(--text-dim);
+      margin-top: 0.1rem;
+    }
+
+    .step-content h3 {
+      font-size: 1.19rem;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+      color: var(--text);
+    }
+
+    .step-content p {
+      font-size: 1.02rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    /* Integrations */
+    .integrations {
+      padding: 2rem 0;
+      text-align: center;
+    }
+
+    .integrations h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 1.2rem;
+    }
+
+    .integration-grid {
+      display: flex;
+      justify-content: center;
+      gap: 0.8rem;
+      flex-wrap: wrap;
+    }
+
+    .integration {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.5rem 0.9rem;
+      font-size: 1.02rem;
+      color: var(--text-dim);
+    }
+
+    .integration .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+
+    .integration img {
+      width: 20px;
+      height: 20px;
+    }
+
+    /* Install */
+    .install {
+      padding: 2rem 0;
+      text-align: center;
+    }
+
+    .install h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 1.2rem;
+    }
+
+    .install-code {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1.2rem 1.5rem;
+      max-width: 580px;
+      margin: 0 auto;
+      position: relative;
+      text-align: left;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+
+    .install-code:hover {
+      border-color: var(--border-light);
+    }
+
+    .install-code code {
+      font-size: 0.935rem;
+      color: var(--green);
+      line-height: 1.6;
+      word-break: break-all;
+    }
+
+    .install-code .copy-hint {
+      position: absolute;
+      top: 0.6rem;
+      right: 0.8rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .install-note {
+      font-size: 0.935rem;
+      color: var(--text-muted);
+      margin-top: 0.8rem;
+    }
+
+    /* Privacy */
+    .privacy {
+      padding: 2rem 0;
+      text-align: center;
+    }
+
+    .privacy-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1.5rem 2rem;
+      max-width: 580px;
+      margin: 0 auto;
+    }
+
+    .privacy-box h3 {
+      font-size: 1.19rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .privacy-box p {
+      font-size: 1.02rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    /* Footer */
+    footer {
+      padding: 3rem 0 2rem;
+      text-align: center;
+      width: 100%;
+      max-width: 900px;
+    }
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .footer-links a {
+      font-size: 1.02rem;
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+    .footer-links a:hover { color: var(--text-dim); }
+
+    .footer-copy {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      .hero h1 { font-size: 2.55rem; }
+      .features { grid-template-columns: 1fr; }
+      .hero { padding: 4rem 0 2rem; }
+      header { padding: 1rem; }
+      .container { padding: 0 1.2rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-glow"></div>
+  <div class="bg-grid"></div>
+  <header>
+    <a href="/" class="logo">
+      <img src="/icon.png" alt="Cockpit">
+      Cockpit
+    </a>
+    <a href="https://github.com/ArthaudMe/cockpit" class="gh-link">GitHub</a>
+  </header>
+
+  <div class="container">
+    <section class="hero">
+      <h1>Pilot your company<br>from one screen</h1>
+      <p>
+        A desktop app that connects to Slack, Calendar, Linear, GitHub,
+        and Notion — so founders can see everything, ask anything,
+        and act instantly without switching tabs.
+      </p>
+      <a href="https://github.com/ArthaudMe/cockpit/releases/download/v0.1.0-alpha/Cockpit-0.1.0-arm64.dmg" class="download-btn">
+        Download for Mac
+      </a>
+      <div class="download-meta">
+        macOS (Apple Silicon) &middot; Free, local &amp; open source
+      </div>
+
+      <div class="hero-screenshot">
+        <img src="/cockpit-screenshot.png" alt="Cockpit dashboard showing projects, chat, calendar, and integrations">
+      </div>
+    </section>
+
+    <section class="features">
+      <div class="feature">
+        <div class="feature-icon">&#9671;</div>
+        <h3>Unified feed</h3>
+        <p>Your calendar, Slack, Linear, GitHub, and Notion — collapsed into one live feed. No more tab-switching to stay on top of things.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">&#9656;</div>
+        <h3>Ask anything</h3>
+        <p>"What did the team ship this week?" "Am I double-booked tomorrow?" Ask in plain English — Cockpit searches every tool before answering.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">&#9733;</div>
+        <h3>Custom skills</h3>
+        <p>Build reusable automations — weekly reports, investor updates, team standups — or let Cockpit suggest them based on how you work.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">&#8984;K</div>
+        <h3>⌘K everything</h3>
+        <p>One shortcut to search across every tool at once. Find that Slack thread, Linear issue, or Notion doc in seconds.</p>
+      </div>
+    </section>
+
+    <section class="how-it-works">
+      <h2>How it works</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <h3>Connect your tools</h3>
+            <p>Sign in with Google, Slack, Linear, GitHub, or Notion. Cockpit uses OAuth — it never sees your passwords.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <h3>Everything lands in one feed</h3>
+            <p>Calendar events, Slack messages, PRs, issues, and docs stream into a single timeline. Sorted by relevance, updated live.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <h3>Ask questions, get real answers</h3>
+            <p>Chat with an AI that searches across all your connected tools before responding. It cites sources so you can verify.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <h3>Build skills that repeat</h3>
+            <p>Turn recurring tasks into one-click skills — weekly reports, investor updates, standup summaries. Cockpit learns what you need.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="integrations">
+      <h2>Connects to</h2>
+      <div class="integration-grid">
+        <div class="integration"><img src="https://www.gstatic.com/calendar/images/dynamiclogo_2020q4/calendar_31_2x.png" alt=""> Google Calendar</div>
+        <div class="integration"><img src="https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico" alt=""> Gmail</div>
+        <div class="integration"><img src="https://a.slack-edge.com/80588/marketing/img/icons/icon_slack_hash_colored.png" alt=""> Slack</div>
+        <div class="integration"><img src="https://linear.app/favicon.ico" alt=""> Linear</div>
+        <div class="integration"><img src="https://github.githubassets.com/favicons/favicon-dark.svg" alt=""> GitHub</div>
+        <div class="integration"><img src="https://www.notion.so/images/favicon.ico" alt=""> Notion</div>
+        <div class="integration"><img src="https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/c7/f1/86/c7f18626-3058-dcac-e507-59dc3bbc3ca6/AppIcon-0-0-1x_U007epad-0-0-0-1-0-0-sRGB-85-220.png/640x640bb.webp" alt=""> Granola</div>
+        <div class="integration"><span class="dot"></span> +1000s of MCPs</div>
+      </div>
+    </section>
+
+    <section class="install" id="install">
+      <h2>After installing</h2>
+      <p class="install-note" style="margin-bottom: 1rem;">Cockpit isn't notarized yet, so macOS will block it on first launch.<br>After dragging Cockpit to Applications, open Terminal and run:</p>
+      <div class="install-code" onclick="navigator.clipboard.writeText('xattr -cr /Applications/Cockpit.app').then(()=>{this.querySelector('.copy-hint').textContent='Copied!'})">
+        <span class="copy-hint">Click to copy</span>
+        <code>xattr -cr /Applications/Cockpit.app</code>
+      </div>
+      <div class="install-note">Then open Cockpit normally. You only need to do this once.</div>
+    </section>
+
+    <section class="privacy">
+      <div class="privacy-box">
+        <h3>Your data stays on your machine</h3>
+        <p>
+          Cockpit runs locally. OAuth tokens are stored in ~/.cockpit with 0600 permissions.
+          No telemetry by default. Client secrets never ship in the app —
+          token exchange goes through a secure proxy.
+        </p>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    <div class="footer-links">
+      <a href="https://github.com/ArthaudMe/cockpit">Source code</a>
+      <a href="https://github.com/ArthaudMe/cockpit/blob/master/LICENSE">MIT License</a>
+      <a href="https://github.com/ArthaudMe/cockpit/releases">Releases</a>
+    </div>
+    <div class="footer-copy">&copy; 2026 arthaud</div>
+  </footer>
+</body>
+</html>

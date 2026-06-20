@@ -7,6 +7,39 @@ const http = require("http");
 const fs = require("fs");
 const os = require("os");
 
+// ─── Crash Reporting ─────────────────────────────────────────────
+const CRASH_LOG_PATH = path.join(os.homedir(), ".cockpit", "crash-log.json");
+
+function logCrash(entry) {
+  try {
+    const dir = path.join(os.homedir(), ".cockpit");
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+
+    let log = [];
+    if (fs.existsSync(CRASH_LOG_PATH)) {
+      try { log = JSON.parse(fs.readFileSync(CRASH_LOG_PATH, "utf-8")); } catch {}
+    }
+    log.push({ ...entry, timestamp: new Date().toISOString() });
+    // Keep last 50 entries
+    if (log.length > 50) log = log.slice(-50);
+    fs.writeFileSync(CRASH_LOG_PATH, JSON.stringify(log, null, 2));
+  } catch {
+    // Never let crash logging itself crash
+  }
+}
+
+process.on("uncaughtException", (err) => {
+  console.error("[electron] uncaughtException:", err);
+  logCrash({ type: "uncaughtException", message: err.message, stack: err.stack });
+});
+
+process.on("unhandledRejection", (reason) => {
+  const message = reason instanceof Error ? reason.message : String(reason);
+  const stack = reason instanceof Error ? reason.stack : undefined;
+  console.error("[electron] unhandledRejection:", message);
+  logCrash({ type: "unhandledRejection", message, stack });
+});
+
 // ─── Config ────────────────────────────────────────────────────────
 let mainWindow;
 let nextServer;
@@ -15,7 +48,9 @@ let tray;
 const isMac = process.platform === "darwin";
 const isWin = process.platform === "win32";
 const isDev = process.env.NODE_ENV === "development";
-const PORT = isDev ? 3939 : 3123;
+// Dev uses the fixed `next dev` port; production picks a free port at
+// startup so we never collide with something already on 3000.
+let serverPort = isDev ? 3939 : null;
 const PROTOCOL = "cockpit";
 
 const APP_ROOT = app.isPackaged
@@ -165,22 +200,63 @@ function createTray() {
 }
 
 // ─── Next.js Server ────────────────────────────────────────────────
-function startNextServer() {
-  return new Promise((resolve, reject) => {
-    const nextBin = isWin
-      ? path.join(APP_ROOT, "node_modules", ".bin", "next.cmd")
-      : path.join(APP_ROOT, "node_modules", ".bin", "next");
+// OAuth redirect URIs are pre-registered with providers as
+// http://localhost:3939/api/datasources/callback (exact match, port
+// included) — so production prefers the same port as dev. If it's taken
+// we fall back to a dynamic port: everything still works except adding
+// NEW OAuth connections (existing tokens refresh fine).
+const PREFERRED_PORT = 3939;
 
-    nextServer = spawn(nextBin, ["start", "--port", String(PORT)], {
-      cwd: APP_ROOT,
+function getFreePort(preferred) {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.on("error", (err) => {
+      if (preferred) {
+        // Preferred port busy — retry with an OS-assigned one
+        getFreePort().then(resolve, reject);
+      } else {
+        reject(err);
+      }
+    });
+    srv.listen(preferred || 0, "127.0.0.1", () => {
+      const port = srv.address().port;
+      srv.close(() => resolve(port));
+    });
+  });
+}
+
+async function startNextServer() {
+  serverPort = await getFreePort(PREFERRED_PORT);
+  if (serverPort !== PREFERRED_PORT) {
+    console.warn(
+      "[electron] port %d busy — using %d; adding new OAuth connections won't work this session",
+      PREFERRED_PORT,
+      serverPort
+    );
+  }
+
+  return new Promise((resolve, reject) => {
+    // The app ships Next's standalone output (.next/standalone) — a
+    // self-contained server.js with its own traced node_modules. We run it
+    // with Electron's bundled Node via ELECTRON_RUN_AS_NODE=1, so no
+    // external node_modules (or symlinked .bin shims) are needed.
+    const serverJs = path.join(APP_ROOT, ".next", "standalone", "server.js");
+
+    if (!fs.existsSync(serverJs)) {
+      reject(new Error(`Server bundle missing at ${serverJs}`));
+      return;
+    }
+
+    nextServer = spawn(process.execPath, [serverJs], {
+      cwd: path.dirname(serverJs),
       env: {
         ...process.env,
-        PORT: String(PORT),
+        ELECTRON_RUN_AS_NODE: "1",
+        PORT: String(serverPort),
+        HOSTNAME: "127.0.0.1",
         NODE_ENV: "production",
       },
       stdio: ["ignore", "pipe", "pipe"],
-      // Windows needs shell for .cmd scripts
-      shell: isWin,
     });
 
     nextServer.stdout.on("data", (data) => {
@@ -213,7 +289,7 @@ function startNextServer() {
       if (resolved) return;
       const sock = new net.Socket();
       sock
-        .connect(PORT, "127.0.0.1", () => {
+        .connect(serverPort, "127.0.0.1", () => {
           sock.destroy();
           if (!resolved) {
             resolved = true;
@@ -340,6 +416,7 @@ function createMainWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, "preload.js"),
     },
   };
 
@@ -358,15 +435,25 @@ function createMainWindow() {
     mainWindow.maximize();
   }
 
-  mainWindow.loadURL(`http://localhost:${PORT}`);
+  mainWindow.loadURL(`http://localhost:${serverPort}`);
 
-  // Open external links in default browser
+  // Open external links (window.open / target=_blank) in the default browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith("http") && !url.includes(`localhost:${PORT}`)) {
+    if (url.startsWith("http") && !url.includes(`localhost:${serverPort}`)) {
       shell.openExternal(url);
       return { action: "deny" };
     }
     return { action: "allow" };
+  });
+
+  // Block in-window navigation away from the local app. A clicked link (or a
+  // malicious assistant-rendered href) must not replace the app with an
+  // external site — send it to the default browser instead.
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (!url.startsWith(`http://localhost:${serverPort}`)) {
+      event.preventDefault();
+      if (/^https?:/i.test(url)) shell.openExternal(url);
+    }
   });
 
   // Save window state on resize/move (debounced)
@@ -387,13 +474,15 @@ function createMainWindow() {
 
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
     console.error("[electron] renderer crashed:", details.reason);
+    logCrash({ type: "renderProcessGone", reason: details.reason, exitCode: details.exitCode });
     if (!app.isQuitting) {
-      mainWindow.loadURL(`http://localhost:${PORT}`);
+      mainWindow.loadURL(`http://localhost:${serverPort}`);
     }
   });
 
   mainWindow.webContents.on("unresponsive", () => {
     console.warn("[electron] window unresponsive, reloading...");
+    logCrash({ type: "windowUnresponsive" });
     mainWindow.webContents.reload();
   });
 
@@ -503,12 +592,16 @@ if (process.defaultApp) {
 
 function handleDeepLink(url) {
   if (!url) return;
+  if (!serverPort) {
+    console.warn("[electron] deep link before server ready, ignoring:", url);
+    return;
+  }
   console.log("[electron] deep link:", url);
 
   try {
     const parsed = new URL(url);
     if (parsed.hostname === "oauth" && parsed.pathname.startsWith("/callback")) {
-      const forwardUrl = `http://localhost:${PORT}/api/datasources/callback${parsed.search}`;
+      const forwardUrl = `http://localhost:${serverPort}/api/datasources/callback${parsed.search}`;
 
       http.get(forwardUrl, (res) => {
         console.log("[electron] OAuth callback forwarded, status:", res.statusCode);
@@ -547,62 +640,69 @@ if (!gotLock) {
   });
 }
 
-// ─── Background Intelligence ────────────────────────────────────────
-let backgroundInterval;
+// ─── Background Tick ──────────────────────────────────────────────
+// The main process owns all polling — the renderer is purely reactive via IPC.
+let tickInterval;
+let dataInterval;
 
-function startBackgroundTick() {
-  // Don't start until server is ready
-  if (backgroundInterval) return;
-
-  backgroundInterval = setInterval(() => {
-    if (app.isQuitting) {
-      clearInterval(backgroundInterval);
-      return;
-    }
-
-    const tickUrl = `http://localhost:${PORT}/api/background/tick`;
-    http.get(tickUrl, (res) => {
+function fetchJson(urlPath) {
+  return new Promise((resolve, reject) => {
+    http.get(`http://localhost:${serverPort}${urlPath}`, (res) => {
       let body = "";
-      res.on("data", (chunk) => { body += chunk; });
+      res.on("data", (chunk) => (body += chunk));
       res.on("end", () => {
         try {
-          const data = JSON.parse(body);
-          if (data.newNotifications && data.newNotifications.length > 0) {
-            // Only show native notifications when the window is not focused
-            const windowFocused = mainWindow && mainWindow.isFocused();
-            if (!windowFocused && ElectronNotification.isSupported()) {
-              for (const notif of data.newNotifications) {
-                const native = new ElectronNotification({
-                  title: notif.title,
-                  body: notif.body,
-                  silent: false,
-                });
-                native.on("click", () => {
-                  if (mainWindow) {
-                    if (mainWindow.isMinimized()) mainWindow.restore();
-                    mainWindow.show();
-                    mainWindow.focus();
-                  }
-                });
-                native.show();
-              }
-            }
-          }
+          resolve(JSON.parse(body));
         } catch {
-          // ignore parse errors
+          reject(new Error("Invalid JSON"));
         }
       });
-    }).on("error", () => {
-      // Server might not be ready yet, ignore
-    });
-  }, 60_000); // Every 60 seconds
+    }).on("error", reject);
+  });
+}
+
+function sendToRenderer(channel, data) {
+  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
+    mainWindow.webContents.send(channel, data);
+  }
+}
+
+async function pollDatasourceData() {
+  try {
+    const data = await fetchJson("/api/datasources/data");
+    sendToRenderer("datasource-data", data);
+  } catch (err) {
+    console.error("[electron] data poll failed:", err.message);
+  }
+}
+
+async function pollBackgroundTick() {
+  try {
+    const tick = await fetchJson("/api/background/tick");
+    if (tick.newCount > 0) {
+      const notifs = await fetchJson("/api/background/notifications");
+      sendToRenderer("notifications-update", notifs);
+    }
+  } catch (err) {
+    console.error("[electron] tick failed:", err.message);
+  }
+}
+
+function startBackgroundTick() {
+  // Initial data fetch after a short delay (let the server settle)
+  setTimeout(() => {
+    pollDatasourceData();
+    pollBackgroundTick();
+  }, 3000);
+
+  // Data poll every 60s, notification tick every 120s
+  dataInterval = setInterval(pollDatasourceData, 60_000);
+  tickInterval = setInterval(pollBackgroundTick, 120_000);
 }
 
 function stopBackgroundTick() {
-  if (backgroundInterval) {
-    clearInterval(backgroundInterval);
-    backgroundInterval = null;
-  }
+  clearInterval(dataInterval);
+  clearInterval(tickInterval);
 }
 
 // ─── Startup ───────────────────────────────────────────────────────

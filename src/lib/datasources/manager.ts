@@ -1,5 +1,5 @@
 import type { ServiceId, DatasourceStatus, DatasourceData } from "./types";
-import { getConnectedServices } from "./token-store";
+import { getConnectedServices, getTokens, isServiceDisabled } from "./token-store";
 import { isGranolaAvailable, fetchGranolaMeetings } from "./connectors/granola";
 import { fetchCalendarEvents, fetchRecentEmails } from "./connectors/google";
 import { fetchLinearIssues } from "./connectors/linear";
@@ -71,20 +71,46 @@ const SERVICE_META: Record<
   },
 };
 
+// Services that need write scopes for actions but may have been connected with read-only
+const WRITE_SCOPE_REQUIREMENTS: Partial<Record<ServiceId, { required: string; reason: string }>> = {
+  linear: { required: "write", reason: "Reconnect to enable creating issues" },
+};
+
 export function getDatasourceStatuses(): DatasourceStatus[] {
   const connected = getConnectedServices();
   const granolaAvailable = isGranolaAvailable();
 
-  return Object.entries(SERVICE_META).map(([id, meta]) => ({
-    id: id as ServiceId,
-    ...meta,
-    connected:
+  return Object.entries(SERVICE_META).map(([id, meta]) => {
+    const serviceId = id as ServiceId;
+    const isConnected =
       id === "granola"
-        ? granolaAvailable
+        ? granolaAvailable && !isServiceDisabled("granola")
         : id === "notion"
           ? isNotionConnected()
-          : connected.includes(id as ServiceId),
-  }));
+          : connected.includes(serviceId);
+
+    let needsScopeUpgrade = false;
+    let scopeUpgradeReason: string | undefined;
+
+    if (isConnected) {
+      const req = WRITE_SCOPE_REQUIREMENTS[serviceId];
+      if (req) {
+        const tokens = getTokens(serviceId);
+        if (tokens?.scope && !tokens.scope.includes(req.required)) {
+          needsScopeUpgrade = true;
+          scopeUpgradeReason = req.reason;
+        }
+      }
+    }
+
+    return {
+      id: serviceId,
+      ...meta,
+      connected: isConnected,
+      needsScopeUpgrade,
+      scopeUpgradeReason,
+    };
+  });
 }
 
 export function getAuthUrl(
@@ -129,7 +155,35 @@ export async function exchangeCode(
   }
 }
 
+// In-memory cache to avoid redundant API calls from concurrent consumers.
+// TTL sits just under the renderer's 60s poll so each poll refreshes once
+// and everything else (background tick, chat prompts, project inference)
+// rides on that result instead of re-hitting every connector API.
+let _cachedData: DatasourceData | null = null;
+let _cacheTime = 0;
+let _inFlight: Promise<DatasourceData> | null = null;
+const DATA_CACHE_TTL = 55_000;
+
+/** Latest cached snapshot without triggering a fetch (may be null early on). */
+export function getCachedData(): DatasourceData | null {
+  return _cachedData;
+}
+
 export async function fetchAllData(): Promise<DatasourceData> {
+  // Return cached data if fresh enough
+  if (_cachedData && Date.now() - _cacheTime < DATA_CACHE_TTL) {
+    return _cachedData;
+  }
+
+  // Single-flight: concurrent callers share one fetch
+  if (_inFlight) return _inFlight;
+  _inFlight = doFetchAllData().finally(() => {
+    _inFlight = null;
+  });
+  return _inFlight;
+}
+
+async function doFetchAllData(): Promise<DatasourceData> {
   const connected = getConnectedServices();
   const granolaAvailable = isGranolaAvailable();
 
@@ -166,7 +220,7 @@ export async function fetchAllData(): Promise<DatasourceData> {
     )
     .flatMap((r) => r.value);
 
-  return {
+  const result: DatasourceData = {
     calendar,
     emails,
     linearIssues,
@@ -177,4 +231,9 @@ export async function fetchAllData(): Promise<DatasourceData> {
     granolaMeetings,
     mcpResources: mcpResources.length > 0 ? mcpResources : undefined,
   };
+
+  _cachedData = result;
+  _cacheTime = Date.now();
+
+  return result;
 }

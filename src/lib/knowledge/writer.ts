@@ -22,12 +22,16 @@ import type {
 
 const HISTORY_DIR = join(homedir(), ".cockpit", "history");
 
+// Throttle writes to once every 5 minutes — no need to persist on every poll
+let _lastWriteTime = 0;
+const WRITE_THROTTLE = 5 * 60 * 1000;
+
 function today(): string {
   return new Date().toISOString().split("T")[0];
 }
 
 function ensureDir(dir: string) {
-  mkdirSync(dir, { recursive: true });
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
 }
 
 function readJsonArray(filePath: string): unknown[] {
@@ -42,7 +46,7 @@ function readJsonArray(filePath: string): unknown[] {
 }
 
 function writeJsonArray(filePath: string, data: unknown[]) {
-  writeFileSync(filePath, JSON.stringify(data, null, 2));
+  writeFileSync(filePath, JSON.stringify(data, null, 2), { mode: 0o600 });
 }
 
 function mergeById(
@@ -131,6 +135,11 @@ function granolaId(item: Record<string, unknown>): string {
 // ─── Public API ─────────────────────────────────────────────────────
 
 export function writeHistory(data: DatasourceData): void {
+  // Throttle: skip if written recently
+  const now = Date.now();
+  if (now - _lastWriteTime < WRITE_THROTTLE) return;
+  _lastWriteTime = now;
+
   try {
     const dateStr = today();
     const dateDir = join(HISTORY_DIR, dateStr);

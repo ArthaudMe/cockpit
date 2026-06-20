@@ -1,5 +1,7 @@
 import type { OAuthConfig, TokenSet, CalendarEvent, EmailThread } from "../types";
 import { getTokens, saveTokens } from "../token-store";
+import { isProxyEnabled, proxyExchangeCode, proxyRefreshToken } from "../oauth-proxy";
+import CREDENTIALS from "../credentials";
 
 export const GOOGLE_OAUTH: OAuthConfig = {
   authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
@@ -17,7 +19,7 @@ export const GOOGLE_OAUTH: OAuthConfig = {
 
 export function getGoogleAuthUrl(redirectUri: string, state: string): string {
   const params = new URLSearchParams({
-    client_id: process.env.GOOGLE_CLIENT_ID || "",
+    client_id: CREDENTIALS.GOOGLE_CLIENT_ID,
     redirect_uri: redirectUri,
     response_type: "code",
     scope: GOOGLE_OAUTH.scopes.join(" "),
@@ -32,19 +34,25 @@ export async function exchangeGoogleCode(
   code: string,
   redirectUri: string
 ): Promise<TokenSet> {
-  const res = await fetch(GOOGLE_OAUTH.tokenUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      code,
-      client_id: process.env.GOOGLE_CLIENT_ID || "",
-      client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
-      redirect_uri: redirectUri,
-      grant_type: "authorization_code",
-    }),
-  });
-  const data = await res.json();
-  if (data.error) throw new Error(data.error_description || data.error);
+  let data: any;
+
+  if (isProxyEnabled()) {
+    data = await proxyExchangeCode("google", code, redirectUri);
+  } else {
+    const res = await fetch(GOOGLE_OAUTH.tokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: CREDENTIALS.GOOGLE_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
+        redirect_uri: redirectUri,
+        grant_type: "authorization_code",
+      }),
+    });
+    data = await res.json();
+    if (data.error) throw new Error(data.error_description || data.error);
+  }
 
   return {
     access_token: data.access_token,
@@ -56,18 +64,24 @@ export async function exchangeGoogleCode(
 }
 
 async function refreshGoogleToken(refreshToken: string): Promise<TokenSet> {
-  const res = await fetch(GOOGLE_OAUTH.tokenUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      refresh_token: refreshToken,
-      client_id: process.env.GOOGLE_CLIENT_ID || "",
-      client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
-      grant_type: "refresh_token",
-    }),
-  });
-  const data = await res.json();
-  if (data.error) throw new Error(data.error_description || data.error);
+  let data: any;
+
+  if (isProxyEnabled()) {
+    data = await proxyRefreshToken("google", refreshToken);
+  } else {
+    const res = await fetch(GOOGLE_OAUTH.tokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        refresh_token: refreshToken,
+        client_id: CREDENTIALS.GOOGLE_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
+        grant_type: "refresh_token",
+      }),
+    });
+    data = await res.json();
+    if (data.error) throw new Error(data.error_description || data.error);
+  }
 
   const tokens: TokenSet = {
     access_token: data.access_token,

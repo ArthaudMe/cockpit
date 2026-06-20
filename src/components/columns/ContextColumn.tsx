@@ -5,6 +5,22 @@ import type { Context } from "@/lib/context-client";
 import { usePersistedState } from "@/lib/use-persisted-state";
 import { track } from "@/lib/analytics";
 
+type QuickSkill = {
+  id: string;
+  name: string;
+  slash: string;
+  icon: string;
+  custom?: boolean;
+};
+
+const FEATURED_SKILLS: QuickSkill[] = [
+  { id: "data-analyst", name: "Analyst", slash: "/data", icon: "▥" },
+  { id: "product-manager", name: "PM", slash: "/pm", icon: "◧" },
+  { id: "sales-pipeline", name: "Sales", slash: "/sales", icon: "◆" },
+  { id: "eng-manager", name: "Admin", slash: "/eng", icon: "◫" },
+  { id: "builder", name: "Finance", slash: "/build", icon: "⚙" },
+];
+
 function Panel({
   title,
   count,
@@ -52,7 +68,7 @@ function ConnectPrompt({
         textAlign: "center",
       }}
     >
-      <span style={{ fontSize: "0.55rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
+      <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
         {label}
       </span>
       <button
@@ -64,7 +80,7 @@ function ConnectPrompt({
           color: "var(--accent)",
           cursor: "pointer",
           fontFamily: "inherit",
-          fontSize: "0.5rem",
+          fontSize: "0.75rem",
           padding: "0.25rem 0.6rem",
           transition: "all 0.15s",
         }}
@@ -92,6 +108,7 @@ export function ContextColumn({
   onCompetitorClick,
   onTodoClick,
   onSettingsClick,
+  onConnectService,
 }: {
   context: Context;
   onPrefill: (text: string) => void;
@@ -101,6 +118,7 @@ export function ContextColumn({
   onCompetitorClick?: (index: number) => void;
   onTodoClick?: (index: number) => void;
   onSettingsClick?: () => void;
+  onConnectService?: (serviceId: string) => void;
 }) {
   const [todos, setTodos] = usePersistedState("cockpit-todos", context.todos);
 
@@ -122,7 +140,7 @@ export function ContextColumn({
             <ConnectPrompt
               service="Google"
               label="Connect Google to see your calendar events"
-              onConnect={() => onSettingsClick?.()}
+              onConnect={() => onConnectService ? onConnectService("google") : onSettingsClick?.()}
             />
           )
         ) : (() => {
@@ -161,7 +179,7 @@ export function ContextColumn({
                   marginTop: di > 0 ? "0.25rem" : 0,
                 }}>
                   <span style={{
-                    fontSize: "0.45rem",
+                    fontSize: "0.75rem",
                     fontWeight: 700,
                     color: color,
                     textTransform: "uppercase",
@@ -169,7 +187,7 @@ export function ContextColumn({
                   }}>
                     {dayLabel}
                   </span>
-                  <span style={{ fontSize: "0.4rem", color: "var(--text-muted)" }}>
+                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
                     {dateLabel}
                   </span>
                   <div style={{ flex: 1, height: 1, background: color, opacity: 0.2 }} />
@@ -187,7 +205,7 @@ export function ContextColumn({
                         <span className="feed-time">{m.duration}</span>
                       </div>
                       <div className="feed-meta">
-                        <span style={{ fontSize: "0.6rem", color }}>{m.time}</span>
+                        <span style={{ fontSize: "0.75rem", color }}>{m.time}</span>
                         <span className="feed-time">{m.attendees.join(", ")}</span>
                       </div>
                     </div>
@@ -246,7 +264,7 @@ export function ContextColumn({
             <ConnectPrompt
               service="Slack"
               label="Connect Slack to see your team's messages"
-              onConnect={() => onSettingsClick?.()}
+              onConnect={() => onConnectService ? onConnectService("slack") : onSettingsClick?.()}
             />
           )
         ) : context.slack_highlights.map((h, i) => (
@@ -274,7 +292,7 @@ export function ContextColumn({
             onClick={() => onCompetitorClick ? onCompetitorClick(i) : onPrefill(`${u.competitor} is ${u.event.toLowerCase()}. What does that mean for us?`)}
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)" }}>
+              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text)" }}>
                 {u.competitor}
               </span>
               <div className="feed-meta">
@@ -287,6 +305,9 @@ export function ContextColumn({
         ))}
       </Panel>
       )}
+
+      {/* Skills */}
+      <SkillsPanel onPrefill={onPrefill} />
 
       {/* Todo */}
       <Panel title="Todo" count={todos.length > 0 ? todos.filter((t) => !t.done).length + "/" + todos.length : 0}>
@@ -312,7 +333,7 @@ export function ContextColumn({
             </div>
             <span
               style={{
-                fontSize: "0.6rem",
+                fontSize: "0.75rem",
                 color: t.done ? "var(--text-muted)" : "var(--text)",
                 textDecoration: t.done ? "line-through" : "none",
                 lineHeight: 1.3,
@@ -325,5 +346,75 @@ export function ContextColumn({
       </Panel>
 
     </div>
+  );
+}
+
+function SkillsPanel({ onPrefill }: { onPrefill: (text: string) => void }) {
+  const [customSkills, setCustomSkills] = useState<QuickSkill[]>([]);
+
+  useEffect(() => {
+    fetch("/api/skills/custom")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setCustomSkills(
+            data.map((s: any) => ({
+              id: s.id,
+              name: s.name,
+              slash: s.slash,
+              icon: s.icon || "★",
+              custom: true,
+            }))
+          );
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const allSkills = [...FEATURED_SKILLS, ...customSkills];
+
+  return (
+    <Panel title="Skills" count={allSkills.length}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.3rem" }}>
+        {allSkills.map((skill) => (
+          <button
+            key={skill.id}
+            onClick={() => {
+              onPrefill(`${skill.slash} `);
+              track("skill_clicked", { skill: skill.id });
+            }}
+            style={{
+              background: skill.custom
+                ? "rgba(168,139,250,0.1)"
+                : "rgba(255,255,255,0.04)",
+              border: `1px solid ${skill.custom ? "rgba(168,139,250,0.3)" : "var(--border)"}`,
+              borderRadius: 4,
+              color: skill.custom ? "#a78bfa" : "var(--text)",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              fontSize: "0.75rem",
+              padding: "0.2rem 0.5rem",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.25rem",
+              transition: "all 0.15s",
+            }}
+            title={`${skill.slash} — Click to use`}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = skill.custom
+                ? "rgba(168,139,250,0.2)"
+                : "rgba(255,255,255,0.08)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = skill.custom
+                ? "rgba(168,139,250,0.1)"
+                : "rgba(255,255,255,0.04)";
+            }}
+          >
+            <span>{skill.icon}</span> {skill.name}
+          </button>
+        ))}
+      </div>
+    </Panel>
   );
 }

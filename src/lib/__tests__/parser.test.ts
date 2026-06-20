@@ -285,4 +285,56 @@ describe("parseResponse", () => {
       }
     });
   });
+
+  // ── Skill proposal blocks ──────────────────────────────────────────
+  describe("skill proposals", () => {
+    it("parses a cockpit_skill create block", () => {
+      const input = [
+        "I'll save that as a skill:",
+        "```json",
+        JSON.stringify({
+          cockpit_skill: true,
+          action: "create",
+          name: "Weekly Report",
+          slash: "/report",
+          icon: "◎",
+          description: "Generate a weekly progress report",
+          promptInstruction: "Summarize all projects for the week...",
+          triggerHints: ["report", "weekly"],
+        }),
+        "```",
+      ].join("\n");
+
+      const result = parseResponse(input);
+      expect(result).toHaveLength(2);
+      expect(result[0].type).toBe("text");
+      expect(result[1].type).toBe("skill_proposal");
+      if (result[1].type === "skill_proposal") {
+        expect(result[1].proposal.name).toBe("Weekly Report");
+        expect(result[1].proposal.slash).toBe("/report");
+        expect(result[1].proposal.action).toBe("create");
+      }
+    });
+
+    it("parses a cockpit_skill delete block", () => {
+      const input = [
+        "```json",
+        JSON.stringify({
+          cockpit_skill: true,
+          action: "delete",
+          id: "custom-weekly-report",
+          name: "Weekly Report",
+        }),
+        "```",
+      ].join("\n");
+
+      const result = parseResponse(input);
+      expect(result).toHaveLength(1);
+      expect(result[0].type).toBe("skill_proposal");
+      if (result[0].type === "skill_proposal") {
+        expect(result[0].proposal.action).toBe("delete");
+        expect(result[0].proposal.id).toBe("custom-weekly-report");
+      }
+    });
+  });
 });

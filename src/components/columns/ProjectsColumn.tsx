@@ -54,7 +54,7 @@ function Panel({
                 color: "var(--text-muted)",
                 cursor: "pointer",
                 fontFamily: "inherit",
-                fontSize: "0.65rem",
+                fontSize: "0.75rem",
                 padding: "0 0.2rem",
                 lineHeight: 1,
               }}
@@ -142,7 +142,7 @@ export function ProjectsColumn({
         border: "1px solid var(--border)",
         borderRadius: 3,
         color: "var(--text-muted)",
-        fontSize: "0.5rem",
+        fontSize: "0.75rem",
         padding: "0.1rem 0.35rem",
         cursor: inferLoading ? "default" : "pointer",
         opacity: inferLoading ? 0.5 : 1,
@@ -173,7 +173,7 @@ export function ProjectsColumn({
                 marginRight: "0.3rem",
               }}
             />
-            <span style={{ fontSize: "0.55rem", color: "var(--text-muted)" }}>
+            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
               Inferring projects...
             </span>
           </div>
@@ -184,7 +184,7 @@ export function ProjectsColumn({
           <div
             style={{
               padding: "0.75rem 0.25rem",
-              fontSize: "0.55rem",
+              fontSize: "0.75rem",
               color: "var(--text-muted)",
               textAlign: "center",
               lineHeight: 1.6,
@@ -204,7 +204,7 @@ export function ProjectsColumn({
                     color: "var(--accent)",
                     cursor: "pointer",
                     fontFamily: "inherit",
-                    fontSize: "0.55rem",
+                    fontSize: "0.75rem",
                     padding: 0,
                     textDecoration: "underline",
                     textUnderlineOffset: "2px",
@@ -222,7 +222,7 @@ export function ProjectsColumn({
                       color: "var(--accent)",
                       cursor: "pointer",
                       fontFamily: "inherit",
-                      fontSize: "0.55rem",
+                      fontSize: "0.75rem",
                       padding: 0,
                       textDecoration: "underline",
                       textUnderlineOffset: "2px",
@@ -255,7 +255,7 @@ export function ProjectsColumn({
             >
               <span
                 style={{
-                  fontSize: "0.65rem",
+                  fontSize: "0.75rem",
                   fontWeight: 600,
                   color: "var(--text)",
                 }}
@@ -280,7 +280,7 @@ export function ProjectsColumn({
               {p.tools.slice(0, 3).map((t) => (
                 <span
                   key={t}
-                  style={{ fontSize: "0.5rem", color: "var(--text-muted)" }}
+                  style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}
                 >
                   {t}
                 </span>
@@ -320,7 +320,7 @@ export function ProjectsColumn({
                 />
                 <span
                   style={{
-                    fontSize: "0.65rem",
+                    fontSize: "0.75rem",
                     fontWeight: 600,
                     color: "var(--text)",
                   }}
@@ -339,7 +339,7 @@ export function ProjectsColumn({
                   color: "var(--text-muted)",
                   cursor: "pointer",
                   fontFamily: "inherit",
-                  fontSize: "0.5rem",
+                  fontSize: "0.75rem",
                   padding: "0 0.15rem",
                   opacity: 0,
                   transition: "opacity 0.1s",
@@ -375,7 +375,7 @@ export function ProjectsColumn({
                 border: "1px solid var(--border-light)",
                 borderRadius: 3,
                 padding: "0.3rem 0.4rem",
-                fontSize: "0.6rem",
+                fontSize: "0.75rem",
                 color: "var(--text)",
                 fontFamily: "inherit",
                 outline: "none",

@@ -188,7 +188,7 @@ export function buildContextFromLiveData(live: DatasourceData, userName?: string
   });
 
   return {
-    user: "Arthaud",
+    user: userName || "User",
     projects: [],
     calendar,
     usage_analytics: {},
@@ -200,13 +200,3 @@ export function buildContextFromLiveData(live: DatasourceData, userName?: string
   };
 }
 
-export function getContextStats(ctx: Context) {
-  return {
-    projects: ctx.projects.length,
-    meetings: ctx.calendar.length,
-    metrics: Object.keys(ctx.usage_analytics).length,
-    slackHighlights: ctx.slack_highlights.length,
-    competitors: ctx.competitor_updates.length,
-    todos: ctx.todos.length,
-  };
-}
