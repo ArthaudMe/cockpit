@@ -33,6 +33,77 @@
       flex-direction: column;
       align-items: center;
       -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* Animated background glow */
+    .bg-glow {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+
+    .bg-glow::before,
+    .bg-glow::after {
+      content: '';
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.07;
+      animation: glow-drift 20s ease-in-out infinite alternate;
+    }
+
+    .bg-glow::before {
+      width: 600px;
+      height: 600px;
+      background: var(--green);
+      top: -200px;
+      right: -100px;
+      animation-duration: 25s;
+    }
+
+    .bg-glow::after {
+      width: 500px;
+      height: 500px;
+      background: var(--purple);
+      bottom: 10%;
+      left: -100px;
+      animation-duration: 20s;
+      animation-delay: -10s;
+    }
+
+    @keyframes glow-drift {
+      0% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(60px, 40px) scale(1.1); }
+      66% { transform: translate(-40px, 20px) scale(0.95); }
+      100% { transform: translate(30px, -30px) scale(1.05); }
+    }
+
+    /* Grid overlay */
+    .bg-grid {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+      background-size: 60px 60px;
+      mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, black 20%, transparent 70%);
+      -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, black 20%, transparent 70%);
+    }
+
+    header, .container, footer {
+      position: relative;
+      z-index: 1;
     }
 
     .container {
@@ -402,6 +473,8 @@
   </style>
 </head>
 <body>
+  <div class="bg-glow"></div>
+  <div class="bg-grid"></div>
   <header>
     <a href="/" class="logo">
       <img src="/icon.png" alt="Cockpit">
