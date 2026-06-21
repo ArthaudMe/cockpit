@@ -151,7 +151,7 @@ export function ContextColumn({
             if (!groups[key]) groups[key] = [];
             groups[key].push(m);
           }
-          const DAY_COLORS = ["var(--accent)", "var(--green)", "var(--yellow)", "#a78bfa", "#f472b6", "#60a5fa", "#f97316"];
+          const DAY_COLORS = ["var(--accent)", "var(--green)", "var(--yellow)", "var(--purple)", "var(--pink)", "var(--blue)", "var(--orange)"];
           const sortedDates = Object.keys(groups).sort();
 
           return sortedDates.map((dateStr, di) => {
@@ -351,10 +351,15 @@ export function ContextColumn({
 
 function SkillsPanel({ onPrefill }: { onPrefill: (text: string) => void }) {
   const [customSkills, setCustomSkills] = useState<QuickSkill[]>([]);
+  const [skillsError, setSkillsError] = useState(false);
 
-  useEffect(() => {
+  const loadCustomSkills = () => {
+    setSkillsError(false);
     fetch("/api/skills/custom")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error();
+        return r.json();
+      })
       .then((data) => {
         if (Array.isArray(data)) {
           setCustomSkills(
@@ -368,13 +373,23 @@ function SkillsPanel({ onPrefill }: { onPrefill: (text: string) => void }) {
           );
         }
       })
-      .catch(() => {});
+      .catch(() => setSkillsError(true));
+  };
+
+  useEffect(() => {
+    loadCustomSkills();
   }, []);
 
   const allSkills = [...FEATURED_SKILLS, ...customSkills];
 
   return (
     <Panel title="Skills" count={allSkills.length}>
+      {skillsError && (
+        <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginBottom: "0.3rem" }}>
+          Failed to load custom skills.{" "}
+          <span onClick={loadCustomSkills} style={{ color: "var(--blue)", cursor: "pointer" }}>Retry</span>
+        </div>
+      )}
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.3rem" }}>
         {allSkills.map((skill) => (
           <button
@@ -389,7 +404,7 @@ function SkillsPanel({ onPrefill }: { onPrefill: (text: string) => void }) {
                 : "rgba(255,255,255,0.04)",
               border: `1px solid ${skill.custom ? "rgba(168,139,250,0.3)" : "var(--border)"}`,
               borderRadius: 4,
-              color: skill.custom ? "#a78bfa" : "var(--text)",
+              color: skill.custom ? "var(--purple)" : "var(--text)",
               cursor: "pointer",
               fontFamily: "inherit",
               fontSize: "0.75rem",

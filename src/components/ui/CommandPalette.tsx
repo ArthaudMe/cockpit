@@ -50,7 +50,7 @@ function SourceBadge({ source }: { source: SearchSource }) {
         borderRadius: 3,
         fontSize: "0.65rem",
         fontWeight: 700,
-        color: "#ffffff",
+        color: "var(--accent)",
         background: badge.bg,
         textTransform: "uppercase",
         letterSpacing: "0.04em",

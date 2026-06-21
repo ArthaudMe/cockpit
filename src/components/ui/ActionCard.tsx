@@ -58,7 +58,7 @@ export function ActionCard({
     <div
       style={{
         margin: "0.4rem 0",
-        border: `1px solid ${state === "success" ? "var(--accent)" : state === "error" ? "#e55" : "var(--border-light)"}`,
+        border: `1px solid ${state === "success" ? "var(--accent)" : state === "error" ? "var(--red)" : "var(--border-light)"}`,
         borderRadius: 6,
         padding: "0.6rem 0.75rem",
         background: "var(--surface)",
@@ -131,7 +131,7 @@ export function ActionCard({
             borderRadius: 4,
             marginBottom: "0.4rem",
             background: result.success ? "rgba(80, 200, 120, 0.1)" : "rgba(230, 80, 80, 0.1)",
-            color: result.success ? "#50c878" : "#e55",
+            color: result.success ? "var(--green)" : "var(--red)",
             lineHeight: 1.5,
           }}
         >

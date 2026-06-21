@@ -106,6 +106,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
   const [mcpTestResult, setMcpTestResult] = useState<{ id: string; success: boolean; message: string } | null>(null);
   const [analyticsOn, setAnalyticsOn] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [settingsLoadError, setSettingsLoadError] = useState(false);
 
   useEffect(() => {
     setAnalyticsOn(isAnalyticsEnabled());
@@ -118,46 +119,34 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
       .catch(() => {});
   }, []);
 
-  useEffect(() => {
-    fetch("/api/agents")
-      .then((r) => r.json())
-      .then((data: AgentInfo[]) => setAgents(data))
-      .catch(() => {});
+  const loadAllSettings = useCallback(() => {
+    setSettingsLoadError(false);
 
-    fetch("/api/detect-backends")
-      .then((r) => r.json())
-      .then((data: { backends: BackendStatus[] }) => setBackends(data.backends))
-      .catch(() => {});
+    const safeFetch = (url: string) =>
+      fetch(url).then((r) => {
+        if (!r.ok) throw new Error();
+        return r.json();
+      });
 
-    fetch("/api/backends")
-      .then((r) => r.json())
-      .then((data: BackendDef[]) => setBackendDefs(data))
-      .catch(() => {});
-
-    fetch("/api/profile")
-      .then((r) => r.json())
-      .then((data: Profile) => setProfile(data))
-      .catch(() => {});
-
-    fetch("/api/skills")
-      .then((r) => r.json())
-      .then((data: SkillInfo[]) => setSkills(data))
-      .catch(() => {});
-
-    fetch("/api/skills/custom")
-      .then((r) => r.json())
-      .then((data: CustomSkillInfo[]) => {
-        if (Array.isArray(data)) setCustomSkills(data);
-      })
-      .catch(() => {});
+    Promise.allSettled([
+      safeFetch("/api/agents").then((data: AgentInfo[]) => setAgents(data)),
+      safeFetch("/api/detect-backends").then((data: { backends: BackendStatus[] }) => setBackends(data.backends)),
+      safeFetch("/api/backends").then((data: BackendDef[]) => setBackendDefs(data)),
+      safeFetch("/api/profile").then((data: Profile) => setProfile(data)),
+      safeFetch("/api/skills").then((data: SkillInfo[]) => setSkills(data)),
+      safeFetch("/api/skills/custom").then((data: CustomSkillInfo[]) => { if (Array.isArray(data)) setCustomSkills(data); }),
+      safeFetch("/api/datasources/mcp").then((data: McpServer[]) => setMcpServers(data)),
+    ]).then((results) => {
+      const allFailed = results.every((r) => r.status === "rejected");
+      if (allFailed) setSettingsLoadError(true);
+    });
 
     fetchDatasources();
-
-    fetch("/api/datasources/mcp")
-      .then((r) => r.json())
-      .then((data: McpServer[]) => setMcpServers(data))
-      .catch(() => {});
   }, [fetchDatasources]);
+
+  useEffect(() => {
+    loadAllSettings();
+  }, [loadAllSettings]);
 
   // Poll for datasource status while connecting, with 2-minute timeout
   useEffect(() => {
@@ -405,6 +394,39 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
 
       {/* Content */}
       <div style={{ flex: 1, overflowY: "auto", padding: "1rem 1.25rem" }}>
+        {settingsLoadError && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              padding: "0.5rem 0.75rem",
+              marginBottom: "0.75rem",
+              background: "rgba(255,68,68,0.08)",
+              border: "1px solid rgba(255,68,68,0.2)",
+              borderRadius: 4,
+              fontSize: "0.68rem",
+              color: "var(--red)",
+            }}
+          >
+            <span style={{ flex: 1 }}>Failed to load settings data.</span>
+            <button
+              onClick={loadAllSettings}
+              style={{
+                background: "none",
+                border: "1px solid var(--border-light)",
+                borderRadius: 3,
+                color: "var(--text-dim)",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                fontSize: "0.65rem",
+                padding: "0.15rem 0.4rem",
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        )}
         {/* ── Profile ── */}
         <div style={sectionTitle}>Profile</div>
         <div style={card}>
@@ -923,7 +945,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
               <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flex: 1, minWidth: 0 }}>
                 <span style={{ fontSize: "0.8rem", flexShrink: 0 }}>{skill.icon}</span>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "#a78bfa" }}>{skill.name}</div>
+                  <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--purple)" }}>{skill.name}</div>
                   <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: "0.05rem" }}>{skill.slash} — {skill.description}</div>
                 </div>
               </div>
@@ -1304,7 +1326,7 @@ function AddSkillForm({
 
   return (
     <div style={{ ...card, marginBottom: "0.6rem", borderColor: "rgba(168,139,250,0.3)" }}>
-      <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "#a78bfa", marginBottom: "0.5rem" }}>
+      <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--purple)", marginBottom: "0.5rem" }}>
         Create Custom Skill
       </div>
 
@@ -1355,7 +1377,7 @@ function AddSkillForm({
           }}
           disabled={!canSubmit}
           style={{
-            background: canSubmit ? "#a78bfa" : "var(--border)",
+            background: canSubmit ? "var(--purple)" : "var(--border)",
             border: "none",
             borderRadius: 4,
             color: "var(--bg)",

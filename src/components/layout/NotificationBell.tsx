@@ -101,7 +101,7 @@ export function NotificationBell({
               top: -4,
               right: -4,
               background: "var(--red)",
-              color: "#fff",
+              color: "var(--accent)",
               fontSize: "0.75rem",
               fontWeight: 700,
               minWidth: 13,

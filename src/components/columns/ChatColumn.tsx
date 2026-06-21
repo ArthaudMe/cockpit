@@ -72,6 +72,7 @@ export const ChatColumn = memo(function ChatColumn({
   const [streamingAgents, setStreamingAgents] = useState<Set<string>>(new Set());
   const [notifiedAgents, setNotifiedAgents] = useState<Set<string>>(new Set());
   const [creatingAgent, setCreatingAgent] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [renamingAgentId, setRenamingAgentId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [showSwitcher, setShowSwitcher] = useState(false);
@@ -106,21 +107,30 @@ export const ChatColumn = memo(function ChatColumn({
     }
   }, [activeAgentId]);
 
-  useEffect(() => {
-    fetch("/api/agents")
-      .then((r) => r.json())
-      .then((data: AgentInfo[]) => {
-        setAgents(data);
-        if (data.length > 0 && !activeAgentId) {
-          setActiveAgentId(data[0].id);
+  const loadAgentsAndBackends = useCallback(() => {
+    setLoadError(false);
+    Promise.all([
+      fetch("/api/agents").then((r) => {
+        if (!r.ok) throw new Error("Failed to load agents");
+        return r.json();
+      }),
+      fetch("/api/backends").then((r) => {
+        if (!r.ok) throw new Error("Failed to load backends");
+        return r.json();
+      }),
+    ])
+      .then(([agentsData, backendsData]: [AgentInfo[], BackendDef[]]) => {
+        setAgents(agentsData);
+        setBackends(backendsData);
+        if (agentsData.length > 0 && !activeAgentId) {
+          setActiveAgentId(agentsData[0].id);
         }
       })
-      .catch(() => {});
+      .catch(() => setLoadError(true));
+  }, [activeAgentId, setActiveAgentId]);
 
-    fetch("/api/backends")
-      .then((r) => r.json())
-      .then((data: BackendDef[]) => setBackends(data))
-      .catch(() => {});
+  useEffect(() => {
+    loadAgentsAndBackends();
   }, []);
 
   const messages = activeAgentId ? messagesByAgent[activeAgentId] || [] : [];
@@ -643,11 +653,43 @@ export const ChatColumn = memo(function ChatColumn({
 
       {/* Messages area */}
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "0.75rem" }}>
-        {messages.length === 0 && activeAgent && (
+        {loadError && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              height: "100%",
+              gap: "0.5rem",
+            }}
+          >
+            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+              Failed to load agents
+            </span>
+            <button
+              onClick={loadAgentsAndBackends}
+              style={{
+                background: "none",
+                border: "1px solid var(--border-light)",
+                borderRadius: 4,
+                color: "var(--text-dim)",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                fontSize: "0.75rem",
+                padding: "0.25rem 0.6rem",
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {!loadError && messages.length === 0 && activeAgent && (
           <EmptyState agent={activeAgent} onPrefill={onInputChange} />
         )}
 
-        {!activeAgent && (
+        {!loadError && !activeAgent && (
           <div
             style={{
               display: "flex",
@@ -775,7 +817,7 @@ export const ChatColumn = memo(function ChatColumn({
                     height: 14,
                     borderRadius: "50%",
                     background: "rgba(0,0,0,0.7)",
-                    color: "#fff",
+                    color: "var(--accent)",
                     border: "none",
                     fontSize: "0.75rem",
                     cursor: "pointer",
