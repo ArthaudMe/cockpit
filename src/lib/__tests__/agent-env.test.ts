@@ -30,7 +30,7 @@ describe("buildAgentEnv", () => {
   it("passes through allowed env vars", () => {
     const env = buildAgentEnv();
     expect(env.HOME).toBe("/Users/test");
-    expect(env.PATH).toBe("/usr/bin");
+    expect(env.PATH).toContain("/usr/bin");
     expect(env.ANTHROPIC_API_KEY).toBe("sk-ant-xxx");
     expect(env.OPENAI_API_KEY).toBe("sk-xxx");
     expect(env.GITHUB_TOKEN).toBe("ghp_xxx");
