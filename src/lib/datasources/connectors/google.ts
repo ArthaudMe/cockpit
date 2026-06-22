@@ -2,6 +2,8 @@ import type { OAuthConfig, TokenSet, CalendarEvent, EmailThread } from "../types
 import { getTokens, saveTokens } from "../token-store";
 import { isProxyEnabled, proxyExchangeCode, proxyRefreshToken } from "../oauth-proxy";
 import CREDENTIALS from "../credentials";
+import { executeAction, isComposioEnabled } from "../composio";
+import { isGoogleConnectedViaComposio } from "../token-store";
 
 export const GOOGLE_OAUTH: OAuthConfig = {
   authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
@@ -163,7 +165,11 @@ export async function fetchCalendarEvents(): Promise<CalendarEvent[]> {
 
 export async function searchCalendarEvents(query: string): Promise<CalendarEvent[]> {
   const tokens = await getValidGoogleTokens();
-  if (!tokens) return [];
+  if (!tokens) {
+    // Fall through to Composio if available
+    if (useComposio()) return searchCalendarEventsViaComposio(query);
+    return [];
+  }
 
   try {
     const now = new Date();
@@ -217,7 +223,10 @@ export async function searchCalendarEvents(query: string): Promise<CalendarEvent
 
 export async function searchEmails(query: string): Promise<EmailThread[]> {
   const tokens = await getValidGoogleTokens();
-  if (!tokens) return [];
+  if (!tokens) {
+    if (useComposio()) return searchEmailsViaComposio(query);
+    return [];
+  }
 
   try {
     const listRes = await fetch(
@@ -365,6 +374,313 @@ export async function createCalendarEvent(params: {
     return { success: false, message: "Couldn't reach Google Calendar. Please check your internet connection." };
   }
 }
+
+// ─── Composio-backed Google data ─────────────────────────────────
+// When Composio is configured, these functions replace direct API calls.
+// They use Composio's managed OAuth so we skip Google's CASA verification.
+
+function useComposio(): boolean {
+  return isComposioEnabled() && isGoogleConnectedViaComposio();
+}
+
+export async function fetchCalendarEventsViaComposio(): Promise<CalendarEvent[]> {
+  try {
+    const now = new Date();
+    const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const result = await executeAction("GOOGLECALENDAR_EVENTS_LIST", {
+      calendarId: "primary",
+      timeMin: now.toISOString(),
+      timeMax: weekFromNow.toISOString(),
+      singleEvents: true,
+      orderBy: "startTime",
+      maxResults: 20,
+    });
+
+    const items = (result.items ?? result.events ?? []) as any[];
+    return items.map((event: any) => {
+      const start = event.start?.dateTime || event.start?.date || "";
+      const end = event.end?.dateTime || event.end?.date || "";
+      const startDate = new Date(start);
+      const endDate = new Date(end);
+      const durationMin = Math.round(
+        (endDate.getTime() - startDate.getTime()) / 60_000,
+      );
+
+      return {
+        title: event.summary || "Untitled",
+        time: startDate.toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        }),
+        date: startDate.toISOString().split("T")[0],
+        duration:
+          durationMin >= 60
+            ? `${Math.round(durationMin / 60)}h`
+            : `${durationMin}m`,
+        attendees: (event.attendees || [])
+          .filter((a: any) => !a.self)
+          .map(
+            (a: any) =>
+              a.displayName || a.email?.split("@")[0] || "Unknown",
+          ),
+        description: event.description?.slice(0, 200),
+        source: "Google Calendar",
+      };
+    });
+  } catch (err) {
+    console.error("[Google/Composio] calendar fetch error:", err);
+    return [];
+  }
+}
+
+export async function fetchRecentEmailsViaComposio(): Promise<EmailThread[]> {
+  try {
+    const result = await executeAction("GMAIL_FETCH_EMAILS", {
+      query: "newer_than:2d",
+      max_results: 15,
+      include_payload: true,
+    });
+
+    const messages = (result.messages ?? result.data ?? []) as any[];
+    return messages.slice(0, 10).map((msg: any) => {
+      const headers = msg.payload?.headers || [];
+      const subject =
+        headers.find((h: any) => h.name === "Subject")?.value ||
+        msg.subject ||
+        "No subject";
+      const from =
+        headers.find((h: any) => h.name === "From")?.value ||
+        msg.from ||
+        "Unknown";
+      const unread = msg.labelIds
+        ? (msg.labelIds as string[]).includes("UNREAD")
+        : msg.unread ?? false;
+
+      return {
+        subject,
+        from: from.replace(/<[^>]+>/g, "").trim(),
+        snippet: msg.snippet || "",
+        time: msg.internalDate
+          ? new Date(Number(msg.internalDate)).toLocaleString()
+          : msg.date || "",
+        unread,
+      };
+    });
+  } catch (err) {
+    console.error("[Google/Composio] email fetch error:", err);
+    return [];
+  }
+}
+
+async function searchCalendarEventsViaComposio(query: string): Promise<CalendarEvent[]> {
+  try {
+    const now = new Date();
+    const threeMonthsAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+    const threeMonthsAhead = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+    const result = await executeAction("GOOGLECALENDAR_FIND_EVENT", {
+      query,
+      time_min: threeMonthsAgo.toISOString(),
+      time_max: threeMonthsAhead.toISOString(),
+      single_events: true,
+      order_by: "startTime",
+    });
+
+    const items = (result.items ?? result.events ?? []) as any[];
+    return items.slice(0, 15).map((event: any) => {
+      const start = event.start?.dateTime || event.start?.date || "";
+      const end = event.end?.dateTime || event.end?.date || "";
+      const startDate = new Date(start);
+      const endDate = new Date(end);
+      const durationMin = Math.round(
+        (endDate.getTime() - startDate.getTime()) / 60_000,
+      );
+
+      return {
+        title: event.summary || "Untitled",
+        time: startDate.toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        }),
+        date: startDate.toISOString().split("T")[0],
+        duration:
+          durationMin >= 60
+            ? `${Math.round(durationMin / 60)}h`
+            : `${durationMin}m`,
+        attendees: (event.attendees || [])
+          .filter((a: any) => !a.self)
+          .map(
+            (a: any) =>
+              a.displayName || a.email?.split("@")[0] || "Unknown",
+          ),
+        description: event.description?.slice(0, 200),
+        source: "Google Calendar",
+      };
+    });
+  } catch (err) {
+    console.error("[Google/Composio] calendar search error:", err);
+    return [];
+  }
+}
+
+async function searchEmailsViaComposio(query: string): Promise<EmailThread[]> {
+  try {
+    const result = await executeAction("GMAIL_FETCH_EMAILS", {
+      query,
+      max_results: 10,
+      include_payload: true,
+    });
+
+    const messages = (result.messages ?? result.data ?? []) as any[];
+    return messages.slice(0, 10).map((msg: any) => {
+      const headers = msg.payload?.headers || [];
+      const subject =
+        headers.find((h: any) => h.name === "Subject")?.value ||
+        msg.subject ||
+        "No subject";
+      const from =
+        headers.find((h: any) => h.name === "From")?.value ||
+        msg.from ||
+        "Unknown";
+      const unread = msg.labelIds
+        ? (msg.labelIds as string[]).includes("UNREAD")
+        : msg.unread ?? false;
+
+      return {
+        subject,
+        from: from.replace(/<[^>]+>/g, "").trim(),
+        snippet: msg.snippet || "",
+        time: msg.internalDate
+          ? new Date(Number(msg.internalDate)).toLocaleString()
+          : msg.date || "",
+        unread,
+      };
+    });
+  } catch (err) {
+    console.error("[Google/Composio] email search error:", err);
+    return [];
+  }
+}
+
+export async function createCalendarEventViaComposio(params: {
+  summary: string;
+  start: string;
+  end: string;
+  description?: string;
+  attendees?: string[];
+}): Promise<{ success: boolean; message: string; url?: string }> {
+  try {
+    const result = await executeAction("GOOGLECALENDAR_CREATE_EVENT", {
+      summary: params.summary,
+      start_datetime: params.start,
+      end_datetime: params.end,
+      ...(params.description && { description: params.description }),
+      ...(params.attendees?.length && { attendees: params.attendees }),
+    });
+
+    return {
+      success: true,
+      message: `Created event: ${params.summary}`,
+      url: (result as any).htmlLink,
+    };
+  } catch (err) {
+    console.error("[Google/Composio] create event error:", err);
+    return {
+      success: false,
+      message: "Couldn't create the calendar event via Composio.",
+    };
+  }
+}
+
+export async function sendEmailViaComposio(params: {
+  to: string;
+  subject: string;
+  body: string;
+}): Promise<{ success: boolean; message: string }> {
+  try {
+    await executeAction("GMAIL_SEND_EMAIL", {
+      recipient_email: params.to,
+      subject: params.subject,
+      body: params.body,
+    });
+
+    return {
+      success: true,
+      message: `Email sent to ${params.to}: "${params.subject}"`,
+    };
+  } catch (err) {
+    console.error("[Google/Composio] send email error:", err);
+    return {
+      success: false,
+      message: "Couldn't send the email via Composio.",
+    };
+  }
+}
+
+export async function createGmailDraftViaComposio(params: {
+  to: string;
+  subject: string;
+  body: string;
+}): Promise<{ success: boolean; message: string; url?: string }> {
+  try {
+    const result = await executeAction("GMAIL_CREATE_EMAIL_DRAFT", {
+      recipient_email: params.to,
+      subject: params.subject,
+      body: params.body,
+    });
+
+    return {
+      success: true,
+      message: `Draft created: "${params.subject}" to ${params.to}`,
+      url: `https://mail.google.com/mail/#drafts`,
+    };
+  } catch (err) {
+    console.error("[Google/Composio] create draft error:", err);
+    return {
+      success: false,
+      message: "Couldn't create the email draft via Composio.",
+    };
+  }
+}
+
+// ─── Unified exports (auto-select Composio vs direct OAuth) ─────
+
+export async function fetchCalendarEventsAuto(): Promise<CalendarEvent[]> {
+  return useComposio()
+    ? fetchCalendarEventsViaComposio()
+    : fetchCalendarEvents();
+}
+
+export async function fetchRecentEmailsAuto(): Promise<EmailThread[]> {
+  return useComposio()
+    ? fetchRecentEmailsViaComposio()
+    : fetchRecentEmails();
+}
+
+export async function createCalendarEventAuto(params: {
+  summary: string;
+  start: string;
+  end: string;
+  description?: string;
+  attendees?: string[];
+}): Promise<{ success: boolean; message: string; url?: string }> {
+  return useComposio()
+    ? createCalendarEventViaComposio(params)
+    : createCalendarEvent(params);
+}
+
+export async function createGmailDraftAuto(params: {
+  to: string;
+  subject: string;
+  body: string;
+}): Promise<{ success: boolean; message: string; url?: string }> {
+  return useComposio()
+    ? createGmailDraftViaComposio(params)
+    : createGmailDraft(params);
+}
+
+// ─── Direct OAuth write actions (original) ───────────────────────
 
 export async function createGmailDraft(params: {
   to: string;

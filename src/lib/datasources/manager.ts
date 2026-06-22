@@ -1,13 +1,14 @@
 import type { ServiceId, DatasourceStatus, DatasourceData } from "./types";
-import { getConnectedServices, getTokens, isServiceDisabled } from "./token-store";
+import { getConnectedServices, getTokens, isServiceDisabled, isGoogleConnectedViaComposio } from "./token-store";
 import { isGranolaAvailable, fetchGranolaMeetings } from "./connectors/granola";
-import { fetchCalendarEvents, fetchRecentEmails } from "./connectors/google";
+import { fetchCalendarEventsAuto, fetchRecentEmailsAuto } from "./connectors/google";
 import { fetchLinearIssues } from "./connectors/linear";
 import { fetchGitHubPRs, fetchGitHubNotifications } from "./connectors/github";
 import { fetchNotionPages, isNotionConnected } from "./connectors/notion";
 import { fetchSlackMessages } from "./connectors/slack";
 import { getMcpServers } from "./mcp-store";
 import { fetchMcpResources } from "./connectors/mcp";
+import { isComposioEnabled } from "./composio";
 import {
   getGoogleAuthUrl,
   exchangeGoogleCode,
@@ -85,9 +86,11 @@ export function getDatasourceStatuses(): DatasourceStatus[] {
     const isConnected =
       id === "granola"
         ? granolaAvailable && !isServiceDisabled("granola")
-        : id === "notion"
-          ? isNotionConnected()
-          : connected.includes(serviceId);
+        : id === "google"
+          ? connected.includes("google") || isGoogleConnectedViaComposio()
+          : id === "notion"
+            ? isNotionConnected()
+            : connected.includes(serviceId);
 
     let needsScopeUpgrade = false;
     let scopeUpgradeReason: string | undefined;
@@ -188,6 +191,8 @@ export async function fetchAllData(): Promise<DatasourceData> {
 async function doFetchAllData(): Promise<DatasourceData> {
   const connected = getConnectedServices();
   const granolaAvailable = isGranolaAvailable();
+  const googleAvailable =
+    connected.includes("google") || isGoogleConnectedViaComposio();
 
   // Fetch all connected services in parallel
   const [
@@ -199,8 +204,8 @@ async function doFetchAllData(): Promise<DatasourceData> {
     notionPages,
     slackMessages,
   ] = await Promise.all([
-    connected.includes("google") ? fetchCalendarEvents() : [],
-    connected.includes("google") ? fetchRecentEmails() : [],
+    googleAvailable ? fetchCalendarEventsAuto() : [],
+    googleAvailable ? fetchRecentEmailsAuto() : [],
     connected.includes("linear") ? fetchLinearIssues() : [],
     connected.includes("github") ? fetchGitHubPRs() : [],
     connected.includes("github") ? fetchGitHubNotifications() : [],

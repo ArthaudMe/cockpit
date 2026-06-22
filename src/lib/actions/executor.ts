@@ -1,5 +1,7 @@
 import { getTokens } from "@/lib/datasources/token-store";
-import { createCalendarEvent, createGmailDraft } from "@/lib/datasources/connectors/google";
+import { createCalendarEventAuto, createGmailDraftAuto, sendEmailViaComposio } from "@/lib/datasources/connectors/google";
+import { isComposioEnabled } from "@/lib/datasources/composio";
+import { isGoogleConnectedViaComposio } from "@/lib/datasources/token-store";
 import { appendToNotionPage } from "@/lib/datasources/connectors/notion";
 import type { ActionBlock, ActionResult } from "./types";
 
@@ -173,7 +175,7 @@ async function executeCalendarCreateEvent(
     return { success: false, message: "Missing required params: summary, start, end (ISO datetime)" };
   }
 
-  const result = await createCalendarEvent({
+  const result = await createCalendarEventAuto({
     summary: summary as string,
     start: start as string,
     end: end as string,
@@ -196,7 +198,7 @@ async function executeGmailDraft(
     return { success: false, message: "Missing required params: to, subject, body" };
   }
 
-  const result = await createGmailDraft({
+  const result = await createGmailDraftAuto({
     to: to as string,
     subject: subject as string,
     body: body as string,
@@ -229,12 +231,32 @@ async function executeNotionUpdatePage(
   };
 }
 
+async function executeGmailSend(
+  params: Record<string, unknown>
+): Promise<ActionResult> {
+  if (!isComposioEnabled() || !isGoogleConnectedViaComposio()) {
+    return { success: false, message: "Direct email sending requires Composio. Use gmail_draft instead." };
+  }
+
+  const { to, subject, body } = params;
+  if (!to || !subject || !body) {
+    return { success: false, message: "Missing required params: to, subject, body" };
+  }
+
+  return sendEmailViaComposio({
+    to: to as string,
+    subject: subject as string,
+    body: body as string,
+  });
+}
+
 const SUPPORTED_ACTIONS = new Set([
   "linear_create_issue",
   "github_comment_pr",
   "slack_send_message",
   "calendar_create_event",
   "gmail_draft",
+  "gmail_send",
   "notion_update_page",
 ]);
 
@@ -254,6 +276,8 @@ export async function executeAction(action: ActionBlock): Promise<ActionResult> 
       return executeCalendarCreateEvent(action.params);
     case "gmail_draft":
       return executeGmailDraft(action.params);
+    case "gmail_send":
+      return executeGmailSend(action.params);
     case "notion_update_page":
       return executeNotionUpdatePage(action.params);
     default:

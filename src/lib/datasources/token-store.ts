@@ -124,3 +124,53 @@ export function consumeOAuthState(state: string): { service: ServiceId; codeVeri
   if (Date.now() - entry.createdAt > 600_000) return null;
   return { service: entry.service, codeVerifier: entry.codeVerifier };
 }
+
+// ─── Composio connection tracking ────────────────────────────────
+// Stores Composio connected-account IDs for Google toolkits.
+
+const COMPOSIO_PATH = path.join(STORE_DIR, "composio-connections.json");
+
+type ComposioConnections = {
+  googlecalendar?: string; // connected_account_id
+  gmail?: string;
+};
+
+function readComposio(): ComposioConnections {
+  return readJsonCached<ComposioConnections>(COMPOSIO_PATH, {});
+}
+
+function writeComposio(conns: ComposioConnections) {
+  ensureDir();
+  fs.writeFileSync(COMPOSIO_PATH, JSON.stringify(conns, null, 2), {
+    mode: 0o600,
+  });
+  invalidateFileCache(COMPOSIO_PATH);
+}
+
+export function saveComposioConnection(
+  toolkit: "googlecalendar" | "gmail",
+  connectionId: string,
+) {
+  const conns = readComposio();
+  conns[toolkit] = connectionId;
+  writeComposio(conns);
+}
+
+export function getComposioConnection(
+  toolkit: "googlecalendar" | "gmail",
+): string | null {
+  return readComposio()[toolkit] ?? null;
+}
+
+export function getComposioConnections(): ComposioConnections {
+  return readComposio();
+}
+
+export function removeComposioConnections() {
+  writeComposio({});
+}
+
+export function isGoogleConnectedViaComposio(): boolean {
+  const conns = readComposio();
+  return !!(conns.googlecalendar || conns.gmail);
+}
