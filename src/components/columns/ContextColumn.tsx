@@ -36,7 +36,7 @@ function Panel({
 
   return (
     <div className="panel">
-      <div className="panel-header" onClick={() => { setOpen(!open); track("panel_clicked", { panel: title }); }}>
+      <div className="panel-header" role="button" tabIndex={0} aria-expanded={open} onClick={() => { setOpen(!open); track("panel_clicked", { panel: title }); }} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(!open); track("panel_clicked", { panel: title }); } }}>
         <div className="panel-title-row">
           <span className="panel-title">{title}</span>
           {count !== undefined && <span className="panel-count">{count}</span>}
@@ -135,7 +135,7 @@ export function ContextColumn({
       <Panel title="Calendar" count={context.calendar.length} defaultOpen>
         {context.calendar.length === 0 ? (
           context.connected.google ? (
-            <div className="empty-state">No upcoming events</div>
+            <div className="empty-state">No upcoming events this week</div>
           ) : (
             <ConnectPrompt
               service="Google"
@@ -206,7 +206,7 @@ export function ContextColumn({
                       </div>
                       <div className="feed-meta">
                         <span style={{ fontSize: "0.75rem", color }}>{m.time}</span>
-                        <span className="feed-time">{m.attendees.join(", ")}</span>
+                        <span className="feed-time">{m.attendees?.length ? m.attendees.join(", ") : "Just you"}</span>
                       </div>
                     </div>
                   );
@@ -235,13 +235,13 @@ export function ContextColumn({
                   style={{
                     padding: "0.4rem",
                     borderBottom: "none",
-                    background: "rgba(255,255,255,0.02)",
+                    background: "color-mix(in srgb, var(--text) 2%, transparent)",
                     borderRadius: 3,
                   }}
                 >
                   <div className="metric-label">{label}</div>
                   <div className="metric-value">
-                    {key === "mrr" ? `$${v.value.toLocaleString()}` : `${v.value}${"unit" in v ? v.unit : ""}`}
+                    {key === "mrr" ? `$${(v.value ?? 0).toLocaleString()}` : `${v.value ?? 0}${"unit" in v ? v.unit : ""}`}
                   </div>
                   <div className={`metric-change ${isGood ? "positive" : "negative"}`}>
                     {v.change}
@@ -259,7 +259,7 @@ export function ContextColumn({
       <Panel title="Slack" count={context.slack_highlights.length}>
         {context.slack_highlights.length === 0 ? (
           context.connected.slack ? (
-            <div className="empty-state">No recent messages</div>
+            <div className="empty-state">No recent highlights — messages will appear here as they come in</div>
           ) : (
             <ConnectPrompt
               service="Slack"
@@ -312,7 +312,7 @@ export function ContextColumn({
       {/* Todo */}
       <Panel title="Todo" count={todos.length > 0 ? todos.filter((t) => !t.done).length + "/" + todos.length : 0}>
         {todos.length === 0 ? (
-          <div className="empty-state">No todos yet</div>
+          <div className="empty-state">No todos yet — ask your AI to create some</div>
         ) : todos.map((t, i) => (
           <div
             key={i}
@@ -400,9 +400,9 @@ function SkillsPanel({ onPrefill }: { onPrefill: (text: string) => void }) {
             }}
             style={{
               background: skill.custom
-                ? "rgba(168,139,250,0.1)"
-                : "rgba(255,255,255,0.04)",
-              border: `1px solid ${skill.custom ? "rgba(168,139,250,0.3)" : "var(--border)"}`,
+                ? "color-mix(in srgb, var(--purple) 10%, transparent)"
+                : "color-mix(in srgb, var(--text) 4%, transparent)",
+              border: `1px solid ${skill.custom ? "color-mix(in srgb, var(--purple) 30%, transparent)" : "var(--border)"}`,
               borderRadius: 4,
               color: skill.custom ? "var(--purple)" : "var(--text)",
               cursor: "pointer",
@@ -417,13 +417,13 @@ function SkillsPanel({ onPrefill }: { onPrefill: (text: string) => void }) {
             title={`${skill.slash} — Click to use`}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = skill.custom
-                ? "rgba(168,139,250,0.2)"
-                : "rgba(255,255,255,0.08)";
+                ? "color-mix(in srgb, var(--purple) 20%, transparent)"
+                : "color-mix(in srgb, var(--text) 8%, transparent)";
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.background = skill.custom
-                ? "rgba(168,139,250,0.1)"
-                : "rgba(255,255,255,0.04)";
+                ? "color-mix(in srgb, var(--purple) 10%, transparent)"
+                : "color-mix(in srgb, var(--text) 4%, transparent)";
             }}
           >
             <span>{skill.icon}</span> {skill.name}

@@ -37,7 +37,7 @@ function ToolResult({ focus }: { focus: ContextFocus }) {
               <span key={key} style={{ display: "inline-block", marginRight: "0.8rem" }}>
                 <span style={{ color: "var(--text-muted)" }}>{key}</span>
                 <span style={{ color: "var(--text-dim)", margin: "0 0.2rem" }}>=</span>
-                <span style={{ color: "var(--green)" }}>{String(val)}</span>
+                <span style={{ color: "var(--green)" }}>{val == null ? "—" : String(val)}</span>
               </span>
             ))}
           </div>
@@ -125,7 +125,8 @@ export function ContextualChatView({
             const next = [...prev];
             next[next.length - 1] = {
               role: "assistant",
-              content: `Error: ${res.status} ${res.statusText}`,
+              content: res.status >= 500 ? "Something went wrong. Please try again in a moment."
+                      : "Sorry, I couldn't process that request. Please try again.",
             };
             return next;
           });
@@ -152,7 +153,9 @@ export function ContextualChatView({
           const next = [...prev];
           next[next.length - 1] = {
             role: "assistant",
-            content: `Error: ${err instanceof Error ? err.message : "Unknown error"}. Is Claude CLI installed?`,
+            content: err instanceof Error && err.message.includes("Failed to fetch")
+                    ? "Couldn't reach the server. Please check your connection and try again."
+                    : "Something unexpected happened. Please try again.",
           };
           return next;
         });

@@ -17,12 +17,10 @@ export async function POST() {
       message: "Auth flow started — check your browser",
     });
   } catch (err) {
+    console.error("[authenticate-claude]", err);
     return NextResponse.json({
       success: false,
-      error:
-        err instanceof Error
-          ? err.message
-          : "Could not start auth flow",
+      error: "Could not start auth flow. Make sure Claude CLI is installed.",
     });
   }
 }

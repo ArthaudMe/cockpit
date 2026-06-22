@@ -165,16 +165,21 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
   }, [connecting, datasources]);
 
   const saveProfile = useCallback(async (updates: Partial<Profile>) => {
+    const previous = profile;
     const updated = { ...profile, ...updates };
     setProfile(updated);
     setEditingField(null);
     try {
-      await fetch("/api/profile", {
+      const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
       });
-    } catch {}
+      if (!res.ok) throw new Error();
+    } catch {
+      setProfile(previous);
+      alert("Couldn't save your profile. Please try again.");
+    }
   }, [profile]);
 
   const handleConnect = useCallback(async (serviceId: string) => {
@@ -191,6 +196,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
       }
     } catch {
       setConnecting(null);
+      alert("Couldn't start the connection. Please check your internet and try again.");
     }
   }, [fetchDatasources]);
 
@@ -213,13 +219,16 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
 
   const handleDisconnect = useCallback(async (serviceId: string) => {
     try {
-      await fetch("/api/datasources/disconnect", {
+      const res = await fetch("/api/datasources/disconnect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ service: serviceId }),
       });
+      if (!res.ok) throw new Error();
       fetchDatasources();
-    } catch {}
+    } catch {
+      alert("Couldn't disconnect. Please try again.");
+    }
   }, [fetchDatasources]);
 
   const handleAddMcp = useCallback(async (server: Omit<McpServer, "id" | "enabled" | "addedAt">) => {
@@ -229,24 +238,37 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(server),
       });
+      if (!res.ok) throw new Error();
       const created: McpServer = await res.json();
       setMcpServers((prev) => [...prev, created]);
       setShowAddMcp(false);
-    } catch {}
+    } catch {
+      alert("Couldn't add the MCP server. Please check the URL and try again.");
+    }
   }, []);
 
   const handleRemoveMcp = useCallback(async (id: string) => {
-    await fetch(`/api/datasources/mcp/${id}`, { method: "DELETE" });
-    setMcpServers((prev) => prev.filter((s) => s.id !== id));
+    try {
+      const res = await fetch(`/api/datasources/mcp/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      setMcpServers((prev) => prev.filter((s) => s.id !== id));
+    } catch {
+      alert("Couldn't remove the server. Please try again.");
+    }
   }, []);
 
   const handleToggleMcp = useCallback(async (id: string, enabled: boolean) => {
     setMcpServers((prev) => prev.map((s) => (s.id === id ? { ...s, enabled } : s)));
-    await fetch(`/api/datasources/mcp/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ enabled }),
-    });
+    try {
+      await fetch(`/api/datasources/mcp/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+    } catch {
+      // Revert optimistic update
+      setMcpServers((prev) => prev.map((s) => (s.id === id ? { ...s, enabled: !enabled } : s)));
+    }
   }, []);
 
   const handleTestMcp = useCallback(async (id: string) => {
@@ -282,15 +304,22 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
         });
         const updated: AgentInfo = await res.json();
         setAgents((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
-      } catch {}
+      } catch {
+        alert("Couldn't rename the agent. Please try again.");
+      }
       setEditingAgent(null);
     },
     [editName]
   );
 
   const handleDeleteAgent = useCallback(async (id: string) => {
-    await fetch(`/api/agents/${id}`, { method: "DELETE" });
-    setAgents((prev) => prev.filter((a) => a.id !== id));
+    try {
+      const res = await fetch(`/api/agents/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      setAgents((prev) => prev.filter((a) => a.id !== id));
+    } catch {
+      alert("Couldn't delete the agent. Please try again.");
+    }
   }, []);
 
   const toggleSkill = useCallback(async (id: string, enabled: boolean) => {
@@ -301,7 +330,9 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, enabled }),
       });
-    } catch {}
+    } catch {
+      setSkills((prev) => prev.map((s) => (s.id === id ? { ...s, enabled: !enabled } : s)));
+    }
   }, []);
 
   const handleAddCustomSkill = useCallback(async (skill: { name: string; slash: string; icon: string; description: string; promptInstruction: string }) => {
@@ -315,15 +346,22 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
       if (result.ok && result.skill) {
         setCustomSkills((prev) => [...prev, result.skill]);
         setShowAddSkill(false);
+      } else {
+        alert("Couldn't create the skill. Please try again.");
       }
-    } catch {}
+    } catch {
+      alert("Couldn't create the skill. Please try again.");
+    }
   }, []);
 
   const handleDeleteCustomSkill = useCallback(async (id: string) => {
     try {
-      await fetch(`/api/skills/custom?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      const res = await fetch(`/api/skills/custom?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
       setCustomSkills((prev) => prev.filter((s) => s.id !== id));
-    } catch {}
+    } catch {
+      alert("Couldn't delete the skill. Please try again.");
+    }
   }, []);
 
   const handleSwitchBackend = useCallback(
@@ -334,9 +372,12 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ backend, model }),
         });
+        if (!res.ok) throw new Error();
         const updated: AgentInfo = await res.json();
         setAgents((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
-      } catch {}
+      } catch {
+        alert("Couldn't switch the backend. Please try again.");
+      }
     },
     []
   );
@@ -402,8 +443,8 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
               gap: "0.5rem",
               padding: "0.5rem 0.75rem",
               marginBottom: "0.75rem",
-              background: "rgba(255,68,68,0.08)",
-              border: "1px solid rgba(255,68,68,0.2)",
+              background: "color-mix(in srgb, var(--red) 8%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--red) 20%, transparent)",
               borderRadius: 4,
               fontSize: "0.68rem",
               color: "var(--red)",
@@ -553,8 +594,8 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                     style={{
                       marginTop: "0.3rem",
                       padding: "0.25rem 0.4rem",
-                      background: "rgba(255,180,50,0.08)",
-                      border: "1px solid rgba(255,180,50,0.2)",
+                      background: "color-mix(in srgb, var(--yellow) 8%, transparent)",
+                      border: "1px solid color-mix(in srgb, var(--yellow) 20%, transparent)",
                       borderRadius: 4,
                       fontSize: "0.65rem",
                       color: "var(--yellow)",
@@ -940,7 +981,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
         {showAddSkill && <AddSkillForm onAdd={handleAddCustomSkill} onCancel={() => setShowAddSkill(false)} card={card} />}
 
         {customSkills.map((skill) => (
-          <div key={skill.id} style={{ ...card, borderColor: "rgba(168,139,250,0.2)" }}>
+          <div key={skill.id} style={{ ...card, borderColor: "color-mix(in srgb, var(--purple) 20%, transparent)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flex: 1, minWidth: 0 }}>
                 <span style={{ fontSize: "0.8rem", flexShrink: 0 }}>{skill.icon}</span>
@@ -1037,7 +1078,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                   <span
                     style={{
                       fontSize: "0.65rem",
-                      background: "rgba(255,255,255,0.06)",
+                      background: "color-mix(in srgb, var(--text) 6%, transparent)",
                       padding: "0.1rem 0.3rem",
                       borderRadius: 3,
                       color: "var(--text-muted)",
@@ -1325,7 +1366,7 @@ function AddSkillForm({
   const canSubmit = name.trim() && promptInstruction.trim();
 
   return (
-    <div style={{ ...card, marginBottom: "0.6rem", borderColor: "rgba(168,139,250,0.3)" }}>
+    <div style={{ ...card, marginBottom: "0.6rem", borderColor: "color-mix(in srgb, var(--purple) 30%, transparent)" }}>
       <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--purple)", marginBottom: "0.5rem" }}>
         Create Custom Skill
       </div>

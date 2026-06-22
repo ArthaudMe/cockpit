@@ -199,7 +199,7 @@ export async function appendToNotionPage(params: {
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      return { success: false, message: `Notion API error: ${res.status} ${(err as any).message || res.statusText}` };
+      return { success: false, message: "Couldn't update the Notion page. Please check your Notion connection and try again." };
     }
 
     return {
@@ -208,6 +208,6 @@ export async function appendToNotionPage(params: {
       url: `https://notion.so/${params.pageId.replace(/-/g, "")}`,
     };
   } catch (err) {
-    return { success: false, message: `Notion request failed: ${(err as Error).message}` };
+    return { success: false, message: "Couldn't reach Notion. Please check your internet connection." };
   }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 type BackendStatus = {
   id: string;
@@ -130,7 +130,7 @@ function ClaudeSetupScreen({
     navigator.clipboard.writeText(CLAUDE_INSTALL_CMD).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    });
+    }).catch(() => {});
   };
 
   return (
@@ -175,7 +175,7 @@ function ClaudeSetupScreen({
           style={{
             border: `1px solid ${claude?.installed ? "var(--green)" : "var(--border-light)"}`,
             borderRadius: 8,
-            background: claude?.installed ? "rgba(68,255,136,0.03)" : "var(--surface)",
+            background: claude?.installed ? "color-mix(in srgb, var(--green) 3%, transparent)" : "var(--surface)",
             padding: "1rem",
           }}
         >
@@ -214,8 +214,8 @@ function ClaudeSetupScreen({
                 borderRadius: 4,
                 flexShrink: 0,
                 ...(claude?.installed
-                  ? { color: "var(--green)", background: "rgba(68,255,136,0.1)" }
-                  : { color: "var(--text-muted)", background: "rgba(255,255,255,0.04)" }),
+                  ? { color: "var(--green)", background: "color-mix(in srgb, var(--green) 10%, transparent)" }
+                  : { color: "var(--text-muted)", background: "color-mix(in srgb, var(--text) 4%, transparent)" }),
               }}
             >
               {detecting && !detection
@@ -312,19 +312,18 @@ function ClaudeSetupScreen({
         >
           <button
             onClick={onContinue}
-            disabled={!ready || checking}
+            disabled={checking}
             style={{
               ...primaryBtn,
               padding: "0.5rem 1.6rem",
-              opacity: ready ? 1 : 0.3,
-              cursor: ready ? "pointer" : "default",
+              cursor: checking ? "default" : "pointer",
             }}
           >
-            Continue
+            {ready ? "Continue" : "Skip"}
           </button>
           {!ready && (
             <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-              {detecting ? "Checking for Claude..." : "Waiting for an engine to be ready"}
+              {detecting ? "Checking for engines..." : "No engine detected — you can still continue"}
             </span>
           )}
         </div>
@@ -361,6 +360,11 @@ function DatasourcesScreen({ onContinue }: { onContinue: () => void }) {
   const [datasources, setDatasources] = useState<DatasourceInfo[]>([]);
   const [connecting, setConnecting] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const connectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => { if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current); };
+  }, []);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -392,7 +396,7 @@ function DatasourcesScreen({ onContinue }: { onContinue: () => void }) {
       // Will show as not connected
     }
     // Don't clear connecting state — polling will update status
-    setTimeout(() => setConnecting(null), 5000);
+    connectTimeoutRef.current = setTimeout(() => setConnecting(null), 5000);
   }, []);
 
   const connectedCount = datasources.filter((d) => d.connected).length;
@@ -480,7 +484,7 @@ function DatasourceCard({
         border: `1px solid ${datasource.connected ? "var(--green)" : "var(--border)"}`,
         borderRadius: 6,
         background: datasource.connected
-          ? "rgba(74, 222, 128, 0.04)"
+          ? "color-mix(in srgb, var(--green) 4%, transparent)"
           : "transparent",
         transition: "all 0.2s",
       }}
@@ -543,7 +547,7 @@ function DatasourceCard({
           onClick={onConnect}
           disabled={connecting}
           style={{
-            background: connecting ? "var(--border)" : "rgba(255,255,255,0.08)",
+            background: connecting ? "var(--border)" : "color-mix(in srgb, var(--text) 8%, transparent)",
             color: connecting ? "var(--text-muted)" : "var(--text)",
             border: "1px solid var(--border-light)",
             borderRadius: 4,

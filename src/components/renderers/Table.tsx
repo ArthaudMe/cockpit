@@ -64,11 +64,11 @@ export function RenderTable({
                 onClick={() => onRowClick?.(ri, row)}
                 style={{
                   borderTop: "1px solid var(--border)",
-                  background: ri % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)",
+                  background: ri % 2 === 0 ? "transparent" : "color-mix(in srgb, var(--text) 2%, transparent)",
                   ...(onRowClick ? { cursor: "pointer" } : {}),
                 }}
-                onMouseEnter={(e) => { if (onRowClick) e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
-                onMouseLeave={(e) => { if (onRowClick) e.currentTarget.style.background = ri % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)"; }}
+                onMouseEnter={(e) => { if (onRowClick) e.currentTarget.style.background = "color-mix(in srgb, var(--text) 6%, transparent)"; }}
+                onMouseLeave={(e) => { if (onRowClick) e.currentTarget.style.background = ri % 2 === 0 ? "transparent" : "color-mix(in srgb, var(--text) 2%, transparent)"; }}
               >
                 {row.map((cell, ci) => (
                   <td

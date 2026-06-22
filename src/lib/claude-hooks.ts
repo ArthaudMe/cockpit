@@ -22,6 +22,9 @@ interface HookConfig {
 
 const HOOK_DIRS = new Map<string, { dir: string; port: number; token: string }>();
 
+/** Agent IDs are hex strings from randomBytes — reject anything else. */
+const SAFE_AGENT_ID = /^[a-f0-9]{8}$/;
+
 /**
  * Create a temp directory with Claude hook settings for an agent.
  * Returns the path to use as the working directory when spawning Claude,
@@ -32,6 +35,13 @@ const HOOK_DIRS = new Map<string, { dir: string; port: number; token: string }>(
  * fresh temp dir each time.
  */
 export function setupClaudeHooks(config: HookConfig): string {
+  // Validate agentId to prevent shell injection — it's embedded in curl commands.
+  // genId() produces 8 hex chars; reject anything else.
+  if (!SAFE_AGENT_ID.test(config.agentId)) {
+    console.error("[claude-hooks] refusing invalid agentId: %s", config.agentId);
+    throw new Error("Invalid agentId for hook setup");
+  }
+
   const existing = HOOK_DIRS.get(config.agentId);
   if (
     existing &&
@@ -48,6 +58,7 @@ export function setupClaudeHooks(config: HookConfig): string {
 
   mkdirSync(claudeDir, { recursive: true });
 
+  // Port/token/agentId are validated — safe to interpolate into the shell command.
   const curlBase = `curl -s -X POST http://127.0.0.1:${config.port}/hook -H "Content-Type: application/json" -H "X-Cockpit-Token: ${config.token}"`;
 
   const settings = {

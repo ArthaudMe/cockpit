@@ -34,19 +34,21 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const service = consumeOAuthState(state);
-  if (!service) {
+  const stateResult = consumeOAuthState(state);
+  if (!stateResult) {
     return new NextResponse(
       renderHTML("Invalid state", "OAuth state expired or invalid. Try again.", false),
       { headers: { "Content-Type": "text/html" } }
     );
   }
 
+  const { service, codeVerifier } = stateResult;
+
   try {
     const origin = req.nextUrl.origin;
     // Must match the redirect_uri used in the authorize request
     const redirectUri = getRedirectUri(origin, service);
-    const tokens = await exchangeCode(service, code, redirectUri);
+    const tokens = await exchangeCode(service, code, redirectUri, codeVerifier);
     saveTokens(service, tokens);
 
     const serviceName = service.charAt(0).toUpperCase() + service.slice(1);
@@ -58,9 +60,14 @@ export async function GET(req: NextRequest) {
       ),
       { headers: { "Content-Type": "text/html" } }
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
+    console.error("[OAuth callback]", err);
     return new NextResponse(
-      renderHTML("Connection failed", err.message || "Unknown error", false),
+      renderHTML(
+        "Connection failed",
+        "Something went wrong while connecting. Please close this tab and try again from Cockpit.",
+        false
+      ),
       { headers: { "Content-Type": "text/html" } }
     );
   }

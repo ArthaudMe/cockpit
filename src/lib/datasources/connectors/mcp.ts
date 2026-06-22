@@ -172,10 +172,11 @@ export async function testMcpConnection(
       serverName: serverInfo?.name,
       resourceCount: resources.length,
     };
-  } catch (err: any) {
+  } catch (err) {
+    console.error("[MCP test]", err);
     return {
       success: false,
-      error: err.message || "Connection failed",
+      error: "Connection failed. Check the server URL and try again.",
     };
   }
 }

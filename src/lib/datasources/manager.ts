@@ -116,7 +116,8 @@ export function getDatasourceStatuses(): DatasourceStatus[] {
 export function getAuthUrl(
   service: ServiceId,
   redirectUri: string,
-  state: string
+  state: string,
+  codeChallenge?: string
 ): string {
   switch (service) {
     case "google":
@@ -128,7 +129,7 @@ export function getAuthUrl(
     case "notion":
       return getNotionAuthUrl(redirectUri, state);
     case "slack":
-      return getSlackAuthUrl(redirectUri, state);
+      return getSlackAuthUrl(redirectUri, state, codeChallenge);
     default:
       throw new Error(`Service ${service} does not support OAuth`);
   }
@@ -137,7 +138,8 @@ export function getAuthUrl(
 export async function exchangeCode(
   service: ServiceId,
   code: string,
-  redirectUri: string
+  redirectUri: string,
+  codeVerifier?: string
 ) {
   switch (service) {
     case "google":
@@ -149,7 +151,7 @@ export async function exchangeCode(
     case "notion":
       return exchangeNotionCode(code, redirectUri);
     case "slack":
-      return exchangeSlackCode(code, redirectUri);
+      return exchangeSlackCode(code, redirectUri, codeVerifier);
     default:
       throw new Error(`Service ${service} does not support OAuth`);
   }

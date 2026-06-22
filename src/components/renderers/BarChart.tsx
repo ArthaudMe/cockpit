@@ -9,7 +9,15 @@ export function RenderBarChart({
   data: { label: string; value: number }[];
   onBarClick?: (barIndex: number, item: { label: string; value: number }) => void;
 }) {
-  const maxValue = Math.max(...data.map((d) => d.value));
+  if (data.length === 0) {
+    return (
+      <div style={{ margin: "0.4rem 0", padding: "0.75rem", fontSize: "0.75rem", color: "var(--text-muted)", textAlign: "center" }}>
+        No data to display
+      </div>
+    );
+  }
+
+  const maxValue = Math.max(...data.map((d) => d.value)) || 1;
 
   return (
     <div
@@ -47,7 +55,7 @@ export function RenderBarChart({
               gap: "0.5rem",
               ...(onBarClick ? { cursor: "pointer", borderRadius: 3 } : {}),
             }}
-            onMouseEnter={(e) => { if (onBarClick) e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+            onMouseEnter={(e) => { if (onBarClick) e.currentTarget.style.background = "color-mix(in srgb, var(--text) 6%, transparent)"; }}
             onMouseLeave={(e) => { if (onBarClick) e.currentTarget.style.background = "transparent"; }}
           >
             <span

@@ -84,7 +84,7 @@ export function isServiceDisabled(service: ServiceId): boolean {
 // (in-memory Map gets cleared by Next.js HMR reloads)
 const STATES_PATH = path.join(STORE_DIR, "oauth-states.json");
 
-type StateEntry = { service: ServiceId; createdAt: number };
+type StateEntry = { service: ServiceId; createdAt: number; codeVerifier?: string };
 type StateStore = Record<string, StateEntry>;
 
 function readStates(): StateStore {
@@ -103,10 +103,10 @@ function writeStates(states: StateStore) {
   });
 }
 
-export function createOAuthState(service: ServiceId): string {
+export function createOAuthState(service: ServiceId, codeVerifier?: string): string {
   const state = crypto.randomUUID();
   const states = readStates();
-  states[state] = { service, createdAt: Date.now() };
+  states[state] = { service, createdAt: Date.now(), codeVerifier };
   // Clean up old states (> 10 min)
   for (const key of Object.keys(states)) {
     if (Date.now() - states[key].createdAt > 600_000) delete states[key];
@@ -115,12 +115,12 @@ export function createOAuthState(service: ServiceId): string {
   return state;
 }
 
-export function consumeOAuthState(state: string): ServiceId | null {
+export function consumeOAuthState(state: string): { service: ServiceId; codeVerifier?: string } | null {
   const states = readStates();
   const entry = states[state];
   if (!entry) return null;
   delete states[state];
   writeStates(states);
   if (Date.now() - entry.createdAt > 600_000) return null;
-  return entry.service;
+  return { service: entry.service, codeVerifier: entry.codeVerifier };
 }

@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     return NextResponse.json(
-      { ok: false, error: `Server error: ${(err as Error).message}` },
+      { ok: false, error: "Something went wrong. Please try again." },
       { status: 500 },
     );
   }

@@ -72,9 +72,9 @@ function LiveBadge() {
         borderRadius: 3,
         fontSize: "0.65rem",
         fontWeight: 600,
-        color: "#a3e635",
-        background: "rgba(163,230,53,0.12)",
-        border: "1px solid rgba(163,230,53,0.25)",
+        color: "var(--green)",
+        background: "color-mix(in srgb, var(--green) 12%, transparent)",
+        border: "1px solid color-mix(in srgb, var(--green) 25%, transparent)",
         flexShrink: 0,
         lineHeight: "1.4",
       }}
@@ -446,7 +446,7 @@ export function CommandPalette({
                     padding: "0.4rem 0.6rem 0.4rem 1.2rem",
                     background:
                       globalIndex === selected
-                        ? "rgba(255,255,255,0.06)"
+                        ? "color-mix(in srgb, var(--text) 6%, transparent)"
                         : "transparent",
                     border: "none",
                     cursor: "pointer",

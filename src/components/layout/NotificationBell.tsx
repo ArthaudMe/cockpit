@@ -197,7 +197,7 @@ export function NotificationBell({
                     gap: "0.45rem",
                     padding: "0.5rem 0.6rem",
                     borderBottom: "1px solid var(--border)",
-                    background: n.read ? "transparent" : "rgba(255,255,255,0.02)",
+                    background: n.read ? "transparent" : "color-mix(in srgb, var(--text) 2%, transparent)",
                   }}
                 >
                   {/* Icon */}

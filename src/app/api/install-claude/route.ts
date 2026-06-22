@@ -31,12 +31,10 @@ export async function POST() {
       version: stdout.trim(),
     });
   } catch (err) {
+    console.error("[install-claude]", err);
     return NextResponse.json({
       success: false,
-      error:
-        err instanceof Error
-          ? err.message
-          : "Installation failed",
+      error: "Installation failed. Try running the install command manually in Terminal.",
     });
   }
 }

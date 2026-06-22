@@ -49,7 +49,7 @@ export function ActionCard({
       setResult(res);
       setState(res.success ? "success" : "error");
     } catch (err) {
-      setResult({ success: false, message: (err as Error).message });
+      setResult({ success: false, message: "Something went wrong. Please try again." });
       setState("error");
     }
   }
@@ -130,7 +130,7 @@ export function ActionCard({
             padding: "0.35rem 0.5rem",
             borderRadius: 4,
             marginBottom: "0.4rem",
-            background: result.success ? "rgba(80, 200, 120, 0.1)" : "rgba(230, 80, 80, 0.1)",
+            background: result.success ? "color-mix(in srgb, var(--green) 10%, transparent)" : "color-mix(in srgb, var(--red) 10%, transparent)",
             color: result.success ? "var(--green)" : "var(--red)",
             lineHeight: 1.5,
           }}

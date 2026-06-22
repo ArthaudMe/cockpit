@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { getAuthUrl } from "@/lib/datasources/manager";
 import { createOAuthState, enableService } from "@/lib/datasources/token-store";
 import type { ServiceId } from "@/lib/datasources/types";
@@ -20,6 +21,18 @@ function getRedirectUri(origin: string): string {
   return `${origin}/api/datasources/callback`;
 }
 
+// Services that require PKCE (Slack requires it for localhost redirect URIs)
+const PKCE_SERVICES: ServiceId[] = ["slack"];
+
+function generatePKCE(): { codeVerifier: string; codeChallenge: string } {
+  const codeVerifier = crypto.randomBytes(32).toString("base64url");
+  const codeChallenge = crypto
+    .createHash("sha256")
+    .update(codeVerifier)
+    .digest("base64url");
+  return { codeVerifier, codeChallenge };
+}
+
 export async function GET(req: NextRequest) {
   const service = req.nextUrl.searchParams.get("service") as ServiceId | null;
 
@@ -38,9 +51,13 @@ export async function GET(req: NextRequest) {
 
   const origin = req.nextUrl.origin;
   const redirectUri = getRedirectUri(origin);
-  const state = createOAuthState(service);
 
-  const authUrl = getAuthUrl(service, redirectUri, state);
+  // Generate PKCE for services that require it
+  const needsPKCE = PKCE_SERVICES.includes(service);
+  const pkce = needsPKCE ? generatePKCE() : undefined;
+  const state = createOAuthState(service, pkce?.codeVerifier);
+
+  const authUrl = getAuthUrl(service, redirectUri, state, pkce?.codeChallenge);
 
   return NextResponse.json({ url: authUrl, redirectUri });
 }

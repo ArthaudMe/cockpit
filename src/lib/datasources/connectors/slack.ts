@@ -21,7 +21,7 @@ export const SLACK_OAUTH: OAuthConfig = {
   clientSecretEnvVar: "SLACK_CLIENT_SECRET",
 };
 
-export function getSlackAuthUrl(redirectUri: string, state: string): string {
+export function getSlackAuthUrl(redirectUri: string, state: string, codeChallenge?: string): string {
   const params = new URLSearchParams({
     client_id: CREDENTIALS.SLACK_CLIENT_ID,
     redirect_uri: redirectUri,
@@ -29,27 +29,34 @@ export function getSlackAuthUrl(redirectUri: string, state: string): string {
     user_scope: SLACK_OAUTH.scopes.join(","),
     state,
   });
+  if (codeChallenge) {
+    params.set("code_challenge", codeChallenge);
+    params.set("code_challenge_method", "S256");
+  }
   return `${SLACK_OAUTH.authUrl}?${params}`;
 }
 
 export async function exchangeSlackCode(
   code: string,
-  redirectUri: string
+  redirectUri: string,
+  codeVerifier?: string
 ): Promise<TokenSet> {
   let data: any;
 
   if (isProxyEnabled()) {
-    data = await proxyExchangeCode("slack", code, redirectUri);
+    data = await proxyExchangeCode("slack", code, redirectUri, codeVerifier);
   } else {
+    const params: Record<string, string> = {
+      code,
+      client_id: CREDENTIALS.SLACK_CLIENT_ID,
+      client_secret: process.env.SLACK_CLIENT_SECRET || "",
+      redirect_uri: redirectUri,
+    };
+    if (codeVerifier) params.code_verifier = codeVerifier;
     const res = await fetch(SLACK_OAUTH.tokenUrl, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        code,
-        client_id: CREDENTIALS.SLACK_CLIENT_ID,
-        client_secret: process.env.SLACK_CLIENT_SECRET || "",
-        redirect_uri: redirectUri,
-      }),
+      body: new URLSearchParams(params),
     });
     data = await res.json();
     if (!data.ok) throw new Error(data.error || "Slack OAuth failed");

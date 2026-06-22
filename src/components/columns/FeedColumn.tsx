@@ -28,7 +28,7 @@ function Panel({
 
   return (
     <div className="panel">
-      <div className="panel-header" onClick={() => setOpen(!open)}>
+      <div className="panel-header" role="button" tabIndex={0} aria-expanded={open} onClick={() => setOpen(!open)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(!open); } }}>
         <div className="panel-title-row">
           <span className="panel-title">{title}</span>
           {count !== undefined && <span className="panel-count">{count}</span>}

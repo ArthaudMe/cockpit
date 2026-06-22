@@ -74,26 +74,15 @@ export class ErrorBoundary extends Component<Props, State> {
             Cockpit ran into an unexpected error. You can try reloading, or dismiss
             this screen to continue.
           </p>
-          {this.state.error && (
-            <pre
-              style={{
-                fontSize: "0.68rem",
-                color: "var(--text-muted)",
-                background: "var(--surface)",
-                border: "1px solid var(--border)",
-                borderRadius: 6,
-                padding: "0.75rem 1rem",
-                maxWidth: 500,
-                maxHeight: 120,
-                overflow: "auto",
-                marginBottom: "1.5rem",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-              }}
-            >
-              {this.state.error.message}
-            </pre>
-          )}
+          <p
+            style={{
+              fontSize: "0.68rem",
+              color: "var(--text-muted)",
+              marginBottom: "1.5rem",
+            }}
+          >
+            If this keeps happening, try restarting Cockpit.
+          </p>
           <div style={{ display: "flex", gap: "0.75rem" }}>
             <button
               onClick={this.handleReload}

@@ -185,7 +185,7 @@ export const ChatMessage = memo(function ChatMessage({
                     maxHeight: 140,
                     borderRadius: 3,
                     objectFit: "cover",
-                    border: "1px solid rgba(0,0,0,0.15)",
+                    border: "1px solid var(--border)",
                   }}
                 />
               ))}
@@ -206,7 +206,7 @@ export const ChatMessage = memo(function ChatMessage({
           if (seg.type === "skill_active") {
             const skill = SKILLS.find((s) => s.slash === seg.skillSlash);
             return (
-              <div key={i} style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", background: "rgba(255,255,255,0.06)", border: "1px solid var(--border)", borderRadius: 3, padding: "0.15rem 0.45rem", marginBottom: "0.4rem", fontSize: "0.75rem", color: "var(--accent)", fontWeight: 600 }}>
+              <div key={i} style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", background: "color-mix(in srgb, var(--text) 6%, transparent)", border: "1px solid var(--border)", borderRadius: 3, padding: "0.15rem 0.45rem", marginBottom: "0.4rem", fontSize: "0.75rem", color: "var(--accent)", fontWeight: 600 }}>
                 <span>{skill?.icon || "◆"}</span>
                 {skill?.name || seg.skillSlash}
               </div>
@@ -220,7 +220,7 @@ export const ChatMessage = memo(function ChatMessage({
                 <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.3rem" }}>Suggested subagent</div>
                 <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text)", marginBottom: "0.15rem" }}>
                   {s.name}
-                  <span style={{ fontSize: "0.75rem", background: "rgba(255,255,255,0.06)", padding: "0.1rem 0.3rem", borderRadius: 3, color: "var(--text-muted)", marginLeft: "0.4rem", fontWeight: 400 }}>{s.role}</span>
+                  <span style={{ fontSize: "0.75rem", background: "color-mix(in srgb, var(--text) 6%, transparent)", padding: "0.1rem 0.3rem", borderRadius: 3, color: "var(--text-muted)", marginLeft: "0.4rem", fontWeight: 400 }}>{s.role}</span>
                 </div>
                 <div style={{ fontSize: "0.75rem", color: "var(--text-dim)", marginBottom: "0.5rem", lineHeight: 1.4 }}>{s.task}</div>
                 {onApproveSubagent && (

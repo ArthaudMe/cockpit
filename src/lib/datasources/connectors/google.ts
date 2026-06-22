@@ -352,7 +352,7 @@ export async function createCalendarEvent(params: {
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      return { success: false, message: `Google Calendar API error: ${res.status} ${(err as any).error?.message || res.statusText}` };
+      return { success: false, message: "Couldn't create the calendar event. Please check your Google connection and try again." };
     }
 
     const data = await res.json();
@@ -362,7 +362,7 @@ export async function createCalendarEvent(params: {
       url: data.htmlLink,
     };
   } catch (err) {
-    return { success: false, message: `Google Calendar request failed: ${(err as Error).message}` };
+    return { success: false, message: "Couldn't reach Google Calendar. Please check your internet connection." };
   }
 }
 
@@ -407,7 +407,7 @@ export async function createGmailDraft(params: {
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      return { success: false, message: `Gmail API error: ${res.status} ${(err as any).error?.message || res.statusText}` };
+      return { success: false, message: "Couldn't create the email draft. Please check your Google connection and try again." };
     }
 
     const data = await res.json();
@@ -417,6 +417,6 @@ export async function createGmailDraft(params: {
       url: `https://mail.google.com/mail/#drafts/${data.message?.id || ""}`,
     };
   } catch (err) {
-    return { success: false, message: `Gmail request failed: ${(err as Error).message}` };
+    return { success: false, message: "Couldn't reach Gmail. Please check your internet connection." };
   }
 }

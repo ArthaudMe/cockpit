@@ -21,9 +21,10 @@ export async function GET(request: Request) {
     const data = await fetchAllData();
     const results = unifiedSearch(query, data);
     return NextResponse.json({ results });
-  } catch (err: any) {
+  } catch (err) {
+    console.error("[Search]", err);
     return NextResponse.json(
-      { error: err.message || "Search failed", results: [] },
+      { error: "Search failed", results: [] },
       { status: 500 },
     );
   }
