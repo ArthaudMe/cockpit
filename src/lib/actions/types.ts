@@ -4,6 +4,7 @@ export type ActionType =
   | "slack_send_message"
   | "calendar_create_event"
   | "gmail_draft"
+  | "gmail_send"
   | "notion_update_page";
 
 export interface ActionBlock {

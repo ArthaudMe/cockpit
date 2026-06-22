@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { getAuthUrl } from "@/lib/datasources/manager";
 import { createOAuthState, enableService } from "@/lib/datasources/token-store";
 import type { ServiceId } from "@/lib/datasources/types";
+import { isComposioEnabled, createConnectLink } from "@/lib/datasources/composio";
 
 const OAUTH_SERVICES: ServiceId[] = [
   "google",
@@ -51,6 +52,23 @@ export async function GET(req: NextRequest) {
 
   const origin = req.nextUrl.origin;
   const redirectUri = getRedirectUri(origin);
+
+  // Google via Composio — managed OAuth, no CASA verification needed
+  if (service === "google" && isComposioEnabled()) {
+    try {
+      // Chain: connect Calendar first, then Gmail.
+      // The callback handler will chain the Gmail connect automatically.
+      const callbackUrl = `${origin}/api/datasources/callback?composio=googlecalendar`;
+      const link = await createConnectLink("googlecalendar", callbackUrl);
+      return NextResponse.json({ url: link.redirectUrl, redirectUri });
+    } catch (err) {
+      console.error("[Composio connect]", err);
+      return NextResponse.json(
+        { error: "Failed to create Composio connect link" },
+        { status: 500 },
+      );
+    }
+  }
 
   // Generate PKCE for services that require it
   const needsPKCE = PKCE_SERVICES.includes(service);

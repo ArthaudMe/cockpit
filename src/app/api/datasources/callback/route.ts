@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { consumeOAuthState, saveTokens } from "@/lib/datasources/token-store";
+import { consumeOAuthState, saveTokens, saveComposioConnection } from "@/lib/datasources/token-store";
 import { exchangeCode } from "@/lib/datasources/manager";
 import type { ServiceId } from "@/lib/datasources/types";
+import { createConnectLink, isComposioEnabled } from "@/lib/datasources/composio";
 
 function getRedirectUri(origin: string, _service: ServiceId): string {
   return `${origin}/api/datasources/callback`;
@@ -17,6 +18,14 @@ function escapeHtml(str: string): string {
 }
 
 export async function GET(req: NextRequest) {
+  // ─── Composio callback ──────────────────────────────────────────
+  // Composio redirects here after the user completes Google auth.
+  // The ?composio= param tells us which toolkit just connected.
+  const composioToolkit = req.nextUrl.searchParams.get("composio");
+  if (composioToolkit && isComposioEnabled()) {
+    return handleComposioCallback(req, composioToolkit);
+  }
+
   const code = req.nextUrl.searchParams.get("code");
   const state = req.nextUrl.searchParams.get("state");
   const error = req.nextUrl.searchParams.get("error");
@@ -71,6 +80,63 @@ export async function GET(req: NextRequest) {
       { headers: { "Content-Type": "text/html" } }
     );
   }
+}
+
+async function handleComposioCallback(
+  req: NextRequest,
+  toolkit: string,
+): Promise<NextResponse> {
+  const origin = req.nextUrl.origin;
+
+  // The connected_account_id may come as a query param from Composio's redirect
+  const connectionId = req.nextUrl.searchParams.get("connected_account_id") || "";
+
+  if (toolkit === "googlecalendar") {
+    // Save Calendar connection
+    if (connectionId) {
+      saveComposioConnection("googlecalendar", connectionId);
+    }
+
+    // Chain: now connect Gmail
+    try {
+      const gmailCallbackUrl = `${origin}/api/datasources/callback?composio=gmail`;
+      const link = await createConnectLink("gmail", gmailCallbackUrl);
+      // Redirect the browser to Gmail auth
+      return NextResponse.redirect(link.redirectUrl);
+    } catch (err) {
+      console.error("[Composio] Gmail connect failed, Calendar still connected:", err);
+      // Calendar connected but Gmail failed — show partial success
+      return new NextResponse(
+        renderHTML(
+          "Google Calendar connected",
+          "Calendar is connected. Gmail connection failed — you can retry from Settings.",
+          true,
+        ),
+        { headers: { "Content-Type": "text/html" } },
+      );
+    }
+  }
+
+  if (toolkit === "gmail") {
+    // Save Gmail connection
+    if (connectionId) {
+      saveComposioConnection("gmail", connectionId);
+    }
+
+    return new NextResponse(
+      renderHTML(
+        "Google connected",
+        "Calendar and Gmail are connected. You can close this tab and return to Cockpit.",
+        true,
+      ),
+      { headers: { "Content-Type": "text/html" } },
+    );
+  }
+
+  return new NextResponse(
+    renderHTML("Unknown toolkit", `Unexpected toolkit: ${toolkit}`, false),
+    { headers: { "Content-Type": "text/html" } },
+  );
 }
 
 function renderHTML(title: string, message: string, success: boolean): string {

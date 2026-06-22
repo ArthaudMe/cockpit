@@ -10,6 +10,12 @@ const CREDENTIALS = {
     process.env.GOOGLE_CLIENT_ID ||
     "434600410325-di9slrobiucra57kurn7f8620pcif3vg.apps.googleusercontent.com",
 
+  // Composio — managed OAuth for Google (Calendar + Gmail).
+  // Set these in .env.local after creating a free Composio account.
+  COMPOSIO_API_KEY: process.env.COMPOSIO_API_KEY || "",
+  COMPOSIO_GCAL_AUTH_CONFIG: process.env.COMPOSIO_GCAL_AUTH_CONFIG || "",
+  COMPOSIO_GMAIL_AUTH_CONFIG: process.env.COMPOSIO_GMAIL_AUTH_CONFIG || "",
+
   GITHUB_CLIENT_ID:
     process.env.GITHUB_CLIENT_ID ||
     "Ov23liLm2ShGLryCdyTh",

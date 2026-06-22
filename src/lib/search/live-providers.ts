@@ -1,5 +1,5 @@
 import type { LiveSearchProvider, SearchResult, SearchSource } from "./types";
-import { getConnectedServices } from "@/lib/datasources/token-store";
+import { getConnectedServices, isGoogleConnectedViaComposio } from "@/lib/datasources/token-store";
 import { isNotionConnected } from "@/lib/datasources/connectors/notion";
 import { searchCalendarEvents, searchEmails } from "@/lib/datasources/connectors/google";
 import { searchLinearIssues } from "@/lib/datasources/connectors/linear";
@@ -10,7 +10,7 @@ import { searchSlackMessages } from "@/lib/datasources/connectors/slack";
 const googleLive: LiveSearchProvider = {
   sources: ["google_calendar", "gmail"],
   isConnected() {
-    return getConnectedServices().includes("google");
+    return getConnectedServices().includes("google") || isGoogleConnectedViaComposio();
   },
   async search(query: string): Promise<SearchResult[]> {
     const [calEvents, emails] = await Promise.all([

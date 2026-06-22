@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { removeTokens, disableService } from "@/lib/datasources/token-store";
+import { removeTokens, disableService, removeComposioConnections } from "@/lib/datasources/token-store";
 import type { ServiceId } from "@/lib/datasources/types";
 
 const VALID_SERVICES: ServiceId[] = [
@@ -29,6 +29,10 @@ export async function POST(req: NextRequest) {
     disableService(service);
   } else {
     removeTokens(service);
+    // Also clear Composio connections for Google
+    if (service === "google") {
+      removeComposioConnections();
+    }
   }
   return NextResponse.json({ success: true });
 }
