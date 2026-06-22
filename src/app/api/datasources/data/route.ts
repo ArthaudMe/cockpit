@@ -30,7 +30,8 @@ export async function GET() {
     writeDatasourceCache(response);
 
     return NextResponse.json(response);
-  } catch (err: any) {
+  } catch (err) {
+    console.error("[Datasource data]", err);
     // On failure, try to return cached data with offline flag
     const cached = readDatasourceCache();
     if (cached) {
@@ -42,7 +43,7 @@ export async function GET() {
     }
 
     return NextResponse.json(
-      { error: err.message || "Failed to fetch data" },
+      { error: "Failed to fetch data" },
       { status: 500 }
     );
   }

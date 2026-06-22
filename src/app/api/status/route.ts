@@ -7,6 +7,18 @@ const execFileAsync = promisify(execFile);
 function cleanEnv() {
   const env = { ...process.env };
   delete env.CLAUDECODE;
+  // Inside packaged Electron, PATH may be minimal. Ensure common binary
+  // locations are included so we can find claude/codex/ollama.
+  const home = env.HOME || "";
+  const extras = [
+    "/usr/local/bin",
+    "/opt/homebrew/bin",
+    `${home}/.local/bin`,
+    `${home}/.nvm/versions/node/current/bin`,
+    `${home}/.cargo/bin`,
+  ];
+  const existing = env.PATH || "/usr/bin:/bin";
+  env.PATH = [...extras, ...existing.split(":")].filter(Boolean).join(":");
   return env;
 }
 

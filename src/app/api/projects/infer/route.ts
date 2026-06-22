@@ -7,9 +7,10 @@ export async function GET() {
     const data = await fetchAllData();
     const projects = await inferProjects(data);
     return NextResponse.json({ projects });
-  } catch (err: any) {
+  } catch (err) {
+    console.error("[Projects infer]", err);
     return NextResponse.json(
-      { error: err.message || "Failed to infer projects" },
+      { error: "Failed to infer projects" },
       { status: 500 },
     );
   }
@@ -21,9 +22,10 @@ export async function POST() {
     const data = await fetchAllData();
     const projects = await inferProjects(data);
     return NextResponse.json({ projects });
-  } catch (err: any) {
+  } catch (err) {
+    console.error("[Projects infer]", err);
     return NextResponse.json(
-      { error: err.message || "Failed to infer projects" },
+      { error: "Failed to infer projects" },
       { status: 500 },
     );
   }

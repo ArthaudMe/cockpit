@@ -150,7 +150,7 @@ export function saveCustomSkill(cmd: SkillCreateCommand): {
     invalidateSkillsCache();
     return { ok: true, skill };
   } catch (err) {
-    return { ok: false, error: `Failed to save: ${(err as Error).message}` };
+    return { ok: false, error: "Failed to save the skill. Please try again." };
   }
 }
 
@@ -191,7 +191,7 @@ export function updateCustomSkill(cmd: SkillCreateCommand): {
     invalidateSkillsCache();
     return { ok: true, skill: updated };
   } catch (err) {
-    return { ok: false, error: `Failed to update: ${(err as Error).message}` };
+    return { ok: false, error: "Failed to update the skill. Please try again." };
   }
 }
 
@@ -208,7 +208,7 @@ export function deleteCustomSkill(id: string): {
     invalidateSkillsCache();
     return { ok: true };
   } catch (err) {
-    return { ok: false, error: `Failed to delete: ${(err as Error).message}` };
+    return { ok: false, error: "Failed to delete the skill. Please try again." };
   }
 }
 

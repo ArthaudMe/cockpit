@@ -437,20 +437,32 @@ function createMainWindow() {
 
   mainWindow.loadURL(`http://localhost:${serverPort}`);
 
+  // Strict URL check: only allow our own localhost server
+  function isLocalAppUrl(url) {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === "http:" &&
+        parsed.hostname === "localhost" &&
+        parseInt(parsed.port, 10) === serverPort;
+    } catch {
+      return false;
+    }
+  }
+
   // Open external links (window.open / target=_blank) in the default browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith("http") && !url.includes(`localhost:${serverPort}`)) {
-      shell.openExternal(url);
-      return { action: "deny" };
+    if (isLocalAppUrl(url)) {
+      return { action: "allow" };
     }
-    return { action: "allow" };
+    if (/^https?:/i.test(url)) shell.openExternal(url);
+    return { action: "deny" };
   });
 
   // Block in-window navigation away from the local app. A clicked link (or a
   // malicious assistant-rendered href) must not replace the app with an
   // external site — send it to the default browser instead.
   mainWindow.webContents.on("will-navigate", (event, url) => {
-    if (!url.startsWith(`http://localhost:${serverPort}`)) {
+    if (!isLocalAppUrl(url)) {
       event.preventDefault();
       if (/^https?:/i.test(url)) shell.openExternal(url);
     }

@@ -4,7 +4,7 @@ Pre-publish checklist for verifying Cockpit features end-to-end.
 
 ## 1. App Launch & Onboarding
 
-- [ ] `pnpm dev` starts without errors on http://localhost:3000
+- [ ] `pnpm dev` starts without errors on http://localhost:3939
 - [ ] First-run onboarding shows 4 steps: Welcome, Engine detection, Datasource connection, Ready
 - [ ] Backend detection correctly identifies installed Claude CLI / Codex / Ollama
 - [ ] Skipping onboarding lands on the main dashboard

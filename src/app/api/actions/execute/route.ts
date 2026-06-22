@@ -42,8 +42,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(result);
   } catch (err) {
+    console.error("[actions/execute] error:", (err as Error).message);
     return NextResponse.json(
-      { success: false, message: `Server error: ${(err as Error).message}` },
+      { success: false, message: "Action failed due to a server error" },
       { status: 500 }
     );
   }

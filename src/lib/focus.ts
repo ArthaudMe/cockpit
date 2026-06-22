@@ -8,21 +8,23 @@ type Todo = Context["todos"][number];
 
 
 export function focusCalendarEvent(event: CalendarEvent): ContextFocus {
+  const attendeeStr = event.attendees?.length ? event.attendees.join(", ") : "";
+  const subtitleParts = [event.time, event.duration, attendeeStr].filter(Boolean);
   return {
     title: event.title,
-    subtitle: `${event.time} · ${event.duration} · ${event.attendees.join(", ")}`,
+    subtitle: subtitleParts.join(" · "),
     source: "Calendar",
     icon: "📅",
     data: [
-      { Time: event.time, Duration: event.duration, Attendees: event.attendees.join(", ") },
+      { Time: event.time, Duration: event.duration, Attendees: attendeeStr || "Just you" },
     ],
     suggestedQuestions: [
       `Prep me for this meeting — what should I know?`,
-      `What context do I have on ${event.attendees[0] || "the attendees"}?`,
+      `What context do I have on ${event.attendees?.[0] || "the attendees"}?`,
       `Draft talking points for this call`,
       `What are the open items related to this meeting?`,
     ],
-    systemContext: `The user is looking at a calendar event: "${event.title}" at ${event.time} (${event.duration}), attendees: ${event.attendees.join(", ")}. Help them prepare for this meeting.`,
+    systemContext: `The user is looking at a calendar event: "${event.title}" at ${event.time} (${event.duration})${attendeeStr ? `, attendees: ${attendeeStr}` : ""}. Help them prepare for this meeting.`,
   };
 }
 

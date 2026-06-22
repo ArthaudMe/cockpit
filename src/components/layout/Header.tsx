@@ -65,9 +65,9 @@ export function Header({
           <span
             style={{
               fontSize: "0.75rem",
-              color: "var(--yellow, #e5a100)",
-              background: "rgba(229, 161, 0, 0.1)",
-              border: "1px solid rgba(229, 161, 0, 0.3)",
+              color: "var(--yellow)",
+              background: "color-mix(in srgb, var(--yellow) 10%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--yellow) 30%, transparent)",
               borderRadius: 3,
               padding: "0.1rem 0.35rem",
               letterSpacing: "0.05em",
@@ -85,6 +85,7 @@ export function Header({
         <button
           onClick={onRetryConnection}
           disabled={claudeStatus.checking}
+          aria-label={claudeStatus.connected ? "Claude CLI connected" : "Retry Claude CLI connection"}
           style={{
             display: "flex",
             alignItems: "center",
@@ -123,6 +124,7 @@ export function Header({
         {onSettingsClick && (
           <button
             onClick={onSettingsClick}
+            aria-label="Open settings"
             style={{
               background: "none",
               border: "1px solid var(--border)",

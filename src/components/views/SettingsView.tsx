@@ -106,6 +106,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
   const [mcpTestResult, setMcpTestResult] = useState<{ id: string; success: boolean; message: string } | null>(null);
   const [analyticsOn, setAnalyticsOn] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [settingsLoadError, setSettingsLoadError] = useState(false);
 
   useEffect(() => {
     setAnalyticsOn(isAnalyticsEnabled());
@@ -118,46 +119,34 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
       .catch(() => {});
   }, []);
 
-  useEffect(() => {
-    fetch("/api/agents")
-      .then((r) => r.json())
-      .then((data: AgentInfo[]) => setAgents(data))
-      .catch(() => {});
+  const loadAllSettings = useCallback(() => {
+    setSettingsLoadError(false);
 
-    fetch("/api/detect-backends")
-      .then((r) => r.json())
-      .then((data: { backends: BackendStatus[] }) => setBackends(data.backends))
-      .catch(() => {});
+    const safeFetch = (url: string) =>
+      fetch(url).then((r) => {
+        if (!r.ok) throw new Error();
+        return r.json();
+      });
 
-    fetch("/api/backends")
-      .then((r) => r.json())
-      .then((data: BackendDef[]) => setBackendDefs(data))
-      .catch(() => {});
-
-    fetch("/api/profile")
-      .then((r) => r.json())
-      .then((data: Profile) => setProfile(data))
-      .catch(() => {});
-
-    fetch("/api/skills")
-      .then((r) => r.json())
-      .then((data: SkillInfo[]) => setSkills(data))
-      .catch(() => {});
-
-    fetch("/api/skills/custom")
-      .then((r) => r.json())
-      .then((data: CustomSkillInfo[]) => {
-        if (Array.isArray(data)) setCustomSkills(data);
-      })
-      .catch(() => {});
+    Promise.allSettled([
+      safeFetch("/api/agents").then((data: AgentInfo[]) => setAgents(data)),
+      safeFetch("/api/detect-backends").then((data: { backends: BackendStatus[] }) => setBackends(data.backends)),
+      safeFetch("/api/backends").then((data: BackendDef[]) => setBackendDefs(data)),
+      safeFetch("/api/profile").then((data: Profile) => setProfile(data)),
+      safeFetch("/api/skills").then((data: SkillInfo[]) => setSkills(data)),
+      safeFetch("/api/skills/custom").then((data: CustomSkillInfo[]) => { if (Array.isArray(data)) setCustomSkills(data); }),
+      safeFetch("/api/datasources/mcp").then((data: McpServer[]) => setMcpServers(data)),
+    ]).then((results) => {
+      const allFailed = results.every((r) => r.status === "rejected");
+      if (allFailed) setSettingsLoadError(true);
+    });
 
     fetchDatasources();
-
-    fetch("/api/datasources/mcp")
-      .then((r) => r.json())
-      .then((data: McpServer[]) => setMcpServers(data))
-      .catch(() => {});
   }, [fetchDatasources]);
+
+  useEffect(() => {
+    loadAllSettings();
+  }, [loadAllSettings]);
 
   // Poll for datasource status while connecting, with 2-minute timeout
   useEffect(() => {
@@ -176,16 +165,21 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
   }, [connecting, datasources]);
 
   const saveProfile = useCallback(async (updates: Partial<Profile>) => {
+    const previous = profile;
     const updated = { ...profile, ...updates };
     setProfile(updated);
     setEditingField(null);
     try {
-      await fetch("/api/profile", {
+      const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
       });
-    } catch {}
+      if (!res.ok) throw new Error();
+    } catch {
+      setProfile(previous);
+      alert("Couldn't save your profile. Please try again.");
+    }
   }, [profile]);
 
   const handleConnect = useCallback(async (serviceId: string) => {
@@ -202,6 +196,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
       }
     } catch {
       setConnecting(null);
+      alert("Couldn't start the connection. Please check your internet and try again.");
     }
   }, [fetchDatasources]);
 
@@ -224,13 +219,16 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
 
   const handleDisconnect = useCallback(async (serviceId: string) => {
     try {
-      await fetch("/api/datasources/disconnect", {
+      const res = await fetch("/api/datasources/disconnect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ service: serviceId }),
       });
+      if (!res.ok) throw new Error();
       fetchDatasources();
-    } catch {}
+    } catch {
+      alert("Couldn't disconnect. Please try again.");
+    }
   }, [fetchDatasources]);
 
   const handleAddMcp = useCallback(async (server: Omit<McpServer, "id" | "enabled" | "addedAt">) => {
@@ -240,24 +238,37 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(server),
       });
+      if (!res.ok) throw new Error();
       const created: McpServer = await res.json();
       setMcpServers((prev) => [...prev, created]);
       setShowAddMcp(false);
-    } catch {}
+    } catch {
+      alert("Couldn't add the MCP server. Please check the URL and try again.");
+    }
   }, []);
 
   const handleRemoveMcp = useCallback(async (id: string) => {
-    await fetch(`/api/datasources/mcp/${id}`, { method: "DELETE" });
-    setMcpServers((prev) => prev.filter((s) => s.id !== id));
+    try {
+      const res = await fetch(`/api/datasources/mcp/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      setMcpServers((prev) => prev.filter((s) => s.id !== id));
+    } catch {
+      alert("Couldn't remove the server. Please try again.");
+    }
   }, []);
 
   const handleToggleMcp = useCallback(async (id: string, enabled: boolean) => {
     setMcpServers((prev) => prev.map((s) => (s.id === id ? { ...s, enabled } : s)));
-    await fetch(`/api/datasources/mcp/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ enabled }),
-    });
+    try {
+      await fetch(`/api/datasources/mcp/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+    } catch {
+      // Revert optimistic update
+      setMcpServers((prev) => prev.map((s) => (s.id === id ? { ...s, enabled: !enabled } : s)));
+    }
   }, []);
 
   const handleTestMcp = useCallback(async (id: string) => {
@@ -293,15 +304,22 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
         });
         const updated: AgentInfo = await res.json();
         setAgents((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
-      } catch {}
+      } catch {
+        alert("Couldn't rename the agent. Please try again.");
+      }
       setEditingAgent(null);
     },
     [editName]
   );
 
   const handleDeleteAgent = useCallback(async (id: string) => {
-    await fetch(`/api/agents/${id}`, { method: "DELETE" });
-    setAgents((prev) => prev.filter((a) => a.id !== id));
+    try {
+      const res = await fetch(`/api/agents/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      setAgents((prev) => prev.filter((a) => a.id !== id));
+    } catch {
+      alert("Couldn't delete the agent. Please try again.");
+    }
   }, []);
 
   const toggleSkill = useCallback(async (id: string, enabled: boolean) => {
@@ -312,7 +330,9 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, enabled }),
       });
-    } catch {}
+    } catch {
+      setSkills((prev) => prev.map((s) => (s.id === id ? { ...s, enabled: !enabled } : s)));
+    }
   }, []);
 
   const handleAddCustomSkill = useCallback(async (skill: { name: string; slash: string; icon: string; description: string; promptInstruction: string }) => {
@@ -326,15 +346,22 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
       if (result.ok && result.skill) {
         setCustomSkills((prev) => [...prev, result.skill]);
         setShowAddSkill(false);
+      } else {
+        alert("Couldn't create the skill. Please try again.");
       }
-    } catch {}
+    } catch {
+      alert("Couldn't create the skill. Please try again.");
+    }
   }, []);
 
   const handleDeleteCustomSkill = useCallback(async (id: string) => {
     try {
-      await fetch(`/api/skills/custom?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      const res = await fetch(`/api/skills/custom?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
       setCustomSkills((prev) => prev.filter((s) => s.id !== id));
-    } catch {}
+    } catch {
+      alert("Couldn't delete the skill. Please try again.");
+    }
   }, []);
 
   const handleSwitchBackend = useCallback(
@@ -345,9 +372,12 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ backend, model }),
         });
+        if (!res.ok) throw new Error();
         const updated: AgentInfo = await res.json();
         setAgents((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
-      } catch {}
+      } catch {
+        alert("Couldn't switch the backend. Please try again.");
+      }
     },
     []
   );
@@ -405,6 +435,39 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
 
       {/* Content */}
       <div style={{ flex: 1, overflowY: "auto", padding: "1rem 1.25rem" }}>
+        {settingsLoadError && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              padding: "0.5rem 0.75rem",
+              marginBottom: "0.75rem",
+              background: "color-mix(in srgb, var(--red) 8%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--red) 20%, transparent)",
+              borderRadius: 4,
+              fontSize: "0.68rem",
+              color: "var(--red)",
+            }}
+          >
+            <span style={{ flex: 1 }}>Failed to load settings data.</span>
+            <button
+              onClick={loadAllSettings}
+              style={{
+                background: "none",
+                border: "1px solid var(--border-light)",
+                borderRadius: 3,
+                color: "var(--text-dim)",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                fontSize: "0.65rem",
+                padding: "0.15rem 0.4rem",
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        )}
         {/* ── Profile ── */}
         <div style={sectionTitle}>Profile</div>
         <div style={card}>
@@ -531,8 +594,8 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                     style={{
                       marginTop: "0.3rem",
                       padding: "0.25rem 0.4rem",
-                      background: "rgba(255,180,50,0.08)",
-                      border: "1px solid rgba(255,180,50,0.2)",
+                      background: "color-mix(in srgb, var(--yellow) 8%, transparent)",
+                      border: "1px solid color-mix(in srgb, var(--yellow) 20%, transparent)",
                       borderRadius: 4,
                       fontSize: "0.65rem",
                       color: "var(--yellow)",
@@ -918,12 +981,12 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
         {showAddSkill && <AddSkillForm onAdd={handleAddCustomSkill} onCancel={() => setShowAddSkill(false)} card={card} />}
 
         {customSkills.map((skill) => (
-          <div key={skill.id} style={{ ...card, borderColor: "rgba(168,139,250,0.2)" }}>
+          <div key={skill.id} style={{ ...card, borderColor: "color-mix(in srgb, var(--purple) 20%, transparent)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flex: 1, minWidth: 0 }}>
                 <span style={{ fontSize: "0.8rem", flexShrink: 0 }}>{skill.icon}</span>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "#a78bfa" }}>{skill.name}</div>
+                  <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--purple)" }}>{skill.name}</div>
                   <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: "0.05rem" }}>{skill.slash} — {skill.description}</div>
                 </div>
               </div>
@@ -1015,7 +1078,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                   <span
                     style={{
                       fontSize: "0.65rem",
-                      background: "rgba(255,255,255,0.06)",
+                      background: "color-mix(in srgb, var(--text) 6%, transparent)",
                       padding: "0.1rem 0.3rem",
                       borderRadius: 3,
                       color: "var(--text-muted)",
@@ -1303,8 +1366,8 @@ function AddSkillForm({
   const canSubmit = name.trim() && promptInstruction.trim();
 
   return (
-    <div style={{ ...card, marginBottom: "0.6rem", borderColor: "rgba(168,139,250,0.3)" }}>
-      <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "#a78bfa", marginBottom: "0.5rem" }}>
+    <div style={{ ...card, marginBottom: "0.6rem", borderColor: "color-mix(in srgb, var(--purple) 30%, transparent)" }}>
+      <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--purple)", marginBottom: "0.5rem" }}>
         Create Custom Skill
       </div>
 
@@ -1355,7 +1418,7 @@ function AddSkillForm({
           }}
           disabled={!canSubmit}
           style={{
-            background: canSubmit ? "#a78bfa" : "var(--border)",
+            background: canSubmit ? "var(--purple)" : "var(--border)",
             border: "none",
             borderRadius: 4,
             color: "var(--bg)",

@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     return streamAgentResponse(agent.id, { message, focusContext });
   } catch (err) {
     return new Response(
-      err instanceof Error ? err.message : "Failed to send message",
+      "Failed to send message",
       { status: 500 }
     );
   }

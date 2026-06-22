@@ -14,6 +14,9 @@
   --green: #44ff88;
   --yellow: #ffaa00;
   --blue: #4488ff;
+  --purple: #a78bfa;
+  --pink: #f472b6;
+  --orange: #f97316;
 }
 
 * {
@@ -88,7 +91,7 @@ body {
   font-size: 0.65rem;
   font-weight: 500;
   color: var(--accent);
-  background: rgba(255,255,255,0.06);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
   padding: 0.1rem 0.35rem;
   border-radius: 3px;
 }
@@ -166,11 +169,11 @@ body {
   border-radius: 2px;
   text-transform: uppercase;
 }
-.tag-green { color: var(--green); background: rgba(68,255,136,0.1); }
-.tag-yellow { color: var(--yellow); background: rgba(255,170,0,0.1); }
-.tag-red { color: var(--red); background: rgba(255,68,68,0.1); }
-.tag-blue { color: var(--blue); background: rgba(68,136,255,0.1); }
-.tag-dim { color: var(--text-dim); background: rgba(255,255,255,0.05); }
+.tag-green { color: var(--green); background: color-mix(in srgb, var(--green) 10%, transparent); }
+.tag-yellow { color: var(--yellow); background: color-mix(in srgb, var(--yellow) 10%, transparent); }
+.tag-red { color: var(--red); background: color-mix(in srgb, var(--red) 10%, transparent); }
+.tag-blue { color: var(--blue); background: color-mix(in srgb, var(--blue) 10%, transparent); }
+.tag-dim { color: var(--text-dim); background: color-mix(in srgb, var(--text) 5%, transparent); }
 
 /* Metrics */
 .metric-value { font-size: 1.1rem; font-weight: 600; color: var(--text); letter-spacing: -0.02em; }
@@ -227,7 +230,7 @@ body {
 }
 .checkbox.checked {
   border-color: var(--green);
-  background: rgba(68,255,136,0.1);
+  background: color-mix(in srgb, var(--green) 10%, transparent);
   color: var(--green);
 }
 .checkbox:not(.checked) { color: transparent; }
@@ -311,7 +314,7 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 0.3rem 0.5rem;
-  background: rgba(68, 136, 255, 0.04);
+  background: color-mix(in srgb, var(--blue) 4%, transparent);
   border-bottom: 1px solid var(--border);
 }
 

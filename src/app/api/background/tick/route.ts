@@ -24,9 +24,10 @@ export async function GET() {
       newNotifications,
       newCount: newNotifications.length,
     });
-  } catch (err: any) {
+  } catch (err) {
+    console.error("[Background tick]", err);
     return NextResponse.json(
-      { error: err.message || "Tick failed", newNotifications: [], newCount: 0 },
+      { error: "Tick failed", newNotifications: [], newCount: 0 },
       { status: 500 },
     );
   }

@@ -35,7 +35,7 @@ function Panel({
 
   return (
     <div className="panel">
-      <div className="panel-header" onClick={() => setOpen(!open)}>
+      <div className="panel-header" role="button" tabIndex={0} aria-expanded={open} onClick={() => setOpen(!open)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(!open); } }}>
         <div className="panel-title-row">
           <span className="panel-title">{title}</span>
           {count !== undefined && <span className="panel-count">{count}</span>}
@@ -114,14 +114,22 @@ export function ProjectsColumn({
         const project: ManualProject = await res.json();
         setManualProjects((prev) => [...prev, project]);
       }
-    } catch {}
+    } catch {
+      alert("Couldn't create the project. Please try again.");
+    }
     setCreateName("");
     setShowCreate(false);
   }, [createName]);
 
   const handleDelete = useCallback(async (id: string) => {
-    await fetch(`/api/projects/${id}`, { method: "DELETE" });
-    setManualProjects((prev) => prev.filter((p) => p.id !== id));
+    if (!confirm("Delete this project?")) return;
+    try {
+      const res = await fetch(`/api/projects/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      setManualProjects((prev) => prev.filter((p) => p.id !== id));
+    } catch {
+      alert("Couldn't delete the project. Please try again.");
+    }
   }, []);
 
   useEffect(() => {
@@ -174,7 +182,7 @@ export function ProjectsColumn({
               }}
             />
             <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-              Inferring projects...
+              Detecting your projects...
             </span>
           </div>
         )}
@@ -191,7 +199,7 @@ export function ProjectsColumn({
             }}
           >
             {hasAnyDatasource ? (
-              <>No projects detected yet.</>
+              <>Projects are detected from your calendar, Slack, and other tools. Check back soon.</>
             ) : (
               <>
                 No projects yet.

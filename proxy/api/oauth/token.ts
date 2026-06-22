@@ -79,7 +79,7 @@ export default async function handler(
     }
   }
 
-  const { service, grant_type, code, refresh_token, redirect_uri } = req.body || {};
+  const { service, grant_type, code, refresh_token, redirect_uri, code_verifier } = req.body || {};
 
   if (!service || !SERVICES[service]) {
     return res.status(400).json({ error: `Invalid service. Must be one of: ${Object.keys(SERVICES).join(", ")}` });
@@ -119,6 +119,7 @@ export default async function handler(
       if (grant_type === "authorization_code") {
         payload.code = code;
         if (redirect_uri) payload.redirect_uri = redirect_uri;
+        if (code_verifier) payload.code_verifier = code_verifier;
       } else {
         payload.refresh_token = refresh_token;
       }
@@ -134,6 +135,7 @@ export default async function handler(
       if (grant_type === "authorization_code") {
         params.set("code", code);
         if (redirect_uri) params.set("redirect_uri", redirect_uri);
+        if (code_verifier) params.set("code_verifier", code_verifier);
       } else {
         params.set("refresh_token", refresh_token);
       }
@@ -151,6 +153,7 @@ export default async function handler(
     // Forward the provider's response as-is
     return res.status(response.ok ? 200 : 400).json(data);
   } catch (err) {
-    return res.status(500).json({ error: `Proxy error: ${(err as Error).message}` });
+    console.error("[proxy] token exchange error:", (err as Error).message);
+    return res.status(500).json({ error: "Token exchange failed" });
   }
 }

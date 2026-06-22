@@ -22,7 +22,8 @@ export function isProxyEnabled(): boolean {
 export async function proxyExchangeCode(
   service: ServiceId,
   code: string,
-  redirectUri: string
+  redirectUri: string,
+  codeVerifier?: string
 ): Promise<Record<string, any>> {
   const res = await fetch(`${PROXY_URL}/api/oauth/token`, {
     method: "POST",
@@ -35,6 +36,7 @@ export async function proxyExchangeCode(
       grant_type: "authorization_code",
       code,
       redirect_uri: redirectUri,
+      ...(codeVerifier ? { code_verifier: codeVerifier } : {}),
     }),
   });
 

@@ -48,16 +48,23 @@ export function NotificationBell({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
+  // Close dropdown when clicking outside or pressing Escape
   useEffect(() => {
     if (!open) return;
-    const handler = (e: MouseEvent) => {
+    const handleClick = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setOpen(false);
       }
     };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKey);
+    };
   }, [open]);
 
   return (
@@ -83,6 +90,7 @@ export function NotificationBell({
           position: "relative",
         }}
         title="Notifications"
+        aria-label={unreadCount > 0 ? `${unreadCount} unread notifications` : "Notifications"}
       >
         {/* Bell character */}
         <span style={{ fontSize: "0.75rem" }}>&#9951;</span>
@@ -93,7 +101,7 @@ export function NotificationBell({
               top: -4,
               right: -4,
               background: "var(--red)",
-              color: "#fff",
+              color: "var(--accent)",
               fontSize: "0.75rem",
               fontWeight: 700,
               minWidth: 13,
@@ -189,7 +197,7 @@ export function NotificationBell({
                     gap: "0.45rem",
                     padding: "0.5rem 0.6rem",
                     borderBottom: "1px solid var(--border)",
-                    background: n.read ? "transparent" : "rgba(255,255,255,0.02)",
+                    background: n.read ? "transparent" : "color-mix(in srgb, var(--text) 2%, transparent)",
                   }}
                 >
                   {/* Icon */}

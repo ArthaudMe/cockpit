@@ -49,9 +49,15 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
     return;
   }
 
+  const MAX_BODY = 64 * 1024; // 64 KB — hook payloads are tiny JSON
   let body = "";
-  req.on("data", (chunk) => { body += chunk; });
+  let tooBig = false;
+  req.on("data", (chunk) => {
+    body += chunk;
+    if (body.length > MAX_BODY) { tooBig = true; req.destroy(); }
+  });
   req.on("end", () => {
+    if (tooBig) { res.writeHead(413); res.end(); return; }
     try {
       const payload = JSON.parse(body);
       const event: AgentEvent = {
@@ -139,7 +145,11 @@ export function onAgentEvent(agentId: string, listener: EventListener): () => vo
   listeners.get(agentId)!.add(listener);
 
   return () => {
-    listeners.get(agentId)?.delete(listener);
+    const set = listeners.get(agentId);
+    if (set) {
+      set.delete(listener);
+      if (set.size === 0) listeners.delete(agentId);
+    }
   };
 }
 

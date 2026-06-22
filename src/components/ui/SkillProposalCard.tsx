@@ -49,8 +49,8 @@ export function SkillProposalCard({
       style={{
         margin: "0.4rem 0",
         padding: "0.6rem",
-        background: "rgba(139, 92, 246, 0.06)",
-        border: "1px solid rgba(139, 92, 246, 0.2)",
+        background: "color-mix(in srgb, var(--purple) 6%, transparent)",
+        border: "1px solid color-mix(in srgb, var(--purple) 20%, transparent)",
         borderRadius: 8,
       }}
     >
@@ -71,7 +71,7 @@ export function SkillProposalCard({
             <span
               style={{
                 fontSize: "0.65rem",
-                color: "rgba(139, 92, 246, 0.8)",
+                color: "var(--purple)",
                 fontWeight: 600,
               }}
             >
@@ -109,7 +109,7 @@ export function SkillProposalCard({
             style={{
               fontSize: "0.65rem",
               color: "var(--text-muted)",
-              background: "rgba(0,0,0,0.2)",
+              background: "color-mix(in srgb, var(--bg) 80%, transparent)",
               padding: "0.4rem",
               borderRadius: 4,
               marginTop: "0.2rem",
@@ -140,8 +140,8 @@ export function SkillProposalCard({
                 fontSize: "0.75rem",
                 padding: "1px 5px",
                 borderRadius: 3,
-                background: "rgba(139, 92, 246, 0.1)",
-                color: "rgba(139, 92, 246, 0.7)",
+                background: "color-mix(in srgb, var(--purple) 10%, transparent)",
+                color: "var(--purple)",
               }}
             >
               {hint}
@@ -155,10 +155,10 @@ export function SkillProposalCard({
           <button
             onClick={handleSave}
             style={{
-              background: "rgba(139, 92, 246, 0.15)",
-              border: "1px solid rgba(139, 92, 246, 0.3)",
+              background: "color-mix(in srgb, var(--purple) 15%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--purple) 30%, transparent)",
               borderRadius: 4,
-              color: "rgba(139, 92, 246, 0.9)",
+              color: "var(--purple)",
               cursor: "pointer",
               fontFamily: "inherit",
               fontSize: "0.75rem",

@@ -98,6 +98,19 @@ export function buildAgentEnv(extra?: Record<string, string>): NodeJS.ProcessEnv
   // Never pass CLAUDECODE — prevents nested session detection
   delete env.CLAUDECODE;
 
+  // Inside packaged Electron, PATH may be minimal. Ensure common binary
+  // locations are included so we can find claude/codex/ollama.
+  const home = env.HOME || "";
+  const extras = [
+    "/usr/local/bin",
+    "/opt/homebrew/bin",
+    `${home}/.local/bin`,
+    `${home}/.nvm/versions/node/current/bin`,
+    `${home}/.cargo/bin`,
+  ];
+  const existing = env.PATH || "/usr/bin:/bin";
+  env.PATH = [...extras, ...existing.split(":")].filter(Boolean).join(":");
+
   // Merge any extra vars (e.g., hook port, agent ID)
   if (extra) {
     Object.assign(env, extra);

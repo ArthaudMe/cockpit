@@ -46,8 +46,8 @@ export class ErrorBoundary extends Component<Props, State> {
           style={{
             position: "fixed",
             inset: 0,
-            background: "#0a0a0a",
-            color: "#e8e8e8",
+            background: "var(--bg)",
+            color: "var(--text)",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
@@ -64,7 +64,7 @@ export class ErrorBoundary extends Component<Props, State> {
           <p
             style={{
               fontSize: "0.75rem",
-              color: "#888",
+              color: "var(--text-dim)",
               maxWidth: 420,
               textAlign: "center",
               lineHeight: 1.5,
@@ -74,32 +74,21 @@ export class ErrorBoundary extends Component<Props, State> {
             Cockpit ran into an unexpected error. You can try reloading, or dismiss
             this screen to continue.
           </p>
-          {this.state.error && (
-            <pre
-              style={{
-                fontSize: "0.68rem",
-                color: "#666",
-                background: "#111",
-                border: "1px solid #222",
-                borderRadius: 6,
-                padding: "0.75rem 1rem",
-                maxWidth: 500,
-                maxHeight: 120,
-                overflow: "auto",
-                marginBottom: "1.5rem",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-              }}
-            >
-              {this.state.error.message}
-            </pre>
-          )}
+          <p
+            style={{
+              fontSize: "0.68rem",
+              color: "var(--text-muted)",
+              marginBottom: "1.5rem",
+            }}
+          >
+            If this keeps happening, try restarting Cockpit.
+          </p>
           <div style={{ display: "flex", gap: "0.75rem" }}>
             <button
               onClick={this.handleReload}
               style={{
-                background: "#fff",
-                color: "#000",
+                background: "var(--accent)",
+                color: "var(--bg)",
                 border: "none",
                 borderRadius: 6,
                 padding: "0.5rem 1.25rem",
@@ -115,8 +104,8 @@ export class ErrorBoundary extends Component<Props, State> {
               onClick={this.handleDismiss}
               style={{
                 background: "transparent",
-                color: "#888",
-                border: "1px solid #333",
+                color: "var(--text-dim)",
+                border: "1px solid var(--border-light)",
                 borderRadius: 6,
                 padding: "0.5rem 1.25rem",
                 fontSize: "0.7rem",

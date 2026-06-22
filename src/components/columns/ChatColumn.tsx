@@ -72,6 +72,7 @@ export const ChatColumn = memo(function ChatColumn({
   const [streamingAgents, setStreamingAgents] = useState<Set<string>>(new Set());
   const [notifiedAgents, setNotifiedAgents] = useState<Set<string>>(new Set());
   const [creatingAgent, setCreatingAgent] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [renamingAgentId, setRenamingAgentId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [showSwitcher, setShowSwitcher] = useState(false);
@@ -84,7 +85,10 @@ export const ChatColumn = memo(function ChatColumn({
   const slashMatches = useMemo(() => {
     const trimmed = inputValue.trim();
     if (!trimmed.startsWith("/")) return [];
-    const query = trimmed.split(" ")[0].toLowerCase();
+    const parts = trimmed.split(" ");
+    const query = parts[0].toLowerCase();
+    // If the user already typed a full slash command + extra text, dismiss autocomplete
+    if (parts.length > 1 && SKILLS.some((s) => s.slash === query)) return [];
     return SKILLS.filter((s) => s.slash.startsWith(query));
   }, [inputValue]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -106,21 +110,30 @@ export const ChatColumn = memo(function ChatColumn({
     }
   }, [activeAgentId]);
 
-  useEffect(() => {
-    fetch("/api/agents")
-      .then((r) => r.json())
-      .then((data: AgentInfo[]) => {
-        setAgents(data);
-        if (data.length > 0 && !activeAgentId) {
-          setActiveAgentId(data[0].id);
+  const loadAgentsAndBackends = useCallback(() => {
+    setLoadError(false);
+    Promise.all([
+      fetch("/api/agents").then((r) => {
+        if (!r.ok) throw new Error("Failed to load agents");
+        return r.json();
+      }),
+      fetch("/api/backends").then((r) => {
+        if (!r.ok) throw new Error("Failed to load backends");
+        return r.json();
+      }),
+    ])
+      .then(([agentsData, backendsData]: [AgentInfo[], BackendDef[]]) => {
+        setAgents(agentsData);
+        setBackends(backendsData);
+        if (agentsData.length > 0 && !activeAgentId) {
+          setActiveAgentId(agentsData[0].id);
         }
       })
-      .catch(() => {});
+      .catch(() => setLoadError(true));
+  }, [activeAgentId, setActiveAgentId]);
 
-    fetch("/api/backends")
-      .then((r) => r.json())
-      .then((data: BackendDef[]) => setBackends(data))
-      .catch(() => {});
+  useEffect(() => {
+    loadAgentsAndBackends();
   }, []);
 
   const messages = activeAgentId ? messagesByAgent[activeAgentId] || [] : [];
@@ -183,9 +196,9 @@ export const ChatColumn = memo(function ChatColumn({
     setPendingImages((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
-  const sendMessage = useCallback(async () => {
-    const text = inputValue.trim();
-    const images = pendingImages;
+  const sendMessage = useCallback(async (directText?: string) => {
+    const text = (directText ?? inputValue).trim();
+    const images = directText ? [] : pendingImages;
     if ((!text && images.length === 0) || streaming || !activeAgentId) return;
 
     const expansion = text ? expandSlashCommand(text) : null;
@@ -217,7 +230,10 @@ export const ChatColumn = memo(function ChatColumn({
           const next = [...prev];
           next[next.length - 1] = {
             role: "assistant",
-            content: `Error: ${res.status} ${res.statusText}`,
+            content: res.status === 503 ? "I'm having trouble connecting right now. Please check your internet connection and try again."
+                    : res.status === 401 ? "Your session may have expired. Try reloading the app."
+                    : res.status >= 500 ? "Something went wrong on my end. Please try again in a moment."
+                    : "Sorry, I couldn't process that request. Please try again.",
           };
           return next;
         });
@@ -248,7 +264,9 @@ export const ChatColumn = memo(function ChatColumn({
         const next = [...prev];
         next[next.length - 1] = {
           role: "assistant",
-          content: `Error: ${err instanceof Error ? err.message : "Unknown error"}`,
+          content: err instanceof Error && err.message.includes("Failed to fetch")
+                  ? "Couldn't reach the server. Please check your connection and try again."
+                  : "Something unexpected happened. Please try again.",
         };
         return next;
       });
@@ -363,7 +381,7 @@ export const ChatColumn = memo(function ChatColumn({
       setAgents((prev) => [...prev, agent]);
       setActiveAgentId(agent.id);
     } catch {
-      // silently fail
+      alert("Couldn't create the agent. Please try again.");
     } finally {
       setCreatingAgent(false);
     }
@@ -383,7 +401,7 @@ export const ChatColumn = memo(function ChatColumn({
         const updated: AgentInfo = await res.json();
         setAgents((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
       } catch {
-        // silently fail
+        alert("Couldn't rename the agent. Please try again.");
       }
     },
     [renameValue]
@@ -391,7 +409,14 @@ export const ChatColumn = memo(function ChatColumn({
 
   const handleDeleteAgent = useCallback(
     async (id: string) => {
-      await fetch(`/api/agents/${id}`, { method: "DELETE" });
+      if (!confirm("Delete this agent and its chat history?")) return;
+      try {
+        const res = await fetch(`/api/agents/${id}`, { method: "DELETE" });
+        if (!res.ok) throw new Error();
+      } catch {
+        alert("Couldn't delete the agent. Please try again.");
+        return;
+      }
       setAgents((prev) => prev.filter((a) => a.id !== id));
       setMessagesByAgent((prev) => {
         const next = { ...prev };
@@ -433,7 +458,7 @@ export const ChatColumn = memo(function ChatColumn({
         if (!chatRes.ok || !chatRes.body) {
           setMessagesFor(agent.id, (prev) => {
             const next = [...prev];
-            next[next.length - 1] = { role: "assistant", content: `Error: ${chatRes.status}` };
+            next[next.length - 1] = { role: "assistant", content: "Something went wrong starting this agent. Please try again." };
             return next;
           });
           setStreamingAgents((prev) => { const next = new Set(prev); next.delete(agent.id); return next; });
@@ -478,7 +503,7 @@ export const ChatColumn = memo(function ChatColumn({
         setAgents((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
         setShowSwitcher(false);
       } catch {
-        // silently fail
+        alert("Couldn't switch the backend. Please try again.");
       }
     },
     [activeAgentId]
@@ -487,7 +512,7 @@ export const ChatColumn = memo(function ChatColumn({
   const activeAgent = agents.find((a) => a.id === activeAgentId);
 
   const shortModel = (model: string) => {
-    if (!model) return "?";
+    if (!model) return "AI";
     if (model.startsWith("claude-")) return model.split("-")[1];
     return model;
   };
@@ -594,7 +619,7 @@ export const ChatColumn = memo(function ChatColumn({
                 </span>
               )}
               <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                {BACKEND_ICONS[agent.backend] || "?"} {shortModel(agent.model)}
+                {BACKEND_ICONS[agent.backend] || "◆"} {shortModel(agent.model)}
               </span>
               {agents.length > 1 && (
                 <span
@@ -642,11 +667,43 @@ export const ChatColumn = memo(function ChatColumn({
 
       {/* Messages area */}
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "0.75rem" }}>
-        {messages.length === 0 && activeAgent && (
-          <EmptyState agent={activeAgent} onPrefill={onInputChange} />
+        {loadError && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              height: "100%",
+              gap: "0.5rem",
+            }}
+          >
+            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+              Failed to load agents
+            </span>
+            <button
+              onClick={loadAgentsAndBackends}
+              style={{
+                background: "none",
+                border: "1px solid var(--border-light)",
+                borderRadius: 4,
+                color: "var(--text-dim)",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                fontSize: "0.75rem",
+                padding: "0.25rem 0.6rem",
+              }}
+            >
+              Retry
+            </button>
+          </div>
         )}
 
-        {!activeAgent && (
+        {!loadError && messages.length === 0 && activeAgent && (
+          <EmptyState agent={activeAgent} onSend={sendMessage} />
+        )}
+
+        {!loadError && !activeAgent && (
           <div
             style={{
               display: "flex",
@@ -705,7 +762,7 @@ export const ChatColumn = memo(function ChatColumn({
                   alignItems: "center",
                   gap: "0.4rem",
                   padding: "0.4rem 0.6rem",
-                  background: idx === slashSelected ? "rgba(255,255,255,0.06)" : "transparent",
+                  background: idx === slashSelected ? "color-mix(in srgb, var(--text) 6%, transparent)" : "transparent",
                   border: "none",
                   cursor: "pointer",
                   fontFamily: "inherit",
@@ -774,7 +831,7 @@ export const ChatColumn = memo(function ChatColumn({
                     height: 14,
                     borderRadius: "50%",
                     background: "rgba(0,0,0,0.7)",
-                    color: "#fff",
+                    color: "var(--accent)",
                     border: "none",
                     fontSize: "0.75rem",
                     cursor: "pointer",
@@ -831,7 +888,7 @@ export const ChatColumn = memo(function ChatColumn({
                 transition: "all 0.1s",
               }}
             >
-              <span style={{ fontSize: "0.75rem" }}>{BACKEND_ICONS[activeAgent.backend] || "?"}</span>
+              <span style={{ fontSize: "0.75rem" }}>{BACKEND_ICONS[activeAgent.backend] || "◆"}</span>
               {shortModel(activeAgent.model)}
               <span style={{ fontSize: "0.75rem", opacity: 0.6 }}>▼</span>
             </button>
@@ -897,7 +954,7 @@ export const ChatColumn = memo(function ChatColumn({
             }}
           />
           <button
-            onClick={sendMessage}
+            onClick={() => sendMessage()}
             disabled={(!inputValue.trim() && pendingImages.length === 0) || streaming || !claudeConnected || !activeAgent}
             style={{
               background:
@@ -1007,7 +1064,7 @@ function BackendSwitcher({
                 gap: "0.3rem",
               }}
             >
-              <span style={{ fontSize: "0.75rem" }}>{BACKEND_ICONS[backend.id] || "?"}</span>
+              <span style={{ fontSize: "0.75rem" }}>{BACKEND_ICONS[backend.id] || "◆"}</span>
               {backend.label}
             </div>
 
@@ -1024,7 +1081,7 @@ function BackendSwitcher({
                     alignItems: "center",
                     justifyContent: "space-between",
                     padding: "0.4rem 0.6rem 0.4rem 1.4rem",
-                    background: isActive ? "rgba(255,255,255,0.05)" : "transparent",
+                    background: isActive ? "color-mix(in srgb, var(--text) 5%, transparent)" : "transparent",
                     border: "none",
                     cursor: "pointer",
                     fontFamily: "inherit",
@@ -1033,7 +1090,7 @@ function BackendSwitcher({
                     transition: "background 0.1s",
                   }}
                   onMouseEnter={(e) => {
-                    if (!isActive) e.currentTarget.style.background = "rgba(255,255,255,0.03)";
+                    if (!isActive) e.currentTarget.style.background = "color-mix(in srgb, var(--text) 3%, transparent)";
                   }}
                   onMouseLeave={(e) => {
                     if (!isActive) e.currentTarget.style.background = "transparent";
@@ -1057,10 +1114,10 @@ function BackendSwitcher({
 
 function EmptyState({
   agent,
-  onPrefill,
+  onSend,
 }: {
   agent: AgentInfo;
-  onPrefill: (text: string) => void;
+  onSend: (text: string) => void;
 }) {
   return (
     <div
@@ -1108,7 +1165,7 @@ function EmptyState({
         {getStarters(agent.role).map((q) => (
           <button
             key={q}
-            onClick={() => onPrefill(q)}
+            onClick={() => onSend(q)}
             style={{
               background: "var(--surface-hover)",
               border: "1px solid var(--border)",

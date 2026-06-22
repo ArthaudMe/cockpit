@@ -58,6 +58,7 @@ export default function Home() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [offlineInfo, setOfflineInfo] = useState<{ offline: boolean; cachedAt?: number }>({ offline: false });
   const [showRightColumn, setShowRightColumn] = useState(true);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
 
   // Fetch user profile name (for filtering attendees)
   useEffect(() => {
@@ -226,7 +227,9 @@ export default function Home() {
       if (data.url) {
         window.open(data.url, "_blank", "width=600,height=700");
       }
-    } catch {}
+    } catch {
+      alert("Couldn't start the connection. Please check your internet and try again.");
+    }
   }, []);
 
   const handleOpenFocus = useCallback((focus: ContextFocus) => {
@@ -240,6 +243,7 @@ export default function Home() {
 
   const handleMetricClick = useCallback((key: string) => {
     const metric = contextData.usage_analytics[key as keyof typeof contextData.usage_analytics];
+    if (!metric) return;
     handleOpenFocus(focusMetric(key, metric));
   }, [handleOpenFocus, contextData.usage_analytics]);
 
@@ -353,10 +357,14 @@ export default function Home() {
   );
 
   // Show onboarding if no backends are connected (and we're done checking)
-  if (!claudeStatus.checking && !claudeStatus.connected) {
+  // User can always skip past onboarding.
+  if (!onboardingDismissed && !claudeStatus.checking && !claudeStatus.connected) {
     return (
       <OnboardingView
-        onRetry={handleRetryConnection}
+        onRetry={() => {
+          setOnboardingDismissed(true);
+          handleRetryConnection();
+        }}
         checking={claudeStatus.checking}
       />
     );

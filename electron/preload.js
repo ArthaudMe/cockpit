@@ -1,5 +1,7 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
+const ALLOWED_CHANNELS = new Set(["datasource-data", "notifications-update"]);
+
 contextBridge.exposeInMainWorld("electronAPI", {
   onDatasourceData: (callback) => {
     ipcRenderer.on("datasource-data", (_event, data) => callback(data));
@@ -8,6 +10,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("notifications-update", (_event, data) => callback(data));
   },
   removeAllListeners: (channel) => {
-    ipcRenderer.removeAllListeners(channel);
+    if (ALLOWED_CHANNELS.has(channel)) {
+      ipcRenderer.removeAllListeners(channel);
+    }
   },
 });

@@ -47,12 +47,12 @@ async function executeLinearCreateIssue(
     });
 
     if (!res.ok) {
-      return { success: false, message: `Linear API error: ${res.status} ${res.statusText}` };
+      return { success: false, message: "Couldn't create the Linear issue. Please check your connection and try again." };
     }
 
     const data = await res.json();
     if (data.errors?.length) {
-      return { success: false, message: `Linear error: ${data.errors[0].message}` };
+      return { success: false, message: "Linear returned an error. Please check the issue details and try again." };
     }
 
     const issue = data.data?.issueCreate?.issue;
@@ -67,7 +67,7 @@ async function executeLinearCreateIssue(
       data: { identifier: issue.identifier },
     };
   } catch (err) {
-    return { success: false, message: `Linear request failed: ${(err as Error).message}` };
+    return { success: false, message: "Couldn't reach Linear. Please check your internet connection." };
   }
 }
 
@@ -84,9 +84,17 @@ async function executeGitHubCommentPR(
     return { success: false, message: "Missing required params: owner, repo, pull_number, body" };
   }
 
+  // Validate path segments to prevent URL injection
+  const ownerStr = String(owner);
+  const repoStr = String(repo);
+  const prNum = Number(pull_number);
+  if (!/^[\w.-]+$/.test(ownerStr) || !/^[\w.-]+$/.test(repoStr) || !Number.isInteger(prNum) || prNum < 1) {
+    return { success: false, message: "Invalid owner, repo, or pull_number format" };
+  }
+
   try {
     const res = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/issues/${pull_number}/comments`,
+      `https://api.github.com/repos/${encodeURIComponent(ownerStr)}/${encodeURIComponent(repoStr)}/issues/${prNum}/comments`,
       {
         method: "POST",
         headers: {
@@ -103,7 +111,7 @@ async function executeGitHubCommentPR(
       const errData = await res.json().catch(() => ({}));
       return {
         success: false,
-        message: `GitHub API error: ${res.status} ${(errData as any).message || res.statusText}`,
+        message: "Couldn't post the GitHub comment. Please check your permissions and try again.",
       };
     }
 
@@ -115,7 +123,7 @@ async function executeGitHubCommentPR(
       data: { comment_id: data.id },
     };
   } catch (err) {
-    return { success: false, message: `GitHub request failed: ${(err as Error).message}` };
+    return { success: false, message: "Couldn't reach GitHub. Please check your internet connection." };
   }
 }
 
@@ -144,7 +152,7 @@ async function executeSlackSendMessage(
 
     const data = await res.json();
     if (!data.ok) {
-      return { success: false, message: `Slack error: ${data.error}` };
+      return { success: false, message: "Slack couldn't send the message. Please check the channel name and try again." };
     }
 
     return {
@@ -153,7 +161,7 @@ async function executeSlackSendMessage(
       data: { ts: data.ts, channel: data.channel },
     };
   } catch (err) {
-    return { success: false, message: `Slack request failed: ${(err as Error).message}` };
+    return { success: false, message: "Couldn't reach Slack. Please check your internet connection." };
   }
 }
 

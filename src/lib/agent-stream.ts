@@ -51,7 +51,7 @@ export function streamAgentResponse(
             );
           } else {
             controller.enqueue(
-              encoder.encode(`\n\n[Process exited with code ${code}]`)
+              encoder.encode(`\n\nSomething went wrong. Please try sending your message again.`)
             );
           }
         }
@@ -93,7 +93,8 @@ export function streamAgentResponse(
       });
 
       proc.on("error", (err) => {
-        controller.enqueue(encoder.encode(`Error: ${err.message}`));
+        console.error(`[agent:${agentId}:error]`, err);
+        controller.enqueue(encoder.encode("Couldn't connect to the AI backend. Please check that Claude is installed and try again."));
         controller.close();
       });
     },
