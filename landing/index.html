@@ -5,10 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Cockpit — Pilot your company from one screen</title>
   <meta name="description" content="A desktop app that connects to Slack, Calendar, Linear, GitHub, and Notion — so founders can see everything, ask anything, and act instantly.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap"></noscript>
   <link rel="icon" type="image/png" href="/icon.png">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
-
     :root {
       --bg: #1a1a1a;
       --surface: #242424;
@@ -353,60 +355,6 @@
       height: 20px;
     }
 
-    /* Install */
-    .install {
-      padding: 2rem 0;
-      text-align: center;
-    }
-
-    .install h2 {
-      font-size: 1.1rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--text-muted);
-      margin-bottom: 1.2rem;
-    }
-
-    .install-code {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 1.2rem 1.5rem;
-      max-width: 580px;
-      margin: 0 auto;
-      position: relative;
-      text-align: left;
-      cursor: pointer;
-      transition: border-color 0.15s;
-    }
-
-    .install-code:hover {
-      border-color: var(--border-light);
-    }
-
-    .install-code code {
-      font-size: 0.935rem;
-      color: var(--green);
-      line-height: 1.6;
-      word-break: break-all;
-    }
-
-    .install-code .copy-hint {
-      position: absolute;
-      top: 0.6rem;
-      right: 0.8rem;
-      font-size: 0.85rem;
-      color: var(--text-muted);
-      pointer-events: none;
-    }
-
-    .install-note {
-      font-size: 0.935rem;
-      color: var(--text-muted);
-      margin-top: 0.8rem;
-    }
-
     /* Privacy */
     .privacy {
       padding: 2rem 0;
@@ -491,7 +439,7 @@
         and Notion — so founders can see everything, ask anything,
         and act instantly without switching tabs.
       </p>
-      <a href="https://github.com/ArthaudMe/cockpit/releases/download/v0.1.0-alpha/Cockpit-0.1.0-arm64.dmg" class="download-btn">
+      <a href="https://github.com/ArthaudMe/cockpit/releases/latest/download/Cockpit-0.1.0-arm64.dmg" class="download-btn">
         Download for Mac
       </a>
       <div class="download-meta">
@@ -572,16 +520,6 @@
         <div class="integration"><img src="https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/c7/f1/86/c7f18626-3058-dcac-e507-59dc3bbc3ca6/AppIcon-0-0-1x_U007epad-0-0-0-1-0-0-sRGB-85-220.png/640x640bb.webp" alt=""> Granola</div>
         <div class="integration"><span class="dot"></span> +1000s of MCPs</div>
       </div>
-    </section>
-
-    <section class="install" id="install">
-      <h2>After installing</h2>
-      <p class="install-note" style="margin-bottom: 1rem;">Cockpit isn't notarized yet, so macOS will block it on first launch.<br>After dragging Cockpit to Applications, open Terminal and run:</p>
-      <div class="install-code" onclick="navigator.clipboard.writeText('xattr -cr /Applications/Cockpit.app').then(()=>{this.querySelector('.copy-hint').textContent='Copied!'})">
-        <span class="copy-hint">Click to copy</span>
-        <code>xattr -cr /Applications/Cockpit.app</code>
-      </div>
-      <div class="install-note">Then open Cockpit normally. You only need to do this once.</div>
     </section>
 
     <section class="privacy">
