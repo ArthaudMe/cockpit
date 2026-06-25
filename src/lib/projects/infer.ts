@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { readJsonCached, invalidateFileCache } from "@/lib/fs-cache";
+import { buildAgentEnv } from "@/lib/agent-env";
 import type {
   DatasourceData,
   LinearIssue,
@@ -206,17 +207,11 @@ Respond with ONLY a valid JSON array. No markdown, no explanation.
 Example: [{"name":"Platform","category":"Product","status":"Active","linear_projects":["Platform"],"github_repos":["org/platform"],"slack_channels":["#platform-dev"],"meeting_keywords":["platform","standup"]}]`;
 }
 
-function cleanEnv() {
-  const env = { ...process.env };
-  delete env.CLAUDECODE;
-  return env;
-}
-
 function askClaude(prompt: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const proc = spawn("claude", ["-p", "--output-format", "text"], {
       stdio: ["pipe", "pipe", "pipe"],
-      env: cleanEnv(),
+      env: buildAgentEnv(),
     });
 
     let stdout = "";

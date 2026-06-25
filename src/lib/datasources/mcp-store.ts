@@ -21,6 +21,66 @@ export interface McpServerConfig {
   addedAt: number;
 }
 
+const VALID_TRANSPORTS = new Set<string>(["stdio", "sse"]);
+
+/**
+ * Validate a complete MCP server config (transport, command, url, args, env).
+ * Returns null if valid, or an error message string if invalid.
+ */
+export function validateMcpServerConfig(
+  config: Partial<McpServerConfig>,
+): string | null {
+  if (!config.transport || !VALID_TRANSPORTS.has(config.transport)) {
+    return "transport must be 'stdio' or 'sse'";
+  }
+
+  if (config.transport === "stdio") {
+    if (!config.command || typeof config.command !== "string") {
+      return "command is required for stdio transport";
+    }
+    if (config.args !== undefined && !Array.isArray(config.args)) {
+      return "args must be an array";
+    }
+    if (
+      Array.isArray(config.args) &&
+      config.args.some((a: unknown) => typeof a !== "string")
+    ) {
+      return "args must be an array of strings";
+    }
+  }
+
+  if (config.transport === "sse") {
+    if (!config.url || typeof config.url !== "string") {
+      return "url is required for sse transport";
+    }
+    try {
+      const parsed = new URL(config.url);
+      if (!["http:", "https:"].includes(parsed.protocol)) {
+        throw new Error("invalid protocol");
+      }
+    } catch {
+      return "url must be a valid HTTP(S) URL";
+    }
+  }
+
+  if (config.env !== undefined) {
+    if (
+      typeof config.env !== "object" ||
+      config.env === null ||
+      Array.isArray(config.env)
+    ) {
+      return "env must be an object with string values";
+    }
+    for (const [, v] of Object.entries(config.env)) {
+      if (typeof v !== "string") {
+        return "env must be an object with string values";
+      }
+    }
+  }
+
+  return null;
+}
+
 function ensureDir() {
   if (!fs.existsSync(STORE_DIR)) {
     fs.mkdirSync(STORE_DIR, { recursive: true, mode: 0o700 });

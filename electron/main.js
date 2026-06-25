@@ -117,7 +117,8 @@ function setupAutoUpdate() {
 
   autoUpdater.on("update-downloaded", (info) => {
     console.log("[updater] update downloaded:", info.version);
-    const response = dialog.showMessageBoxSync(mainWindow, {
+    const parentWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+    const response = dialog.showMessageBoxSync(parentWindow, {
       type: "info",
       title: "Update Ready",
       message: `Cockpit ${info.version} is ready to install.`,
@@ -247,16 +248,43 @@ async function startNextServer() {
       return;
     }
 
-    nextServer = spawn(process.execPath, [serverJs], {
+    // Use system node if available to avoid a second Dock icon on macOS.
+    // Electron's binary with ELECTRON_RUN_AS_NODE still registers as a GUI app.
+    let nodeBin = process.execPath;
+    let nodeEnv = { ELECTRON_RUN_AS_NODE: "1" };
+
+    if (isMac) {
+      try {
+        // Electron GUI apps get a minimal PATH — extend it with common locations
+        const extendedPath = [
+          "/opt/homebrew/bin",
+          "/usr/local/bin",
+          process.env.PATH || "",
+        ].join(":");
+        const systemNode = execFileSync("/usr/bin/which", ["node"], {
+          encoding: "utf-8",
+          env: { ...process.env, PATH: extendedPath },
+        }).trim();
+        if (systemNode && fs.existsSync(systemNode)) {
+          nodeBin = systemNode;
+          nodeEnv = {}; // Not Electron — no need for ELECTRON_RUN_AS_NODE
+        }
+      } catch {
+        // System node not found — fall back to Electron binary
+      }
+    }
+
+    nextServer = spawn(nodeBin, [serverJs], {
       cwd: path.dirname(serverJs),
       env: {
         ...process.env,
-        ELECTRON_RUN_AS_NODE: "1",
+        ...nodeEnv,
         PORT: String(serverPort),
         HOSTNAME: "127.0.0.1",
         NODE_ENV: "production",
       },
       stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
     });
 
     nextServer.stdout.on("data", (data) => {
@@ -416,6 +444,7 @@ function createMainWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
       preload: path.join(__dirname, "preload.js"),
     },
   };
@@ -487,7 +516,7 @@ function createMainWindow() {
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
     console.error("[electron] renderer crashed:", details.reason);
     logCrash({ type: "renderProcessGone", reason: details.reason, exitCode: details.exitCode });
-    if (!app.isQuitting) {
+    if (!app.isQuitting && mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.loadURL(`http://localhost:${serverPort}`);
     }
   });
@@ -495,7 +524,9 @@ function createMainWindow() {
   mainWindow.webContents.on("unresponsive", () => {
     console.warn("[electron] window unresponsive, reloading...");
     logCrash({ type: "windowUnresponsive" });
-    mainWindow.webContents.reload();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.reload();
+    }
   });
 
   return mainWindow;
@@ -576,7 +607,8 @@ function buildMenu() {
         {
           label: `About ${app.name}`,
           click: () => {
-            dialog.showMessageBox(mainWindow, {
+            const parentWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+            dialog.showMessageBox(parentWindow, {
               type: "info",
               title: `About ${app.name}`,
               message: `${app.name} v${app.getVersion()}`,
@@ -613,7 +645,16 @@ function handleDeepLink(url) {
   try {
     const parsed = new URL(url);
     if (parsed.hostname === "oauth" && parsed.pathname.startsWith("/callback")) {
-      const forwardUrl = `http://localhost:${serverPort}/api/datasources/callback${parsed.search}`;
+      // Only forward known-safe OAuth parameters — never pass arbitrary query strings
+      const SAFE_PARAMS = ["code", "state"];
+      const safeQuery = new URLSearchParams();
+      for (const key of SAFE_PARAMS) {
+        if (parsed.searchParams.has(key)) {
+          safeQuery.set(key, parsed.searchParams.get(key));
+        }
+      }
+      const qs = safeQuery.toString();
+      const forwardUrl = `http://localhost:${serverPort}/api/datasources/callback${qs ? `?${qs}` : ""}`;
 
       http.get(forwardUrl, (res) => {
         console.log("[electron] OAuth callback forwarded, status:", res.statusCode);

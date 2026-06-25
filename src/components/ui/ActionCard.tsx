@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { safeHref } from "@/lib/sanitize";
 import type { ActionBlock, ActionResult } from "@/lib/actions/types";
 
 const ACTION_LABELS: Record<string, string> = {
@@ -31,10 +32,12 @@ export function ActionCard({
 }: {
   action: ActionBlock;
   onExecute: () => Promise<ActionResult>;
-  onCancel: () => void;
+  onCancel?: () => void;
 }) {
-  const [state, setState] = useState<"pending" | "loading" | "success" | "error">("pending");
+  const [state, setState] = useState<"pending" | "loading" | "success" | "error" | "dismissed">("pending");
   const [result, setResult] = useState<ActionResult | null>(null);
+
+  if (state === "dismissed") return null;
 
   const label = ACTION_LABELS[action.cockpit_action] || action.cockpit_action;
   const params = action.params || {};
@@ -140,7 +143,7 @@ export function ActionCard({
             <>
               {" "}
               <a
-                href={result.url}
+                href={safeHref(result.url)}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{ color: "var(--accent)", textDecoration: "underline" }}
@@ -172,7 +175,7 @@ export function ActionCard({
             Execute
           </button>
           <button
-            onClick={onCancel}
+            onClick={() => { setState("dismissed"); onCancel?.(); }}
             style={{
               background: "transparent",
               color: "var(--text-muted)",

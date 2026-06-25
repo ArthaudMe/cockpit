@@ -101,7 +101,7 @@ export const PROVIDERS: Record<string, ProviderDef> = {
       { id: "gemma3", label: "Gemma 3" },
     ],
     defaultModel: "llama3.3",
-    buildArgs: (model) => ["run", model],
+    buildArgs: (model, systemPrompt) => ["run", model, "--system", systemPrompt],
     supportsPrewarm: false,
     supportsHooks: false,
   },
