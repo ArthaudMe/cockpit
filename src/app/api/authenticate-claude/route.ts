@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { spawn } from "child_process";
+import { buildAgentEnv } from "@/lib/agent-env";
 
 export async function POST() {
   // Spawn `claude login` which opens the browser for OAuth
@@ -7,6 +8,7 @@ export async function POST() {
     const proc = spawn("claude", ["login"], {
       stdio: "ignore",
       detached: true,
+      env: buildAgentEnv(),
     });
 
     // Detach so it doesn't block the server

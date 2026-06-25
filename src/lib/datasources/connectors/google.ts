@@ -95,6 +95,10 @@ async function refreshGoogleToken(refreshToken: string): Promise<TokenSet> {
   return tokens;
 }
 
+// Guard against concurrent refresh calls — two callers racing can cause the
+// provider to invalidate the first refresh token before the second uses it.
+let _googleRefreshInFlight: Promise<TokenSet> | null = null;
+
 async function getValidGoogleTokens(): Promise<TokenSet | null> {
   const tokens = getTokens("google");
   if (!tokens) return null;
@@ -103,7 +107,11 @@ async function getValidGoogleTokens(): Promise<TokenSet | null> {
   if (tokens.expires_at && tokens.expires_at < Date.now() + 300_000) {
     if (!tokens.refresh_token) return null;
     try {
-      return await refreshGoogleToken(tokens.refresh_token);
+      if (_googleRefreshInFlight) return await _googleRefreshInFlight;
+      _googleRefreshInFlight = refreshGoogleToken(tokens.refresh_token).finally(
+        () => { _googleRefreshInFlight = null; },
+      );
+      return await _googleRefreshInFlight;
     } catch {
       return null;
     }

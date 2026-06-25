@@ -394,6 +394,7 @@ export default function Home() {
             alignItems: "center",
             justifyContent: "center",
             fontSize: "1.1rem",
+            color: "var(--text)",
           }}
         >
           &#9670;
@@ -403,7 +404,7 @@ export default function Home() {
             className="dot"
             style={{ background: "var(--accent)", animation: "pulse 1.5s ease-in-out infinite" }}
           />
-          <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+          <span style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>
             Connecting...
           </span>
         </div>

@@ -85,6 +85,10 @@ async function refreshLinearToken(refreshToken: string): Promise<TokenSet> {
   return tokens;
 }
 
+// Guard against concurrent refresh calls — two callers racing can cause the
+// provider to invalidate the first refresh token before the second uses it.
+let _linearRefreshInFlight: Promise<TokenSet> | null = null;
+
 async function getValidLinearTokens(): Promise<TokenSet | null> {
   const tokens = getTokens("linear");
   if (!tokens) return null;
@@ -92,7 +96,11 @@ async function getValidLinearTokens(): Promise<TokenSet | null> {
   if (tokens.expires_at && tokens.expires_at < Date.now() + 300_000) {
     if (!tokens.refresh_token) return null;
     try {
-      return await refreshLinearToken(tokens.refresh_token);
+      if (_linearRefreshInFlight) return await _linearRefreshInFlight;
+      _linearRefreshInFlight = refreshLinearToken(tokens.refresh_token).finally(
+        () => { _linearRefreshInFlight = null; },
+      );
+      return await _linearRefreshInFlight;
     } catch {
       return null;
     }

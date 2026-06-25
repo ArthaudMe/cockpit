@@ -2,6 +2,7 @@
 
 import { memo } from "react";
 import { parseResponse } from "@/lib/parser";
+import { safeHref } from "@/lib/sanitize";
 import { SKILLS } from "@/lib/skills-defs";
 import { RenderBlockRenderer } from "../renderers/RenderBlockRenderer";
 import { ActionCard } from "./ActionCard";
@@ -14,16 +15,6 @@ type Message = {
   content: string;
   images?: string[];
 };
-
-// Assistant output is untrusted. Only allow safe link schemes so a response
-// can't render e.g. a javascript: href (script execution inside Electron).
-function safeHref(url: string): string {
-  const trimmed = url.trim();
-  if (/^(https?:|mailto:)/i.test(trimmed)) return trimmed;
-  if (/^[/#]/.test(trimmed)) return trimmed; // relative path or anchor
-  if (!/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return trimmed; // no scheme → relative
-  return "#";
-}
 
 function SimpleMarkdown({ content }: { content: string }) {
   const lines = content.split("\n");
@@ -317,7 +308,7 @@ export const ChatMessage = memo(function ChatMessage({
                 key={i}
                 action={seg.action}
                 onExecute={() => executeActionRequest(seg.action)}
-                onCancel={() => {}}
+                onCancel={undefined}
               />
             );
           }

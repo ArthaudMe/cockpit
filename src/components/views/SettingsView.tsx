@@ -200,22 +200,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
     }
   }, [fetchDatasources]);
 
-  // Poll for connection status while an OAuth flow is in progress
-  useEffect(() => {
-    if (!connecting) return;
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch("/api/datasources");
-        const data: { datasources: DatasourceInfo[] } = await res.json();
-        setDatasources(data.datasources);
-        const target = data.datasources.find((d) => d.id === connecting);
-        if (target?.connected) {
-          setConnecting(null);
-        }
-      } catch {}
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [connecting]);
+
 
   const handleDisconnect = useCallback(async (serviceId: string) => {
     try {

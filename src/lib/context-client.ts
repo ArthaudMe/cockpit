@@ -40,6 +40,12 @@ function parseRelativeTime(time: string): number {
     return Math.abs(nowMinutes - eventMinutes);
   }
 
+  // Fallback: try parsing as ISO timestamp or locale date string
+  const parsed = new Date(time);
+  if (!isNaN(parsed.getTime())) {
+    return Math.max(0, (Date.now() - parsed.getTime()) / 60_000);
+  }
+
   return Infinity;
 }
 
