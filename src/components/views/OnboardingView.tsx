@@ -7,6 +7,7 @@ type BackendStatus = {
   label: string;
   installed: boolean;
   version?: string;
+  installHint?: string;
 };
 
 type DetectionResult = {
@@ -14,9 +15,25 @@ type DetectionResult = {
   anyAvailable: boolean;
 };
 
-type OnboardingStep = "claude" | "datasources";
+type OnboardingStep = "engines" | "datasources";
 
-const CLAUDE_INSTALL_CMD = "curl -fsSL https://claude.ai/install.sh | bash";
+const INSTALL_COMMANDS: Record<string, string> = {
+  claude: "npm install -g @anthropic-ai/claude-code",
+  codex: "npm install -g @openai/codex",
+  ollama: "curl -fsSL https://ollama.com/install.sh | sh",
+};
+
+const ENGINE_DESCRIPTIONS: Record<string, string> = {
+  claude: "Uses your Claude subscription. No API keys needed.",
+  codex: "Uses your OpenAI account. Runs locally.",
+  ollama: "Fully local and free. Runs Llama, Hermes, Qwen, and more.",
+};
+
+const ENGINE_ICONS: Record<string, string> = {
+  claude: "◇",
+  codex: "◆",
+  ollama: "○",
+};
 
 interface DatasourceInfo {
   id: string;
@@ -35,7 +52,7 @@ export function OnboardingView({
   checking: boolean;
   error?: string;
 }) {
-  const [step, setStep] = useState<OnboardingStep>("claude");
+  const [step, setStep] = useState<OnboardingStep>("engines");
   const [detection, setDetection] = useState<DetectionResult | null>(null);
   const [detecting, setDetecting] = useState(false);
 
@@ -55,7 +72,7 @@ export function OnboardingView({
   // Detect on mount, and keep re-checking until an engine is ready so the
   // screen advances on its own after an install/login finishes.
   useEffect(() => {
-    if (step !== "claude") return;
+    if (step !== "engines") return;
     detect();
     if (detection?.anyAvailable) return;
     const interval = setInterval(detect, 5000);
@@ -67,7 +84,7 @@ export function OnboardingView({
   }
 
   return (
-    <ClaudeSetupScreen
+    <EngineSetupScreen
       detection={detection}
       detecting={detecting}
       checking={checking}
@@ -78,10 +95,10 @@ export function OnboardingView({
 }
 
 /* =====================
-   Step 1 — Claude Setup
+   Step 1 — Engine Setup
    ===================== */
 
-function ClaudeSetupScreen({
+function EngineSetupScreen({
   detection,
   detecting,
   checking,
@@ -94,48 +111,24 @@ function ClaudeSetupScreen({
   onDetect: () => void;
   onContinue: () => void;
 }) {
-  const [installing, setInstalling] = useState(false);
-  const [showManual, setShowManual] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const claude = detection?.backends.find((b) => b.id === "claude");
-  const others = (detection?.backends || []).filter(
-    (b) => b.id !== "claude" && b.installed
-  );
+  const backends = detection?.backends || [];
   const ready = detection?.anyAvailable || false;
 
-  const handleInstall = useCallback(async () => {
-    setInstalling(true);
-    try {
-      const res = await fetch("/api/install-claude", { method: "POST" });
-      const data = await res.json();
-      if (data.success) onDetect();
-    } catch {
-      // fail silently — manual instructions remain available
-    } finally {
-      setInstalling(false);
-    }
-  }, [onDetect]);
-
-  const handleSignIn = useCallback(async () => {
-    try {
-      await fetch("/api/authenticate-claude", { method: "POST" });
-      // Browser opens for login; the 5s detection loop picks up the result
-    } catch {
-      // auth opens browser
-    }
-  }, []);
-
-  const copyCmd = () => {
-    navigator.clipboard.writeText(CLAUDE_INSTALL_CMD).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+  const copyCmd = (id: string) => {
+    const cmd = INSTALL_COMMANDS[id];
+    if (!cmd) return;
+    navigator.clipboard.writeText(cmd).then(() => {
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
     }).catch(() => {});
   };
 
   return (
     <div style={fullscreen}>
-      <div style={{ maxWidth: 640, width: "100%" }}>
+      <div style={{ maxWidth: 520, width: "100%" }}>
         {/* Branding header */}
         <div style={{ textAlign: "center", marginBottom: "2rem" }}>
           <div
@@ -166,139 +159,126 @@ function ClaudeSetupScreen({
             Pilot your company
           </div>
           <div style={{ fontSize: "0.8rem", color: "var(--text-dim)", lineHeight: 1.5 }}>
-            Cockpit is powered by Claude. One step and you&apos;re flying.
+            Cockpit needs an AI engine to run. Pick any one below.
           </div>
         </div>
 
-        {/* Claude card */}
-        <div
-          style={{
-            border: `1px solid ${claude?.installed ? "var(--green)" : "var(--border-light)"}`,
-            borderRadius: 8,
-            background: claude?.installed ? "color-mix(in srgb, var(--green) 3%, transparent)" : "var(--surface)",
-            padding: "1rem",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-            <span
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: 8,
-                border: `1px solid ${claude?.installed ? "var(--green)" : "var(--border-light)"}`,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: "0.95rem",
-                flexShrink: 0,
-                color: claude?.installed ? "var(--green)" : "var(--text-dim)",
-              }}
-            >
-              {claude?.installed ? "✓" : "◇"}
-            </span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text)" }}>
-                Claude
-              </div>
-              <div style={{ fontSize: "0.75rem", color: "var(--text-dim)", marginTop: "0.1rem" }}>
-                {claude?.installed
-                  ? "Installed — uses your Claude subscription, no API keys needed."
-                  : "Uses your Claude subscription — no API keys needed."}
-              </div>
-            </div>
-            <span
-              style={{
-                fontSize: "0.7rem",
-                fontWeight: 600,
-                padding: "0.2rem 0.5rem",
-                borderRadius: 4,
-                flexShrink: 0,
-                ...(claude?.installed
-                  ? { color: "var(--green)", background: "color-mix(in srgb, var(--green) 10%, transparent)" }
-                  : { color: "var(--text-muted)", background: "color-mix(in srgb, var(--text) 4%, transparent)" }),
-              }}
-            >
-              {detecting && !detection
-                ? "CHECKING..."
-                : claude?.installed
-                  ? "READY"
-                  : "NOT FOUND"}
-            </span>
-          </div>
-
-          {/* Actions */}
-          <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", marginTop: "0.85rem" }}>
-            {!claude?.installed ? (
-              <>
-                <button onClick={handleInstall} disabled={installing} style={primaryBtn}>
-                  {installing ? "Installing..." : "Install Claude"}
-                </button>
-                <button
-                  onClick={() => setShowManual(!showManual)}
-                  style={secondaryBtn}
-                >
-                  {showManual ? "Hide" : "Install manually"}
-                </button>
-              </>
-            ) : (
-              <>
-                <button onClick={handleSignIn} style={secondaryBtn}>
-                  Sign in to Claude
-                </button>
-                <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
-                  Already signed in? Just continue.
-                </span>
-              </>
-            )}
-          </div>
-
-          {showManual && !claude?.installed && (
-            <div
-              style={{
-                marginTop: "0.6rem",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                background: "var(--bg)",
-                border: "1px solid var(--border)",
-                borderRadius: 5,
-                padding: "0.45rem 0.6rem",
-                gap: "0.5rem",
-              }}
-            >
-              <code
+        {/* Engine cards */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+          {backends.map((backend) => {
+            const expanded = expandedId === backend.id;
+            const cmd = INSTALL_COMMANDS[backend.id];
+            return (
+              <div
+                key={backend.id}
                 style={{
-                  fontSize: "0.72rem",
-                  color: "var(--green)",
-                  fontFamily: "inherit",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
+                  border: `1px solid ${backend.installed ? "var(--green)" : "var(--border-light)"}`,
+                  borderRadius: 8,
+                  background: backend.installed
+                    ? "color-mix(in srgb, var(--green) 3%, transparent)"
+                    : "var(--surface)",
+                  padding: "0.75rem 1rem",
+                  transition: "all 0.2s",
                 }}
               >
-                $ {CLAUDE_INSTALL_CMD}
-              </code>
-              <button onClick={copyCmd} style={{ ...secondaryBtn, flexShrink: 0 }}>
-                {copied ? "copied" : "copy"}
-              </button>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                  <span
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 8,
+                      border: `1px solid ${backend.installed ? "var(--green)" : "var(--border-light)"}`,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "0.9rem",
+                      flexShrink: 0,
+                      color: backend.installed ? "var(--green)" : "var(--text-dim)",
+                    }}
+                  >
+                    {backend.installed ? "✓" : (ENGINE_ICONS[backend.id] || "◆")}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--text)" }}>
+                      {backend.label}
+                    </div>
+                    <div style={{ fontSize: "0.72rem", color: "var(--text-dim)", marginTop: "0.1rem" }}>
+                      {backend.installed
+                        ? `Installed${backend.version ? ` (${backend.version})` : ""}`
+                        : (ENGINE_DESCRIPTIONS[backend.id] || backend.installHint || "")}
+                    </div>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: "0.68rem",
+                      fontWeight: 600,
+                      padding: "0.15rem 0.45rem",
+                      borderRadius: 4,
+                      flexShrink: 0,
+                      ...(backend.installed
+                        ? { color: "var(--green)", background: "color-mix(in srgb, var(--green) 10%, transparent)" }
+                        : { color: "var(--text-muted)", background: "color-mix(in srgb, var(--text) 4%, transparent)" }),
+                    }}
+                  >
+                    {detecting && !detection ? "CHECKING..." : backend.installed ? "READY" : "NOT FOUND"}
+                  </span>
+                </div>
+
+                {/* Install actions for missing engines */}
+                {!backend.installed && cmd && (
+                  <div style={{ marginTop: "0.6rem", display: "flex", gap: "0.35rem", alignItems: "center" }}>
+                    <button
+                      onClick={() => setExpandedId(expanded ? null : backend.id)}
+                      style={secondaryBtn}
+                    >
+                      {expanded ? "Hide" : "Install"}
+                    </button>
+                  </div>
+                )}
+
+                {/* Install command */}
+                {expanded && !backend.installed && cmd && (
+                  <div
+                    style={{
+                      marginTop: "0.5rem",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      background: "var(--bg)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 5,
+                      padding: "0.4rem 0.6rem",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <code
+                      style={{
+                        fontSize: "0.7rem",
+                        color: "var(--green)",
+                        fontFamily: "inherit",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      $ {cmd}
+                    </code>
+                    <button onClick={() => copyCmd(backend.id)} style={{ ...secondaryBtn, flexShrink: 0 }}>
+                      {copiedId === backend.id ? "copied" : "copy"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Loading state before detection completes */}
+          {backends.length === 0 && detecting && (
+            <div style={{ textAlign: "center", padding: "1rem", fontSize: "0.75rem", color: "var(--text-muted)" }}>
+              Scanning for engines...
             </div>
           )}
         </div>
-
-        {/* Other detected engines — informational only */}
-        {others.length > 0 && (
-          <div
-            style={{
-              marginTop: "0.6rem",
-              fontSize: "0.72rem",
-              color: "var(--text-muted)",
-              textAlign: "center",
-            }}
-          >
-            Also detected: {others.map((b) => b.label).join(", ")} — available in the model
-            switcher.
-          </div>
-        )}
 
         {/* Continue */}
         <div
@@ -321,9 +301,14 @@ function ClaudeSetupScreen({
           >
             {ready ? "Continue" : "Skip"}
           </button>
-          {!ready && (
+          {!ready && !detecting && backends.length > 0 && (
             <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-              {detecting ? "Checking for engines..." : "No engine detected — you can still continue"}
+              No engine detected. Install one above, or skip to explore.
+            </span>
+          )}
+          {!ready && detecting && (
+            <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+              Checking for engines...
             </span>
           )}
         </div>
