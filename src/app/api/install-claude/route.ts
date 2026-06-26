@@ -1,29 +1,31 @@
 import { NextResponse } from "next/server";
-import { execFile, exec } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
+import { buildAgentEnv } from "@/lib/agent-env";
 
 const execFileAsync = promisify(execFile);
-const execAsync = promisify(exec);
+const env = buildAgentEnv();
 
 export async function POST() {
   // First check if already installed
   try {
-    await execFileAsync("claude", ["--version"], { timeout: 5000 });
+    await execFileAsync("claude", ["--version"], { timeout: 5000, env });
     return NextResponse.json({ success: true, message: "Already installed" });
   } catch {
     // Not installed, proceed
   }
 
-  // Try to install via the official install script
+  // Install via npm instead of piping a remote shell script to bash.
   try {
-    await execAsync("curl -fsSL https://claude.ai/install.sh | bash", {
-      timeout: 60000,
-      shell: "/bin/bash",
+    await execFileAsync("npm", ["install", "-g", "@anthropic-ai/claude-code"], {
+      timeout: 120000,
+      env,
     });
 
     // Verify installation
     const { stdout } = await execFileAsync("claude", ["--version"], {
       timeout: 5000,
+      env,
     });
 
     return NextResponse.json({

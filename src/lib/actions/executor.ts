@@ -110,7 +110,6 @@ async function executeGitHubCommentPR(
     );
 
     if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
       return {
         success: false,
         message: "Couldn't post the GitHub comment. Please check your permissions and try again.",

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getAuthUrl } from "@/lib/datasources/manager";
-import { createOAuthState, enableService } from "@/lib/datasources/token-store";
+import { createComposioOAuthState, createOAuthState, enableService } from "@/lib/datasources/token-store";
 import type { ServiceId } from "@/lib/datasources/types";
-import { isComposioEnabled, createConnectLink } from "@/lib/datasources/composio";
+import { isComposioEnabled, createConnectLink, isAllowedComposioRedirectUrl } from "@/lib/datasources/composio";
 
 const OAUTH_SERVICES: ServiceId[] = [
   "google",
@@ -58,8 +58,13 @@ export async function GET(req: NextRequest) {
     try {
       // Chain: connect Calendar first, then Gmail.
       // The callback handler will chain the Gmail connect automatically.
-      const callbackUrl = `${origin}/api/datasources/callback?composio=googlecalendar`;
+      const state = crypto.randomUUID();
+      const callbackUrl = `${origin}/api/datasources/callback?composio=googlecalendar&state=${encodeURIComponent(state)}`;
       const link = await createConnectLink("googlecalendar", callbackUrl);
+      createComposioOAuthState("googlecalendar", link.connectionId, state);
+      if (!isAllowedComposioRedirectUrl(link.redirectUrl)) {
+        throw new Error("Unexpected Composio redirect URL");
+      }
       return NextResponse.json({ url: link.redirectUrl, redirectUri });
     } catch (err) {
       console.error("[Composio connect]", err);

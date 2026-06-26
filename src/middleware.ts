@@ -8,36 +8,54 @@ import { NextRequest, NextResponse } from "next/server";
  * accounts. Because any page in any browser can issue requests to localhost,
  * a malicious website could otherwise drive those mutations (CSRF).
  *
- * This middleware rejects cross-origin state-changing requests. The browser
- * sets `Sec-Fetch-Site` (and `Origin`) and JavaScript cannot forge them, so:
+ * This middleware rejects cross-origin state-changing requests. Packaged
+ * Electron builds additionally set COCKPIT_API_TOKEN, which gates local API
+ * access with a per-session cookie/header so arbitrary same-user local
+ * processes cannot drive the app through localhost unless they know that
+ * session token.
+ *
+ * The browser sets `Sec-Fetch-Site` (and `Origin`) and JavaScript cannot forge
+ * them, so:
  *
  *   - same-origin / user-initiated (our renderer)      → allowed
  *   - cross-site / same-site (another website's fetch) → rejected
- *   - no browser headers at all (Electron's own Node
- *     polling, curl, local tooling)                    → allowed
+ *   - no browser headers and no packaged token gate
+ *     (dev Electron polling, local tooling)            → allowed
  *
- * Only unsafe methods are guarded. GET stays open: the browser's same-origin
- * policy already prevents a cross-site page from reading our responses, the
- * OAuth provider redirect lands on a GET callback (protected separately by its
- * CSRF `state` param), and Electron's background polling is GET.
- *
- * Note: this stops the browser-based threat. A separate per-session token
- * (Electron-injected) would additionally gate non-browser local processes —
- * see the security PR notes. It's deferred because a same-user local process
- * can already read ~/.cockpit token files directly, so the marginal gain
- * didn't justify shipping unverifiable Electron/renderer plumbing.
+ * When COCKPIT_API_TOKEN is absent (browser dev / next dev), only the
+ * browser-origin protection is applied. The OAuth callback stays exempt from
+ * the token gate because providers redirect an external browser to that GET
+ * endpoint; it remains protected by its own OAuth state validation.
  */
 
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const API_TOKEN_COOKIE = "cockpit_api_token";
+const API_TOKEN_HEADER = "x-cockpit-token";
+const OAUTH_CALLBACK_PATH = "/api/datasources/callback";
 
-function blocked() {
+function blocked(message = "Cross-origin request blocked") {
   return new NextResponse(
-    JSON.stringify({ error: "Cross-origin request blocked" }),
+    JSON.stringify({ error: message }),
     { status: 403, headers: { "content-type": "application/json" } }
   );
 }
 
+function hasValidApiToken(req: NextRequest, expected: string): boolean {
+  const headerToken = req.headers.get(API_TOKEN_HEADER);
+  const cookieToken = req.cookies.get(API_TOKEN_COOKIE)?.value;
+  return headerToken === expected || cookieToken === expected;
+}
+
 export function middleware(req: NextRequest) {
+  const apiToken = process.env.COCKPIT_API_TOKEN;
+  if (
+    apiToken &&
+    req.nextUrl.pathname !== OAUTH_CALLBACK_PATH &&
+    !hasValidApiToken(req, apiToken)
+  ) {
+    return blocked("Unauthorized local API request");
+  }
+
   if (!UNSAFE_METHODS.has(req.method)) {
     return NextResponse.next();
   }

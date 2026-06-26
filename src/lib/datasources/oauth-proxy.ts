@@ -12,11 +12,11 @@ import type { ServiceId } from "./types";
 // The proxy URL is public. The shared secret is intentionally NOT in source:
 // it's inlined at build time from OAUTH_PROXY_SECRET (see next.config.ts),
 // which `next build`/`next dev` read from .env.local.
-const PROXY_URL = process.env.OAUTH_PROXY_URL || "https://proxy-mio-xyz.vercel.app";
+const PROXY_URL = process.env.OAUTH_PROXY_URL || "";
 const PROXY_SECRET = process.env.OAUTH_PROXY_SECRET || "";
 
 export function isProxyEnabled(): boolean {
-  return !!PROXY_URL;
+  return !!(PROXY_URL && PROXY_SECRET);
 }
 
 export async function proxyExchangeCode(

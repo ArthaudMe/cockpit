@@ -1,17 +1,12 @@
-import { processSkillCommand, type SkillCreateCommand } from "./skills-custom";
+import type { SkillCreateCommand } from "./skills-custom";
 
 /**
  * Extract cockpit_skill commands from an LLM response.
  *
- * SECURITY: "create" actions are NOT auto-persisted. They are extracted
- * for the UI to render a SkillProposalCard so the user can explicitly
- * approve (Save) or reject (Dismiss) them. Auto-persisting creates would
- * allow prompt-injected model output to install durable prompt
- * instructions without user consent.
- *
- * "update" and "delete" actions still require explicit skill references
- * and are processed server-side since they act on existing user-approved
- * skills.
+ * Skill proposals affect future system prompts, so they must not be persisted
+ * directly from model output. The UI renders a proposal card; only the user's
+ * explicit Save click calls POST /api/skills/custom. This applies to create,
+ * update, and delete commands.
  */
 export function extractAndProcessSkills(responseText: string): {
   processed: Array<{
@@ -36,13 +31,7 @@ export function extractAndProcessSkills(responseText: string): {
 
       const cmd = parsed as unknown as SkillCreateCommand;
 
-      // Skip "create" — requires explicit user approval via SkillProposalCard.
-      // The UI component persists via POST /api/skills/custom on Save.
-      if (cmd.action === "create") continue;
-
-      // Process update/delete server-side (they reference existing skills)
-      const result = processSkillCommand(cmd);
-      processed.push({ command: cmd, result });
+      processed.push({ command: cmd, result: { ok: false, error: "Requires user approval" } });
     } catch {
       // Invalid JSON — skip
     }

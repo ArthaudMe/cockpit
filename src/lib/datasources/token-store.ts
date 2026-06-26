@@ -125,6 +125,61 @@ export function consumeOAuthState(state: string): { service: ServiceId; codeVeri
   return { service: entry.service, codeVerifier: entry.codeVerifier };
 }
 
+// File-based state for Composio hosted OAuth callbacks. Direct OAuth uses the
+// service state above; Composio returns a connected_account_id that must match
+// the link we just created before we persist it.
+const COMPOSIO_STATES_PATH = path.join(STORE_DIR, "composio-oauth-states.json");
+
+type ComposioToolkit = "googlecalendar" | "gmail";
+type ComposioStateEntry = {
+  toolkit: ComposioToolkit;
+  connectionId: string;
+  createdAt: number;
+};
+type ComposioStateStore = Record<string, ComposioStateEntry>;
+
+function readComposioStates(): ComposioStateStore {
+  try {
+    if (!fs.existsSync(COMPOSIO_STATES_PATH)) return {};
+    return JSON.parse(fs.readFileSync(COMPOSIO_STATES_PATH, "utf-8"));
+  } catch {
+    return {};
+  }
+}
+
+function writeComposioStates(states: ComposioStateStore) {
+  ensureDir();
+  fs.writeFileSync(COMPOSIO_STATES_PATH, JSON.stringify(states, null, 2), {
+    mode: 0o600,
+  });
+}
+
+export function createComposioOAuthState(
+  toolkit: ComposioToolkit,
+  connectionId: string,
+  state = crypto.randomUUID(),
+): string {
+  const states = readComposioStates();
+  states[state] = { toolkit, connectionId, createdAt: Date.now() };
+  for (const key of Object.keys(states)) {
+    if (Date.now() - states[key].createdAt > 600_000) delete states[key];
+  }
+  writeComposioStates(states);
+  return state;
+}
+
+export function consumeComposioOAuthState(
+  state: string,
+): { toolkit: ComposioToolkit; connectionId: string } | null {
+  const states = readComposioStates();
+  const entry = states[state];
+  if (!entry) return null;
+  delete states[state];
+  writeComposioStates(states);
+  if (Date.now() - entry.createdAt > 600_000) return null;
+  return { toolkit: entry.toolkit, connectionId: entry.connectionId };
+}
+
 // ─── Composio connection tracking ────────────────────────────────
 // Stores Composio connected-account IDs for Google toolkits.
 

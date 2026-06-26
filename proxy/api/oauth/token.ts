@@ -62,8 +62,13 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ) {
-  // CORS
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  // CORS: browser calls are not required by the desktop app. If a browser does
+  // hit this endpoint, only allow local app origins instead of wildcarding.
+  const origin = String(req.headers.origin || "");
+  if (/^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+  res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
@@ -72,6 +77,9 @@ export default async function handler(
 
   // Authenticate the request
   const proxySecret = process.env.PROXY_SECRET;
+  if (!proxySecret) {
+    return res.status(500).json({ error: "Proxy not configured" });
+  }
   if (proxySecret) {
     const auth = req.headers.authorization;
     if (auth !== `Bearer ${proxySecret}`) {

@@ -30,6 +30,10 @@ export async function PATCH(
   }
 
   const updates = await req.json();
+  if (!updates || typeof updates !== "object" || Array.isArray(updates)) {
+    return NextResponse.json({ error: "Request body must be an object" }, { status: 400 });
+  }
+
   // Don't allow changing the id or addedAt
   delete updates.id;
   delete updates.addedAt;

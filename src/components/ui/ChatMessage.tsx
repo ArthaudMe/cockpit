@@ -1,9 +1,9 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useState } from "react";
 import { parseResponse } from "@/lib/parser";
-import { safeHref } from "@/lib/sanitize";
 import { SKILLS } from "@/lib/skills-defs";
+import { safeHref } from "@/lib/sanitize";
 import { RenderBlockRenderer } from "../renderers/RenderBlockRenderer";
 import { ActionCard } from "./ActionCard";
 import { SkillProposalCard } from "./SkillProposalCard";
@@ -143,6 +143,8 @@ export const ChatMessage = memo(function ChatMessage({
   onApproveSubagent?: (suggestion: SubagentSuggestion) => void;
   onOpenFocus?: (focus: ContextFocus) => void;
 }) {
+  const [dismissedActions, setDismissedActions] = useState<Set<number>>(() => new Set());
+
   if (message.role === "user") {
     return (
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "0.5rem" }}>
@@ -303,12 +305,15 @@ export const ChatMessage = memo(function ChatMessage({
           }
 
           if (seg.type === "action") {
+            if (dismissedActions.has(i)) return null;
             return (
               <ActionCard
                 key={i}
                 action={seg.action}
                 onExecute={() => executeActionRequest(seg.action)}
-                onCancel={undefined}
+                onCancel={() => {
+                  setDismissedActions((prev) => new Set(prev).add(i));
+                }}
               />
             );
           }

@@ -105,14 +105,14 @@ Optional backends: [Codex](https://github.com/openai/codex), [Ollama](https://ol
 ## Setup
 
 ```bash
-cp .env.example .env.local   # fill in OAUTH_PROXY_SECRET (see below)
+cp .env.example .env.local   # fill in OAuth proxy or local OAuth credentials
 pnpm install
 pnpm dev
 ```
 
 Open http://localhost:3939. The onboarding flow guides you through the rest.
 
-`OAUTH_PROXY_SECRET` authenticates the app to the OAuth token-exchange proxy and is inlined at build time — it must match `PROXY_SECRET` on the deployed proxy (see `proxy/README.md`). Without it, datasource OAuth connects will fail.
+`OAUTH_PROXY_URL` and `OAUTH_PROXY_SECRET` enable the OAuth token-exchange proxy. The secret is inlined at build time and must match `PROXY_SECRET` on the deployed proxy (see `proxy/README.md`). If either proxy value is blank, the app falls back to direct local OAuth credentials.
 
 ### Connecting datasources
 

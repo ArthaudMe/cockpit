@@ -103,6 +103,22 @@ export async function createConnectLink(
   };
 }
 
+export function isAllowedComposioRedirectUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    return (
+      parsed.protocol === "https:" &&
+      (host === "composio.dev" ||
+        host.endsWith(".composio.dev") ||
+        host === "composio.com" ||
+        host.endsWith(".composio.com"))
+    );
+  } catch {
+    return false;
+  }
+}
+
 // ─── Connection status ───────────────────────────────────────────
 
 interface ConnectionListResponse {

@@ -56,6 +56,12 @@ describe("provider-registry", () => {
     expect(PROVIDERS.ollama.supportsPrewarm).toBe(false);
   });
 
+  it("ollama forwards the system prompt", () => {
+    const ollama = PROVIDERS.ollama;
+    const args = ollama.buildArgs("llama3.3", "Be useful.");
+    expect(args).toEqual(["run", "llama3.3", "--system", "Be useful."]);
+  });
+
   it("getProviderDefs returns all providers as array", () => {
     const defs = getProviderDefs();
     expect(defs).toBeInstanceOf(Array);

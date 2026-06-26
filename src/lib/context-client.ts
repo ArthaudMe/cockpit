@@ -27,6 +27,11 @@ function parseRelativeTime(time: string): number {
     if (unit === "d") return n * 60 * 24;
   }
 
+  const parsedTimestamp = Date.parse(time);
+  if (!Number.isNaN(parsedTimestamp)) {
+    return Math.round(Math.abs(Date.now() - parsedTimestamp) / 60_000);
+  }
+
   const clockMatch = t.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i);
   if (clockMatch) {
     let hours = parseInt(clockMatch[1], 10);
@@ -205,4 +210,3 @@ export function buildContextFromLiveData(live: DatasourceData, userName?: string
     connected: live._connected || {},
   };
 }
-

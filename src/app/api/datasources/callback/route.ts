@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { consumeOAuthState, saveTokens, saveComposioConnection } from "@/lib/datasources/token-store";
+import crypto from "crypto";
+import {
+  consumeComposioOAuthState,
+  consumeOAuthState,
+  createComposioOAuthState,
+  saveTokens,
+  saveComposioConnection,
+} from "@/lib/datasources/token-store";
 import { exchangeCode } from "@/lib/datasources/manager";
 import type { ServiceId } from "@/lib/datasources/types";
-import { createConnectLink, isComposioEnabled } from "@/lib/datasources/composio";
+import { createConnectLink, isAllowedComposioRedirectUrl, isComposioEnabled } from "@/lib/datasources/composio";
 
 function getRedirectUri(origin: string, _service: ServiceId): string {
   return `${origin}/api/datasources/callback`;
@@ -90,6 +97,22 @@ async function handleComposioCallback(
 
   // The connected_account_id may come as a query param from Composio's redirect
   const connectionId = req.nextUrl.searchParams.get("connected_account_id") || "";
+  const state = req.nextUrl.searchParams.get("state") || "";
+  const stateResult = state ? consumeComposioOAuthState(state) : null;
+
+  if (!stateResult) {
+    return new NextResponse(
+      renderHTML("Invalid state", "Composio OAuth state expired or invalid. Try again.", false),
+      { headers: { "Content-Type": "text/html" } },
+    );
+  }
+
+  if (stateResult.toolkit !== toolkit || stateResult.connectionId !== connectionId) {
+    return new NextResponse(
+      renderHTML("Connection failed", "Composio callback did not match the connection you started.", false),
+      { headers: { "Content-Type": "text/html" } },
+    );
+  }
 
   if (toolkit === "googlecalendar") {
     // Save Calendar connection
@@ -99,8 +122,13 @@ async function handleComposioCallback(
 
     // Chain: now connect Gmail
     try {
-      const gmailCallbackUrl = `${origin}/api/datasources/callback?composio=gmail`;
+      const gmailState = crypto.randomUUID();
+      const gmailCallbackUrl = `${origin}/api/datasources/callback?composio=gmail&state=${encodeURIComponent(gmailState)}`;
       const link = await createConnectLink("gmail", gmailCallbackUrl);
+      createComposioOAuthState("gmail", link.connectionId, gmailState);
+      if (!isAllowedComposioRedirectUrl(link.redirectUrl)) {
+        throw new Error("Unexpected Composio redirect URL");
+      }
       // Redirect the browser to Gmail auth
       return NextResponse.redirect(link.redirectUrl);
     } catch (err) {

@@ -6,6 +6,7 @@ const net = require("net");
 const http = require("http");
 const fs = require("fs");
 const os = require("os");
+const { randomBytes } = require("crypto");
 
 // ─── Crash Reporting ─────────────────────────────────────────────
 const CRASH_LOG_PATH = path.join(os.homedir(), ".cockpit", "crash-log.json");
@@ -52,6 +53,9 @@ const isDev = process.env.NODE_ENV === "development";
 // startup so we never collide with something already on 3000.
 let serverPort = isDev ? 3939 : null;
 const PROTOCOL = "cockpit";
+const API_TOKEN_COOKIE = "cockpit_api_token";
+const API_TOKEN_HEADER = "X-Cockpit-Token";
+const API_TOKEN = randomBytes(32).toString("hex");
 
 const APP_ROOT = app.isPackaged
   ? path.join(process.resourcesPath, "app")
@@ -59,6 +63,20 @@ const APP_ROOT = app.isPackaged
 
 const COCKPIT_DIR = path.join(os.homedir(), ".cockpit");
 const WINDOW_STATE_PATH = path.join(COCKPIT_DIR, "window-state.json");
+
+function getDialogParent() {
+  return mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+}
+
+function showMessageBoxSync(options) {
+  const parent = getDialogParent();
+  return parent ? dialog.showMessageBoxSync(parent, options) : dialog.showMessageBoxSync(options);
+}
+
+function showMessageBox(options) {
+  const parent = getDialogParent();
+  return parent ? dialog.showMessageBox(parent, options) : dialog.showMessageBox(options);
+}
 
 // ─── Window State Persistence ─────────────────────────────────────
 function ensureCockpitDir() {
@@ -117,8 +135,7 @@ function setupAutoUpdate() {
 
   autoUpdater.on("update-downloaded", (info) => {
     console.log("[updater] update downloaded:", info.version);
-    const parentWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
-    const response = dialog.showMessageBoxSync(parentWindow, {
+    const response = showMessageBoxSync({
       type: "info",
       title: "Update Ready",
       message: `Cockpit ${info.version} is ready to install.`,
@@ -282,6 +299,7 @@ async function startNextServer() {
         PORT: String(serverPort),
         HOSTNAME: "127.0.0.1",
         NODE_ENV: "production",
+        COCKPIT_API_TOKEN: API_TOKEN,
       },
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
@@ -366,7 +384,7 @@ function createSplash() {
     resizable: false,
     alwaysOnTop: true,
     skipTaskbar: true,
-    webPreferences: { nodeIntegration: false, contextIsolation: true },
+    webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
   });
 
   splash.loadURL(
@@ -464,7 +482,25 @@ function createMainWindow() {
     mainWindow.maximize();
   }
 
-  mainWindow.loadURL(`http://localhost:${serverPort}`);
+  const appUrl = `http://localhost:${serverPort}`;
+
+  mainWindow.webContents.session.cookies
+    .set({
+      url: appUrl,
+      name: API_TOKEN_COOKIE,
+      value: API_TOKEN,
+      httpOnly: true,
+      sameSite: "strict",
+      path: "/",
+    })
+    .catch((err) => {
+      console.error("[electron] failed to set API token cookie:", err.message);
+    })
+    .finally(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.loadURL(appUrl);
+      }
+    });
 
   // Strict URL check: only allow our own localhost server
   function isLocalAppUrl(url) {
@@ -607,8 +643,7 @@ function buildMenu() {
         {
           label: `About ${app.name}`,
           click: () => {
-            const parentWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
-            dialog.showMessageBox(parentWindow, {
+            showMessageBox({
               type: "info",
               title: `About ${app.name}`,
               message: `${app.name} v${app.getVersion()}`,
@@ -700,17 +735,26 @@ let dataInterval;
 
 function fetchJson(urlPath) {
   return new Promise((resolve, reject) => {
-    http.get(`http://localhost:${serverPort}${urlPath}`, (res) => {
-      let body = "";
-      res.on("data", (chunk) => (body += chunk));
-      res.on("end", () => {
-        try {
-          resolve(JSON.parse(body));
-        } catch {
-          reject(new Error("Invalid JSON"));
-        }
-      });
-    }).on("error", reject);
+    const req = http.get(
+      `http://localhost:${serverPort}${urlPath}`,
+      { headers: { [API_TOKEN_HEADER]: API_TOKEN } },
+      (res) => {
+        let body = "";
+        res.on("data", (chunk) => (body += chunk));
+        res.on("end", () => {
+          if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+            reject(new Error(`HTTP ${res.statusCode ?? "unknown"}`));
+            return;
+          }
+          try {
+            resolve(JSON.parse(body));
+          } catch {
+            reject(new Error("Invalid JSON"));
+          }
+        });
+      },
+    );
+    req.on("error", reject);
   });
 }
 
