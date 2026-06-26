@@ -60,6 +60,38 @@ const APP_ROOT = app.isPackaged
 const COCKPIT_DIR = path.join(os.homedir(), ".cockpit");
 const WINDOW_STATE_PATH = path.join(COCKPIT_DIR, "window-state.json");
 
+// ─── Env file loading ─────────────────────────────────────────────
+// Packaged Electron apps don't inherit shell env vars, so we load
+// env files from ~/.cockpit/env (production) and .env.local (dev).
+function loadEnvFile(filePath) {
+  const vars = {};
+  try {
+    if (!fs.existsSync(filePath)) return vars;
+    const lines = fs.readFileSync(filePath, "utf-8").split("\n");
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eqIdx = trimmed.indexOf("=");
+      if (eqIdx < 1) continue;
+      const key = trimmed.slice(0, eqIdx).trim();
+      let val = trimmed.slice(eqIdx + 1).trim();
+      // Strip surrounding quotes
+      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+        val = val.slice(1, -1);
+      }
+      vars[key] = val;
+    }
+  } catch {
+    // non-fatal
+  }
+  return vars;
+}
+
+// Load env vars: ~/.cockpit/env takes priority, then .env.local in project root.
+const userEnvFile = loadEnvFile(path.join(COCKPIT_DIR, "env"));
+const projectEnvFile = loadEnvFile(path.join(APP_ROOT, ".env.local"));
+const loadedEnv = { ...projectEnvFile, ...userEnvFile };
+
 // ─── Window State Persistence ─────────────────────────────────────
 function ensureCockpitDir() {
   if (!fs.existsSync(COCKPIT_DIR)) {
@@ -278,6 +310,7 @@ async function startNextServer() {
       cwd: path.dirname(serverJs),
       env: {
         ...process.env,
+        ...loadedEnv,
         ...nodeEnv,
         PORT: String(serverPort),
         HOSTNAME: "127.0.0.1",
