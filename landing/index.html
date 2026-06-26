@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cockpit — Pilot your company from one screen</title>
-  <meta name="description" content="A desktop app that connects to Slack, Calendar, Linear, GitHub, and Notion — so founders can see everything, ask anything, and act instantly.">
+  <title>Cockpit - Pilot your company from one screen</title>
+  <meta name="description" content="A desktop app that connects to Slack, Calendar, Linear, GitHub, and Notion so founders can see everything, ask anything, and act instantly.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" onload="this.onload=null;this.rel='stylesheet'">
@@ -207,6 +207,22 @@
       letter-spacing: 0.02em;
     }
 
+    /* Hero integrations strip */
+    .hero-integrations {
+      margin-top: 2rem;
+      text-align: center;
+    }
+
+    .hero-integrations-label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      display: block;
+      margin-bottom: 0.8rem;
+    }
+
     /* Screenshot */
     .hero-screenshot {
       margin-top: 3rem;
@@ -307,21 +323,6 @@
       font-size: 1.02rem;
       color: var(--text-muted);
       line-height: 1.6;
-    }
-
-    /* Integrations */
-    .integrations {
-      padding: 2rem 0;
-      text-align: center;
-    }
-
-    .integrations h2 {
-      font-size: 1.1rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--text-muted);
-      margin-bottom: 1.2rem;
     }
 
     .integration-grid {
@@ -435,15 +436,27 @@
     <section class="hero">
       <h1>Pilot your company<br>from one screen</h1>
       <p>
-        A desktop app that connects to Slack, Calendar, Linear, GitHub,
-        and Notion — so founders can see everything, ask anything,
-        and act instantly without switching tabs.
+        Monitor everything, ask anything &amp; act instantly. No more switching tabs.
       </p>
       <a href="https://github.com/ArthaudMe/cockpit/releases/latest/download/Cockpit-0.1.0-arm64.dmg" class="download-btn">
         Download for Mac
       </a>
       <div class="download-meta">
-        macOS (Apple Silicon) &middot; Free, local &amp; open source
+        Free, local &amp; open source
+      </div>
+
+      <div class="hero-integrations">
+        <span class="hero-integrations-label">Connects to</span>
+        <div class="integration-grid">
+          <div class="integration"><img src="https://www.gstatic.com/calendar/images/dynamiclogo_2020q4/calendar_31_2x.png" alt=""> Google Calendar</div>
+          <div class="integration"><img src="https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico" alt=""> Gmail</div>
+          <div class="integration"><img src="https://a.slack-edge.com/80588/marketing/img/icons/icon_slack_hash_colored.png" alt=""> Slack</div>
+          <div class="integration"><img src="https://linear.app/favicon.ico" alt=""> Linear</div>
+          <div class="integration"><img src="https://github.githubassets.com/favicons/favicon-dark.svg" alt=""> GitHub</div>
+          <div class="integration"><img src="https://www.notion.so/images/favicon.ico" alt=""> Notion</div>
+          <div class="integration"><img src="https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/c7/f1/86/c7f18626-3058-dcac-e507-59dc3bbc3ca6/AppIcon-0-0-1x_U007epad-0-0-0-1-0-0-sRGB-85-220.png/640x640bb.webp" alt=""> Granola</div>
+          <div class="integration"><span class="dot"></span> +1000s of MCPs</div>
+        </div>
       </div>
 
       <div class="hero-screenshot">
@@ -455,17 +468,17 @@
       <div class="feature">
         <div class="feature-icon">&#9671;</div>
         <h3>Unified feed</h3>
-        <p>Your calendar, Slack, Linear, GitHub, and Notion — collapsed into one live feed. No more tab-switching to stay on top of things.</p>
+        <p>Your calendar, Slack, Linear, GitHub, and Notion collapsed into one live feed. No more tab-switching to stay on top of things.</p>
       </div>
       <div class="feature">
         <div class="feature-icon">&#9656;</div>
         <h3>Ask anything</h3>
-        <p>"What did the team ship this week?" "Am I double-booked tomorrow?" Ask in plain English — Cockpit searches every tool before answering.</p>
+        <p>"What did the team ship this week?" "Am I double-booked tomorrow?" Ask in plain English. Cockpit searches every tool before answering.</p>
       </div>
       <div class="feature">
         <div class="feature-icon">&#9733;</div>
         <h3>Custom skills</h3>
-        <p>Build reusable automations — weekly reports, investor updates, team standups — or let Cockpit suggest them based on how you work.</p>
+        <p>Build reusable automations: weekly reports, investor updates, team standups. Or let Cockpit suggest them based on how you work.</p>
       </div>
       <div class="feature">
         <div class="feature-icon">&#8984;K</div>
@@ -481,7 +494,7 @@
           <div class="step-num">1</div>
           <div class="step-content">
             <h3>Connect your tools</h3>
-            <p>Sign in with Google, Slack, Linear, GitHub, or Notion. Cockpit uses OAuth — it never sees your passwords.</p>
+            <p>Sign in with Google, Slack, Linear, GitHub, or Notion. Cockpit uses OAuth and never sees your passwords.</p>
           </div>
         </div>
         <div class="step">
@@ -502,33 +515,19 @@
           <div class="step-num">4</div>
           <div class="step-content">
             <h3>Build skills that repeat</h3>
-            <p>Turn recurring tasks into one-click skills — weekly reports, investor updates, standup summaries. Cockpit learns what you need.</p>
+            <p>Turn recurring tasks into one-click skills: weekly reports, investor updates, standup summaries. Cockpit learns what you need.</p>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="integrations">
-      <h2>Connects to</h2>
-      <div class="integration-grid">
-        <div class="integration"><img src="https://www.gstatic.com/calendar/images/dynamiclogo_2020q4/calendar_31_2x.png" alt=""> Google Calendar</div>
-        <div class="integration"><img src="https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico" alt=""> Gmail</div>
-        <div class="integration"><img src="https://a.slack-edge.com/80588/marketing/img/icons/icon_slack_hash_colored.png" alt=""> Slack</div>
-        <div class="integration"><img src="https://linear.app/favicon.ico" alt=""> Linear</div>
-        <div class="integration"><img src="https://github.githubassets.com/favicons/favicon-dark.svg" alt=""> GitHub</div>
-        <div class="integration"><img src="https://www.notion.so/images/favicon.ico" alt=""> Notion</div>
-        <div class="integration"><img src="https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/c7/f1/86/c7f18626-3058-dcac-e507-59dc3bbc3ca6/AppIcon-0-0-1x_U007epad-0-0-0-1-0-0-sRGB-85-220.png/640x640bb.webp" alt=""> Granola</div>
-        <div class="integration"><span class="dot"></span> +1000s of MCPs</div>
-      </div>
-    </section>
 
     <section class="privacy">
       <div class="privacy-box">
         <h3>Your data stays on your machine</h3>
         <p>
           Cockpit runs locally. OAuth tokens are stored in ~/.cockpit with 0600 permissions.
-          No telemetry by default. Client secrets never ship in the app —
-          token exchange goes through a secure proxy.
+          No telemetry by default. Token exchange goes through a secure proxy.
         </p>
       </div>
     </section>
