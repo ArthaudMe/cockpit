@@ -838,7 +838,26 @@ function stopBackgroundTick() {
 // ─── Startup ───────────────────────────────────────────────────────
 app.isQuitting = false;
 
+// Auto-eject the installer DMG after the app launches from /Applications.
+// Without this, each install leaves a mounted volume cluttering the desktop.
+function ejectInstallerDmg() {
+  if (isDev || !app.getPath("exe").startsWith("/Applications/")) return;
+  try {
+    const { execSync } = require("child_process");
+    // Find mounted Cockpit DMG volumes
+    const mounts = execSync("ls /Volumes", { encoding: "utf-8" })
+      .split("\n")
+      .filter((v) => v.toLowerCase().includes("cockpit"));
+    for (const vol of mounts) {
+      execSync(`hdiutil detach "/Volumes/${vol}" -quiet`, { stdio: "ignore" });
+    }
+  } catch {
+    // Not critical — ignore if eject fails
+  }
+}
+
 app.whenReady().then(async () => {
+  ejectInstallerDmg();
   buildMenu();
   setupAutoUpdate();
   createTray();
