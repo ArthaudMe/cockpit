@@ -101,11 +101,27 @@ export function buildAgentEnv(extra?: Record<string, string>): NodeJS.ProcessEnv
   // Inside packaged Electron, PATH may be minimal. Ensure common binary
   // locations are included so we can find claude/codex/ollama.
   const home = env.HOME || "";
+  // Resolve NVM's active node version directory dynamically so we find
+  // binaries installed via `npm i -g` (claude, codex, etc.).
+  const nvmDir = env.NVM_DIR || `${home}/.nvm`;
+  let nvmBin = `${nvmDir}/versions/node/current/bin`;
+  try {
+    const fs = require("fs");
+    const versions = fs.readdirSync(`${nvmDir}/versions/node`).filter((d: string) => d.startsWith("v"));
+    if (versions.length > 0) {
+      // Sort semver descending, pick the latest
+      versions.sort((a: string, b: string) => b.localeCompare(a, undefined, { numeric: true }));
+      nvmBin = `${nvmDir}/versions/node/${versions[0]}/bin`;
+    }
+  } catch {
+    // NVM not installed or unreadable — keep the fallback
+  }
+
   const extras = [
     "/usr/local/bin",
     "/opt/homebrew/bin",
     `${home}/.local/bin`,
-    `${home}/.nvm/versions/node/current/bin`,
+    nvmBin,
     `${home}/.cargo/bin`,
   ];
   const existing = env.PATH || "/usr/bin:/bin";
