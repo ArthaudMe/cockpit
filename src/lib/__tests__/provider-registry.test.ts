@@ -1,5 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { PROVIDERS, getProviderDefs, listProviders } from "../provider-registry";
+import {
+  PROVIDERS,
+  getProviderDefs,
+  isProviderId,
+  isProviderModel,
+  listProviders,
+  providerSupportsImages,
+  providerSupportsPrewarm,
+  providerUsesClaudeHooks,
+} from "../provider-registry";
 
 describe("provider-registry", () => {
   it("has exactly the supported providers", () => {
@@ -21,6 +30,10 @@ describe("provider-registry", () => {
       expect(def.defaultModel).toBeTruthy();
       expect(typeof def.buildArgs).toBe("function");
       expect(typeof def.supportsPrewarm).toBe("boolean");
+      expect(def.capabilities).toBeDefined();
+      expect(def.capabilities.install.hint).toBe(def.installHint);
+      expect(def.capabilities.models.defaultModel).toBe(def.defaultModel);
+      expect(def.capabilities.models.options).toBe(def.models);
     }
   });
 
@@ -49,11 +62,11 @@ describe("provider-registry", () => {
   });
 
   it("claude supports prewarm", () => {
-    expect(PROVIDERS.claude.supportsPrewarm).toBe(true);
+    expect(providerSupportsPrewarm(PROVIDERS.claude)).toBe(true);
   });
 
   it("ollama does not support prewarm", () => {
-    expect(PROVIDERS.ollama.supportsPrewarm).toBe(false);
+    expect(providerSupportsPrewarm(PROVIDERS.ollama)).toBe(false);
   });
 
   it("ollama forwards the system prompt", () => {
@@ -86,6 +99,7 @@ describe("provider-registry", () => {
     expect(defs[0].id).toBeDefined();
     expect(defs[0].label).toBeDefined();
     expect(defs[0].models).toBeDefined();
+    expect(defs[0].capabilities).toBeDefined();
     // Should NOT have implementation details
     expect((defs[0] as any).binary).toBeUndefined();
     expect((defs[0] as any).buildArgs).toBeUndefined();
@@ -105,5 +119,27 @@ describe("provider-registry", () => {
       const modelIds = def.models.map((m) => m.id);
       expect(modelIds).toContain(def.defaultModel);
     }
+  });
+
+  it("exposes explicit provider capabilities", () => {
+    expect(PROVIDERS.claude.capabilities.lifecycle.hooks).toEqual({ kind: "claude-workspace" });
+    expect(providerUsesClaudeHooks(PROVIDERS.claude)).toBe(true);
+    expect(providerSupportsImages(PROVIDERS.claude)).toBe(true);
+
+    expect(PROVIDERS.codex.capabilities.lifecycle.hooks).toEqual({ kind: "none" });
+    expect(providerUsesClaudeHooks(PROVIDERS.codex)).toBe(false);
+    expect(providerSupportsImages(PROVIDERS.codex)).toBe(false);
+
+    expect(PROVIDERS.ollama.capabilities.prompt.systemPrompt).toEqual({
+      kind: "ollama-system-flag",
+    });
+  });
+
+  it("validates provider ids and provider-specific models", () => {
+    expect(isProviderId("claude")).toBe(true);
+    expect(isProviderId("missing")).toBe(false);
+    expect(isProviderModel("claude", PROVIDERS.claude.defaultModel)).toBe(true);
+    expect(isProviderModel("claude", "llama3.3")).toBe(false);
+    expect(isProviderModel("missing", "anything")).toBe(false);
   });
 });

@@ -123,7 +123,8 @@ Connect services from onboarding or Settings. You'll be redirected to each servi
 ```bash
 pnpm electron:dev       # development (uses the dev server on :3939)
 pnpm electron:build     # next build + standalone packaging + electron-builder
-pnpm electron:publish   # build and publish a release (auto-update feed)
+pnpm release:mac        # build, sign, notarize, staple, and verify a macOS DMG
+pnpm electron:publish   # macOS release build + verified GitHub release upload
 ```
 
 ### Quality
@@ -162,6 +163,7 @@ proxy/
   api/oauth/token.ts    # Vercel function holding OAuth client secrets
 scripts/
   prepare-standalone.js # Copies static assets into the standalone bundle
+  release/              # macOS notarization, verification, and release upload scripts
 ```
 
 ## Data storage
@@ -179,15 +181,22 @@ All user data stays local:
 - `~/.cockpit/window-state.json`, `crash-log.json` — Electron state
 - `localStorage` — chat UI state (capped, images excluded)
 
-## Installing Unsigned DMGs (macOS)
+## macOS Releases
 
-Until the app is signed and notarized, macOS Gatekeeper will block it. After dragging **Cockpit** to Applications, either run:
+Website downloads should be Developer ID signed, notarized, stapled, and
+Gatekeeper verified. The normal release path is:
 
 ```bash
-xattr -cr /Applications/Cockpit.app
+pnpm release:mac
 ```
 
-or go to **System Settings → Privacy & Security** and click **Open Anyway** after the first blocked launch attempt. Note that auto-update does not work on unsigned macOS builds.
+For an already-built DMG, verify stapling and Gatekeeper with:
+
+```bash
+pnpm release:mac:verify
+```
+
+See `agents/workflows/release.md` for local and CI release details.
 
 ## License
 

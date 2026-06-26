@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAgent, listAgents, ensureAgentRuntimeStarted, type AgentRole, type AgentBackend } from "@/lib/agent-manager";
+import { isProviderId } from "@/lib/provider-registry";
 
 export async function GET() {
   await ensureAgentRuntimeStarted();
@@ -17,8 +18,7 @@ export async function POST(req: NextRequest) {
   const validRoles: AgentRole[] = ["general", "research", "writer", "ops"];
   const agentRole = validRoles.includes(role) ? role : "general";
 
-  const validBackends: AgentBackend[] = ["claude", "codex", "ollama"];
-  const agentBackend = validBackends.includes(backend) ? backend : "claude";
+  const agentBackend: AgentBackend = isProviderId(backend) ? backend : "claude";
 
   const agent = createAgent(name, agentRole, systemPrompt, agentBackend, model);
   return NextResponse.json(agent, { status: 201 });

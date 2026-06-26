@@ -58,8 +58,11 @@ const API_TOKEN_HEADER = "X-Cockpit-Token";
 const API_TOKEN = randomBytes(32).toString("hex");
 
 const APP_ROOT = app.isPackaged
-  ? path.join(process.resourcesPath, "app")
+  ? app.getAppPath()
   : path.join(__dirname, "..");
+const UNPACKED_APP_ROOT = app.isPackaged
+  ? path.join(process.resourcesPath, "app.asar.unpacked")
+  : APP_ROOT;
 
 const COCKPIT_DIR = path.join(os.homedir(), ".cockpit");
 const WINDOW_STATE_PATH = path.join(COCKPIT_DIR, "window-state.json");
@@ -290,7 +293,10 @@ async function startNextServer() {
     // self-contained server.js with its own traced node_modules. We run it
     // with Electron's bundled Node via ELECTRON_RUN_AS_NODE=1, so no
     // external node_modules (or symlinked .bin shims) are needed.
-    const serverJs = path.join(APP_ROOT, ".next", "standalone", "server.js");
+    const unpackedServerJs = path.join(UNPACKED_APP_ROOT, ".next", "standalone", "server.js");
+    const serverJs = fs.existsSync(unpackedServerJs)
+      ? unpackedServerJs
+      : path.join(APP_ROOT, ".next", "standalone", "server.js");
 
     if (!fs.existsSync(serverJs)) {
       reject(new Error(`Server bundle missing at ${serverJs}`));
