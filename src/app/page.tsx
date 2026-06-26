@@ -58,7 +58,12 @@ export default function Home() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [offlineInfo, setOfflineInfo] = useState<{ offline: boolean; cachedAt?: number }>({ offline: false });
   const [showRightColumn, setShowRightColumn] = useState(true);
-  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("cockpit:onboarding-done") === "1";
+    }
+    return false;
+  });
 
   // Fetch user profile name (for filtering attendees)
   useEffect(() => {
@@ -363,6 +368,7 @@ export default function Home() {
       <OnboardingView
         onRetry={() => {
           setOnboardingDismissed(true);
+          localStorage.setItem("cockpit:onboarding-done", "1");
           handleRetryConnection();
         }}
         checking={claudeStatus.checking}
