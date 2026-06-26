@@ -7,7 +7,7 @@ import {
   type AgentBackend,
   type AgentRole,
 } from "@/lib/agent-manager";
-import { PROVIDERS } from "@/lib/provider-registry";
+import { isProviderId, isProviderModel } from "@/lib/provider-registry";
 
 const VALID_ROLES = new Set<AgentRole>(["general", "research", "writer", "ops"]);
 const ALLOWED_PATCH_KEYS = new Set(["name", "role", "backend", "model"]);
@@ -80,7 +80,7 @@ export async function PATCH(
   }
 
   if ("backend" in body) {
-    if (typeof body.backend !== "string" || !PROVIDERS[body.backend]) {
+    if (!isProviderId(body.backend)) {
       return badRequest("backend is invalid");
     }
     updates.backend = body.backend;
@@ -91,11 +91,10 @@ export async function PATCH(
       return badRequest("model must be a non-empty string");
     }
     const backend = updates.backend ?? agent.backend;
-    const provider = PROVIDERS[backend];
-    if (!provider) {
+    if (!isProviderId(backend)) {
       return badRequest("backend is invalid");
     }
-    if (!provider.models.some((model) => model.id === body.model)) {
+    if (!isProviderModel(backend, body.model)) {
       return badRequest("model is invalid for backend");
     }
     updates.model = body.model;

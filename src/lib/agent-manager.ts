@@ -6,7 +6,14 @@ import { randomBytes } from "crypto";
 import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync } from "fs";
 import { join } from "path";
 import { homedir, tmpdir } from "os";
-import { PROVIDERS, getProviderDefs, type ProviderDef } from "./provider-registry";
+import {
+  PROVIDERS,
+  getProviderDefs,
+  providerSupportsImages,
+  providerSupportsPrewarm,
+  providerUsesClaudeHooks,
+  type ProviderDef,
+} from "./provider-registry";
 import { buildAgentEnv } from "./agent-env";
 import { startEventServer, getEventServerInfo, onAgentEvent, removeAgentListeners } from "./agent-event-server";
 import { setupClaudeHooks, cleanupClaudeHooks } from "./claude-hooks";
@@ -162,13 +169,13 @@ function warmAgent(state: AgentStateExt) {
   state.info.systemPrompt = buildAgentSystemPrompt(state.info.role, state.customPrompt);
   const systemPrompt = state.info.systemPrompt;
 
-  if (def.supportsPrewarm) {
+  if (providerSupportsPrewarm(def)) {
     // Set up hooks for Claude
     let cwd: string | undefined;
     const extraEnv: Record<string, string> = {};
     const eventInfo = getEventServerInfo();
 
-    if (def.supportsHooks && eventInfo) {
+    if (providerUsesClaudeHooks(def) && eventInfo) {
       const hookDir = setupClaudeHooks({
         port: eventInfo.port,
         token: eventInfo.token,
@@ -346,7 +353,7 @@ export function sendToAgent(
     extraEnv.COCKPIT_AGENT_ID = id;
   }
 
-  if (hasImages && backend === "claude") {
+  if (hasImages && providerSupportsImages(def)) {
     for (const img of images) {
       try {
         tempImagePaths.push(writeImageToTemp(img));
@@ -357,7 +364,7 @@ export function sendToAgent(
 
     const args = def.buildArgs(model, systemPrompt, { images: tempImagePaths });
     let cwd: string | undefined;
-    if (def.supportsHooks && eventInfo) {
+    if (providerUsesClaudeHooks(def) && eventInfo) {
       const hookDir = setupClaudeHooks({
         port: eventInfo.port,
         token: eventInfo.token,
@@ -384,7 +391,7 @@ export function sendToAgent(
     console.log("[agent-manager] cold start for %s (backend=%s)", id, backend);
 
     let cwd: string | undefined;
-    if (def.supportsHooks && eventInfo) {
+    if (providerUsesClaudeHooks(def) && eventInfo) {
       const hookDir = setupClaudeHooks({
         port: eventInfo.port,
         token: eventInfo.token,
@@ -402,7 +409,7 @@ export function sendToAgent(
   // One-shot CLI calls have no session memory — carry recent turns and
   // relevant history along with the message.
   let prompt = buildPromptPrelude({ message, focusContext, agentId: id });
-  if (hasImages && backend !== "claude") {
+  if (hasImages && !providerSupportsImages(def)) {
     prompt = `[${images!.length} image(s) attached]\n\n${prompt}`;
   }
 
@@ -417,7 +424,7 @@ export function sendToAgent(
       try { unlinkSync(p); } catch { /* ignore */ }
     }
 
-    if (agents.has(id) && def.supportsPrewarm && !state.warmProc) {
+    if (agents.has(id) && providerSupportsPrewarm(def) && !state.warmProc) {
       warmAgent(state);
     }
   });
