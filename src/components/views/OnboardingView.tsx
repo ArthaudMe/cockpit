@@ -130,35 +130,35 @@ function EngineSetupScreen({
     <div style={fullscreen}>
       <div style={{ maxWidth: 520, width: "100%" }}>
         {/* Branding header */}
-        <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
+        <div style={{ textAlign: "center", marginBottom: "2rem" }}>
           <div
             style={{
-              width: 36,
-              height: 36,
-              borderRadius: 10,
+              width: 48,
+              height: 48,
+              borderRadius: 12,
               border: "1px solid var(--border-light)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              margin: "0 auto 0.75rem",
-              fontSize: "0.9rem",
+              margin: "0 auto 1rem",
+              fontSize: "1.2rem",
             }}
           >
             &#9672;
           </div>
           <div
             style={{
-              fontSize: "1.05rem",
+              fontSize: "1.4rem",
               fontWeight: 700,
               color: "var(--text)",
               letterSpacing: "-0.03em",
               lineHeight: 1.15,
-              marginBottom: "0.3rem",
+              marginBottom: "0.4rem",
             }}
           >
             Pilot your company
           </div>
-          <div style={{ fontSize: "0.6rem", color: "var(--text-dim)", lineHeight: 1.5 }}>
+          <div style={{ fontSize: "0.8rem", color: "var(--text-dim)", lineHeight: 1.5 }}>
             Cockpit needs an AI engine to run. Pick any one below.
           </div>
         </div>
@@ -184,14 +184,14 @@ function EngineSetupScreen({
                 <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
                   <span
                     style={{
-                      width: 26,
-                      height: 26,
-                      borderRadius: 6,
+                      width: 32,
+                      height: 32,
+                      borderRadius: 8,
                       border: `1px solid ${backend.installed ? "var(--green)" : "var(--border-light)"}`,
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      fontSize: "0.7rem",
+                      fontSize: "0.9rem",
                       flexShrink: 0,
                       color: backend.installed ? "var(--green)" : "var(--text-dim)",
                     }}
@@ -199,10 +199,10 @@ function EngineSetupScreen({
                     {backend.installed ? "✓" : (ENGINE_ICONS[backend.id] || "◆")}
                   </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: "0.62rem", fontWeight: 600, color: "var(--text)" }}>
+                    <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--text)" }}>
                       {backend.label}
                     </div>
-                    <div style={{ fontSize: "0.54rem", color: "var(--text-dim)", marginTop: "0.05rem" }}>
+                    <div style={{ fontSize: "0.72rem", color: "var(--text-dim)", marginTop: "0.1rem" }}>
                       {backend.installed
                         ? `Installed${backend.version ? ` (${backend.version})` : ""}`
                         : (ENGINE_DESCRIPTIONS[backend.id] || backend.installHint || "")}
@@ -210,7 +210,7 @@ function EngineSetupScreen({
                   </div>
                   <span
                     style={{
-                      fontSize: "0.51rem",
+                      fontSize: "0.68rem",
                       fontWeight: 600,
                       padding: "0.15rem 0.45rem",
                       borderRadius: 4,
@@ -253,7 +253,7 @@ function EngineSetupScreen({
                   >
                     <code
                       style={{
-                        fontSize: "0.53rem",
+                        fontSize: "0.7rem",
                         color: "var(--green)",
                         fontFamily: "inherit",
                         overflow: "hidden",
@@ -274,7 +274,7 @@ function EngineSetupScreen({
 
           {/* Loading state before detection completes */}
           {backends.length === 0 && detecting && (
-            <div style={{ textAlign: "center", padding: "0.75rem", fontSize: "0.56rem", color: "var(--text-muted)" }}>
+            <div style={{ textAlign: "center", padding: "1rem", fontSize: "0.75rem", color: "var(--text-muted)" }}>
               Scanning for engines...
             </div>
           )}
@@ -295,19 +295,19 @@ function EngineSetupScreen({
             disabled={checking}
             style={{
               ...primaryBtn,
-              padding: "0.38rem 1.2rem",
+              padding: "0.5rem 1.6rem",
               cursor: checking ? "default" : "pointer",
             }}
           >
             {ready ? "Continue" : "Skip"}
           </button>
           {!ready && !detecting && backends.length > 0 && (
-            <span style={{ fontSize: "0.54rem", color: "var(--text-muted)" }}>
+            <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
               No engine detected. Install one above, or skip to explore.
             </span>
           )}
           {!ready && detecting && (
-            <span style={{ fontSize: "0.54rem", color: "var(--text-muted)" }}>
+            <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
               Checking for engines...
             </span>
           )}
@@ -394,7 +394,7 @@ function DatasourcesScreen({ onContinue }: { onContinue: () => void }) {
           <div style={labelStyle}>Cockpit — last step</div>
           <div
             style={{
-              fontSize: "0.82rem",
+              fontSize: "1.1rem",
               fontWeight: 700,
               color: "var(--text)",
               letterSpacing: "-0.02em",
@@ -405,9 +405,9 @@ function DatasourcesScreen({ onContinue }: { onContinue: () => void }) {
           </div>
           <div
             style={{
-              fontSize: "0.58rem",
+              fontSize: "0.78rem",
               color: "var(--text-dim)",
-              marginTop: "0.25rem",
+              marginTop: "0.35rem",
               lineHeight: 1.5,
             }}
           >
@@ -435,12 +435,12 @@ function DatasourcesScreen({ onContinue }: { onContinue: () => void }) {
         <div style={{ marginTop: "1.5rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <button
             onClick={onContinue}
-            style={{ ...primaryBtn, padding: "0.38rem 1.2rem" }}
+            style={{ ...primaryBtn, padding: "0.5rem 1.6rem" }}
           >
             {connectedCount > 0 ? "Enter cockpit" : "Skip for now"}
           </button>
           {connectedCount > 0 && (
-            <span style={{ fontSize: "0.56rem", color: "var(--text-dim)" }}>
+            <span style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>
               {connectedCount} connected
             </span>
           )}
@@ -477,14 +477,14 @@ function DatasourceCard({
       {/* Icon */}
       <div
         style={{
-          width: 22,
-          height: 22,
-          borderRadius: 5,
+          width: 28,
+          height: 28,
+          borderRadius: 6,
           border: `1px solid ${datasource.connected ? "var(--green)" : "var(--border-light)"}`,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          fontSize: "0.56rem",
+          fontSize: "0.75rem",
           fontWeight: 700,
           color: datasource.connected ? "var(--green)" : "var(--text-dim)",
           flexShrink: 0,
@@ -497,7 +497,7 @@ function DatasourceCard({
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{
-            fontSize: "0.58rem",
+            fontSize: "0.78rem",
             fontWeight: 600,
             color: "var(--text)",
           }}
@@ -506,7 +506,7 @@ function DatasourceCard({
         </div>
         <div
           style={{
-            fontSize: "0.54rem",
+            fontSize: "0.72rem",
             color: "var(--text-muted)",
             marginTop: "0.1rem",
           }}
@@ -519,7 +519,7 @@ function DatasourceCard({
       {datasource.connected ? (
         <span
           style={{
-            fontSize: "0.54rem",
+            fontSize: "0.72rem",
             color: "var(--green)",
             fontWeight: 600,
             flexShrink: 0,
@@ -537,7 +537,7 @@ function DatasourceCard({
             border: "1px solid var(--border-light)",
             borderRadius: 4,
             padding: "0.2rem 0.6rem",
-            fontSize: "0.54rem",
+            fontSize: "0.72rem",
             fontWeight: 600,
             cursor: connecting ? "default" : "pointer",
             fontFamily: "inherit",
@@ -564,7 +564,7 @@ function DatasourceCard({
       ) : (
         <span
           style={{
-            fontSize: "0.54rem",
+            fontSize: "0.72rem",
             color: datasource.connected ? "var(--green)" : "var(--text-muted)",
             fontWeight: 600,
             flexShrink: 0,
@@ -596,7 +596,7 @@ const primaryBtn: React.CSSProperties = {
   border: "none",
   borderRadius: 6,
   padding: "0.35rem 0.9rem",
-  fontSize: "0.58rem",
+  fontSize: "0.78rem",
   fontWeight: 700,
   cursor: "pointer",
   fontFamily: "inherit",
@@ -609,14 +609,14 @@ const secondaryBtn: React.CSSProperties = {
   border: "1px solid var(--border)",
   borderRadius: 5,
   color: "var(--text-muted)",
-  fontSize: "0.54rem",
+  fontSize: "0.72rem",
   cursor: "pointer",
   fontFamily: "inherit",
   padding: "0.3rem 0.6rem",
 };
 
 const labelStyle: React.CSSProperties = {
-  fontSize: "0.54rem",
+  fontSize: "0.72rem",
   fontWeight: 600,
   color: "var(--text-muted)",
   textTransform: "uppercase",
