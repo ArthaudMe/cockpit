@@ -51,6 +51,9 @@
     },
     "npmRebuild": false,
     "asar": true,
+    "asarUnpack": [
+      ".next/standalone/**/*"
+    ],
     "files": [
       "electron/**/*",
       ".next/standalone/**/*",
