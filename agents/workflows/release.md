@@ -21,6 +21,9 @@ Prerequisites:
 - `OAUTH_PROXY_URL` and `OAUTH_PROXY_SECRET` set for production builds. These
   are inlined by `next.config.ts`; if either is blank, OAuth proxy connections
   are disabled in that build.
+  `pnpm release:mac` runs `pnpm oauth:check` first, which verifies the deployed
+  Vercel proxy accepts the shared secret and has credentials for GitHub, Linear,
+  Slack, and Notion.
 - Apple notarization credentials available either as:
   - keychain profile `cockpit-notary`, or
   - `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID`, or
@@ -56,6 +59,12 @@ Required GitHub environment secrets:
 
 ## Manual Verification
 
+For the deployed OAuth proxy:
+
+```bash
+pnpm oauth:check
+```
+
 For an existing DMG:
 
 ```bash
@@ -67,5 +76,6 @@ This validates stapling and Gatekeeper without submitting to Apple again.
 ## Files
 
 - `package.json` - Electron builder config and release scripts.
+- `scripts/release/check-oauth-proxy.js` - Vercel OAuth proxy preflight.
 - `scripts/release/notarize-mac.js` - Notarization, stapling, and Gatekeeper checks.
 - `.github/workflows/release-mac.yml` - Mac release workflow.
