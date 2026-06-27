@@ -17,9 +17,14 @@
     "electron:start": "electron .",
     "electron:publish": "pnpm release:mac:publish",
     "oauth:check": "node scripts/release/check-oauth-proxy.js",
-    "release:mac": "pnpm oauth:check && next build && node scripts/prepare-standalone.js && electron-builder --mac --publish never && node scripts/release/notarize-mac.js",
+    "release:check-secrets": "node scripts/release/check-ci-secrets.js",
+    "release:verify": "pnpm oauth:check && pnpm typecheck && pnpm test && pnpm build && node scripts/prepare-standalone.js && pnpm smoke:datasources",
+    "release:mac": "pnpm oauth:check && next build && node scripts/prepare-standalone.js && electron-builder --mac --publish never && pnpm smoke:packaged && node scripts/release/notarize-mac.js",
     "release:mac:verify": "node scripts/release/notarize-mac.js --skip-submit",
     "release:mac:publish": "pnpm release:mac && node scripts/release/upload-github.js",
+    "smoke:datasources": "node scripts/smoke/datasources.js --start",
+    "smoke:packaged": "node scripts/smoke/packaged-mac.js",
+    "smoke:packaged:launch": "node scripts/smoke/packaged-mac.js --launch",
     "lint": "next lint"
   },
   "dependencies": {
