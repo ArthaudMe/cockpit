@@ -37,8 +37,16 @@ if (missingRequired.length > 0 || (!hasAppleIdGroup && !hasApiKeyGroup)) {
   }
 
   if (!hasAppleIdGroup && !hasApiKeyGroup) {
+    const missingAppleId = missing(appleIdGroup);
+    const missingApiKey = missing(apiKeyGroup);
     console.error(
       `[release:check-secrets] missing notarization credentials: set either ${appleIdGroup.join(", ")} or ${apiKeyGroup.join(", ")}`,
+    );
+    console.error(
+      `[release:check-secrets] Apple ID group missing: ${missingAppleId.join(", ") || "none"}`,
+    );
+    console.error(
+      `[release:check-secrets] App Store Connect API key group missing: ${missingApiKey.join(", ") || "none"}`,
     );
   }
 
