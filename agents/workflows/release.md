@@ -59,6 +59,12 @@ Required GitHub environment secrets:
 
 ## Manual Verification
 
+For the release validation gate:
+
+```bash
+pnpm release:verify
+```
+
 For the deployed OAuth proxy:
 
 ```bash
@@ -76,6 +82,9 @@ This validates stapling and Gatekeeper without submitting to Apple again.
 ## Files
 
 - `package.json` - Electron builder config and release scripts.
+- `scripts/release/check-ci-secrets.js` - CI release secret preflight.
 - `scripts/release/check-oauth-proxy.js` - Vercel OAuth proxy preflight.
 - `scripts/release/notarize-mac.js` - Notarization, stapling, and Gatekeeper checks.
+- `scripts/smoke/datasources.js` - OAuth datasource connect smoke.
+- `scripts/smoke/packaged-mac.js` - Packaged app layout/signing/startup smoke.
 - `.github/workflows/release-mac.yml` - Mac release workflow.
