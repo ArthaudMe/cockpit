@@ -80,20 +80,34 @@ export function NotificationBell({
           background: "none",
           border: "1px solid var(--border)",
           borderRadius: 3,
-          padding: "0.2rem 0.4rem",
+          width: 28,
+          height: 24,
+          padding: 0,
           cursor: "pointer",
-          fontSize: "0.75rem",
-          color: "var(--text-dim)",
+          color: unreadCount > 0 ? "var(--text)" : "var(--text-dim)",
           fontFamily: "inherit",
           display: "flex",
           alignItems: "center",
+          justifyContent: "center",
           position: "relative",
         }}
         title="Notifications"
         aria-label={unreadCount > 0 ? `${unreadCount} unread notifications` : "Notifications"}
       >
-        {/* Bell character */}
-        <span style={{ fontSize: "0.75rem" }}>&#9951;</span>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+          <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+        </svg>
         {unreadCount > 0 && (
           <span
             style={{
@@ -101,17 +115,18 @@ export function NotificationBell({
               top: -4,
               right: -4,
               background: "var(--red)",
-              color: "var(--accent)",
+              color: "var(--bg)",
               fontSize: "0.75rem",
               fontWeight: 700,
-              minWidth: 13,
-              height: 13,
-              borderRadius: 7,
+              minWidth: 14,
+              height: 14,
+              borderRadius: 8,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               padding: "0 3px",
               lineHeight: 1,
+              border: "1px solid var(--surface)",
             }}
           >
             {unreadCount > 9 ? "9+" : unreadCount}

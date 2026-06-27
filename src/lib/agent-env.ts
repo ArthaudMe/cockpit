@@ -1,3 +1,6 @@
+import { existsSync, readdirSync } from "fs";
+import { join } from "path";
+
 /**
  * Environment Variable Allowlist
  *
@@ -81,6 +84,26 @@ const ALLOWED_ENV_VARS = [
 
 const ALLOWED_SET = new Set(ALLOWED_ENV_VARS);
 
+function existingDirs(paths: string[]): string[] {
+  return paths.filter((p) => p && existsSync(p));
+}
+
+function nvmNodeBins(home: string): string[] {
+  const nvmVersionsDir = join(home, ".nvm", "versions", "node");
+  try {
+    return readdirSync(nvmVersionsDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true }))
+      .map((entry) => join(nvmVersionsDir, entry.name, "bin"));
+  } catch {
+    return [];
+  }
+}
+
+function dedupe(paths: string[]): string[] {
+  return [...new Set(paths.filter(Boolean))];
+}
+
 /**
  * Build a clean environment for spawned agent processes.
  * Only passes through allowed env vars + any COCKPIT_* prefixed vars.
@@ -99,33 +122,26 @@ export function buildAgentEnv(extra?: Record<string, string>): NodeJS.ProcessEnv
   delete env.CLAUDECODE;
 
   // Inside packaged Electron, PATH may be minimal. Ensure common binary
-  // locations are included so we can find claude/codex/ollama.
+  // locations are included so we can find claude/codex/ollama installed by
+  // Homebrew, npm, nvm, Volta, fnm, Bun, Cargo, or user-local installers.
   const home = env.HOME || "";
-  // Resolve NVM's active node version directory dynamically so we find
-  // binaries installed via `npm i -g` (claude, codex, etc.).
-  const nvmDir = env.NVM_DIR || `${home}/.nvm`;
-  let nvmBin = `${nvmDir}/versions/node/current/bin`;
-  try {
-    const fs = require("fs");
-    const versions = fs.readdirSync(`${nvmDir}/versions/node`).filter((d: string) => d.startsWith("v"));
-    if (versions.length > 0) {
-      // Sort semver descending, pick the latest
-      versions.sort((a: string, b: string) => b.localeCompare(a, undefined, { numeric: true }));
-      nvmBin = `${nvmDir}/versions/node/${versions[0]}/bin`;
-    }
-  } catch {
-    // NVM not installed or unreadable — keep the fallback
-  }
-
   const extras = [
     "/usr/local/bin",
     "/opt/homebrew/bin",
     `${home}/.local/bin`,
-    nvmBin,
+    `${home}/.npm-global/bin`,
+    `${home}/.nvm/versions/node/current/bin`,
+    ...nvmNodeBins(home),
+    `${home}/.volta/bin`,
+    `${home}/.fnm/current/bin`,
+    `${home}/.bun/bin`,
     `${home}/.cargo/bin`,
   ];
   const existing = env.PATH || "/usr/bin:/bin";
-  env.PATH = [...extras, ...existing.split(":")].filter(Boolean).join(":");
+  // Preserve the user's shell PATH priority when available, then append GUI-app
+  // fallbacks. That avoids picking an older global install ahead of the CLI the
+  // user actually gets in Terminal.
+  env.PATH = dedupe([...existing.split(":"), ...existingDirs(extras)]).join(":");
 
   // Merge any extra vars (e.g., hook port, agent ID)
   if (extra) {

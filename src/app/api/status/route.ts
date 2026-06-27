@@ -1,36 +1,33 @@
 import { NextResponse } from "next/server";
-import { execFile } from "child_process";
-import { promisify } from "util";
-import { buildAgentEnv } from "@/lib/agent-env";
-
-const execFileAsync = promisify(execFile);
-
-async function check(bin: string, args: string[]): Promise<{ ok: boolean; version?: string }> {
-  try {
-    const { stdout } = await execFileAsync(bin, args, { timeout: 5000, env: buildAgentEnv() });
-    return { ok: true, version: stdout.trim() };
-  } catch {
-    return { ok: false };
-  }
-}
+import { listProviders } from "@/lib/provider-registry";
+import { detectProvider } from "@/lib/provider-runtime";
 
 export async function GET() {
-  const [claude, codex, ollama] = await Promise.all([
-    check("claude", ["--version"]),
-    check("codex", ["--version"]),
-    check("ollama", ["--version"]),
-  ]);
-
-  const connected = claude.ok || codex.ok || ollama.ok;
+  const results = await Promise.all(
+    listProviders().map(async (provider) => ({
+      provider,
+      result: await detectProvider(provider),
+    }))
+  );
+  const connected = results.some(({ result }) => result.ok);
+  const primary = results.find(({ result }) => result.ok);
 
   return NextResponse.json({
     connected,
-    version: claude.version || codex.version || ollama.version,
+    provider: primary?.provider.id,
+    providerLabel: primary?.provider.label,
+    version: primary?.result.version,
     cwd: process.cwd(),
-    backends: {
-      claude: { connected: claude.ok, version: claude.version },
-      codex: { connected: codex.ok, version: codex.version },
-      ollama: { connected: ollama.ok, version: ollama.version },
-    },
+    backends: Object.fromEntries(
+      results.map(({ provider, result }) => [
+        provider.id,
+        {
+          connected: result.ok,
+          version: result.version,
+          binaryPath: result.binaryPath,
+          error: result.error,
+        },
+      ])
+    ),
   });
 }

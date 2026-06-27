@@ -24,6 +24,26 @@ function escapeHtml(str: string): string {
     .replace(/'/g, "&#39;");
 }
 
+function sanitizeOAuthMessage(message: string): string {
+  return message
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
+    .replace(
+      /\b(access[_-]?token|refresh[_-]?token|client[_-]?secret|code[_-]?verifier|authorization|secret)\b\s*[:=]\s*["']?[^"'\s&]+/gi,
+      "$1=[redacted]"
+    )
+    .slice(0, 700);
+}
+
+function errorMessage(err: unknown): string {
+  const raw =
+    typeof err === "string"
+      ? err
+      : err instanceof Error
+        ? err.message
+        : "OAuth token exchange failed";
+  return sanitizeOAuthMessage(raw);
+}
+
 export async function GET(req: NextRequest) {
   // ─── Composio callback ──────────────────────────────────────────
   // Composio redirects here after the user completes Google auth.
@@ -36,9 +56,11 @@ export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code");
   const state = req.nextUrl.searchParams.get("state");
   const error = req.nextUrl.searchParams.get("error");
+  const errorDescription = req.nextUrl.searchParams.get("error_description");
 
   if (error) {
-    return new NextResponse(renderHTML("Connection failed", error, false), {
+    const detail = errorDescription ? `${error}: ${errorDescription}` : error;
+    return new NextResponse(renderHTML("Connection failed", sanitizeOAuthMessage(detail), false), {
       headers: { "Content-Type": "text/html" },
     });
   }
@@ -78,10 +100,11 @@ export async function GET(req: NextRequest) {
     );
   } catch (err: unknown) {
     console.error("[OAuth callback]", err);
+    const serviceName = service.charAt(0).toUpperCase() + service.slice(1);
     return new NextResponse(
       renderHTML(
-        "Connection failed",
-        "Something went wrong while connecting. Please close this tab and try again from Cockpit.",
+        `${serviceName} connection failed`,
+        errorMessage(err),
         false
       ),
       { headers: { "Content-Type": "text/html" } }

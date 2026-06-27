@@ -58,12 +58,14 @@ export default function Home() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [offlineInfo, setOfflineInfo] = useState<{ offline: boolean; cachedAt?: number }>({ offline: false });
   const [showRightColumn, setShowRightColumn] = useState(true);
-  const [onboardingDismissed, setOnboardingDismissed] = useState(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("cockpit:onboarding-done") === "1";
-    }
-    return false;
-  });
+  const [onboardingComplete, setOnboardingComplete] = useState(false);
+  const [onboardingPreferenceLoaded, setOnboardingPreferenceLoaded] = useState(false);
+  const [datasourceStatusChecked, setDatasourceStatusChecked] = useState(false);
+
+  useEffect(() => {
+    setOnboardingComplete(localStorage.getItem("cockpit:onboarding-complete") === "true");
+    setOnboardingPreferenceLoaded(true);
+  }, []);
 
   // Fetch user profile name (for filtering attendees)
   useEffect(() => {
@@ -80,6 +82,7 @@ export default function Home() {
     (data: DatasourceData & { _offline?: boolean; _cachedAt?: number }) => {
       setRawDatasourceData(data);
       setContextData(buildContextFromLiveData(data, userName));
+      setDatasourceStatusChecked(true);
       setOfflineInfo({
         offline: !!data._offline,
         cachedAt: data._cachedAt,
@@ -111,7 +114,7 @@ export default function Home() {
       fetch("/api/datasources/data")
         .then((r) => r.json())
         .then(handleDatasourceData)
-        .catch(() => {});
+        .catch(() => setDatasourceStatusChecked(true));
     };
 
     const tick = () => {
@@ -217,6 +220,12 @@ export default function Home() {
       });
   }, []);
 
+  const handleCompleteOnboarding = useCallback(() => {
+    localStorage.setItem("cockpit:onboarding-complete", "true");
+    setOnboardingComplete(true);
+    handleRetryConnection();
+  }, [handleRetryConnection]);
+
   const handleBackToChat = useCallback(() => {
     setCenterView({ type: "chat" });
   }, []);
@@ -228,12 +237,15 @@ export default function Home() {
   const handleConnectService = useCallback(async (serviceId: string) => {
     try {
       const res = await fetch(`/api/datasources/connect?service=${serviceId}`);
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Couldn't start the connection.");
+      }
       if (data.url) {
         window.open(data.url, "_blank", "width=600,height=700");
       }
-    } catch {
-      alert("Couldn't start the connection. Please check your internet and try again.");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Couldn't start the connection.");
     }
   }, []);
 
@@ -361,16 +373,17 @@ export default function Home() {
     [contextData.connected],
   );
 
-  // Show onboarding if no backends are connected (and we're done checking)
-  // User can always skip past onboarding.
-  if (!onboardingDismissed && !claudeStatus.checking && !claudeStatus.connected) {
+  const shouldShowOnboarding =
+    onboardingPreferenceLoaded &&
+    datasourceStatusChecked &&
+    !onboardingComplete &&
+    !claudeStatus.checking &&
+    (!claudeStatus.connected || !hasAnyDatasource);
+
+  if (shouldShowOnboarding) {
     return (
       <OnboardingView
-        onRetry={() => {
-          setOnboardingDismissed(true);
-          localStorage.setItem("cockpit:onboarding-done", "1");
-          handleRetryConnection();
-        }}
+        onComplete={handleCompleteOnboarding}
         checking={claudeStatus.checking}
       />
     );
@@ -421,8 +434,6 @@ export default function Home() {
   return (
     <div className="flex h-screen flex-col" style={{ background: "var(--bg)" }}>
       <Header
-        claudeStatus={claudeStatus}
-        onRetryConnection={handleRetryConnection}
         onSettingsClick={handleSettingsClick}
         notifications={notifications}
         unreadCount={unreadCount}

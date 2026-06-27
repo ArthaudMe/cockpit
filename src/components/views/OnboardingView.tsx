@@ -15,25 +15,10 @@ type DetectionResult = {
   anyAvailable: boolean;
 };
 
-type OnboardingStep = "engines" | "datasources";
+type OnboardingStep = "intro" | "datasources" | "engine";
 
-const INSTALL_COMMANDS: Record<string, string> = {
-  claude: "npm install -g @anthropic-ai/claude-code",
-  codex: "npm install -g @openai/codex",
-  ollama: "curl -fsSL https://ollama.com/install.sh | sh",
-};
-
-const ENGINE_DESCRIPTIONS: Record<string, string> = {
-  claude: "Uses your Claude subscription. No API keys needed.",
-  codex: "Uses your OpenAI account. Runs locally.",
-  ollama: "Fully local and free. Runs Llama, Hermes, Qwen, and more.",
-};
-
-const ENGINE_ICONS: Record<string, string> = {
-  claude: "◇",
-  codex: "◆",
-  ollama: "○",
-};
+const CLAUDE_INSTALL_CMD = "curl -fsSL https://claude.ai/install.sh | bash";
+const CORE_DATASOURCE_ORDER = ["calendar", "gmail", "slack", "linear", "github", "notion", "granola"];
 
 interface DatasourceInfo {
   id: string;
@@ -44,15 +29,20 @@ interface DatasourceInfo {
   needsOAuth: boolean;
 }
 
+type OnboardingDatasource = DatasourceInfo & {
+  displayId: string;
+  connectId: string;
+};
+
 export function OnboardingView({
-  onRetry,
+  onComplete,
   checking,
 }: {
-  onRetry: () => void;
+  onComplete: () => void;
   checking: boolean;
   error?: string;
 }) {
-  const [step, setStep] = useState<OnboardingStep>("engines");
+  const [step, setStep] = useState<OnboardingStep>("intro");
   const [detection, setDetection] = useState<DetectionResult | null>(null);
   const [detecting, setDetecting] = useState(false);
 
@@ -63,24 +53,26 @@ export function OnboardingView({
       const data: DetectionResult = await res.json();
       setDetection(data);
     } catch {
-      // detection failed
+      // Keep the install guidance visible if detection fails.
     } finally {
       setDetecting(false);
     }
   }, []);
 
-  // Detect on mount, and keep re-checking until an engine is ready so the
-  // screen advances on its own after an install/login finishes.
   useEffect(() => {
-    if (step !== "engines") return;
+    if (step !== "engine") return;
     detect();
     if (detection?.anyAvailable) return;
     const interval = setInterval(detect, 5000);
     return () => clearInterval(interval);
   }, [step, detect, detection?.anyAvailable]);
 
+  if (step === "intro") {
+    return <IntroScreen onContinue={() => setStep("datasources")} />;
+  }
+
   if (step === "datasources") {
-    return <DatasourcesScreen onContinue={onRetry} />;
+    return <DatasourcesScreen onBack={() => setStep("intro")} onContinue={() => setStep("engine")} />;
   }
 
   return (
@@ -89,266 +81,120 @@ export function OnboardingView({
       detecting={detecting}
       checking={checking}
       onDetect={detect}
-      onContinue={() => setStep("datasources")}
+      onBack={() => setStep("datasources")}
+      onContinue={onComplete}
     />
   );
 }
 
-/* =====================
-   Step 1 — Engine Setup
-   ===================== */
-
-function EngineSetupScreen({
-  detection,
-  detecting,
-  checking,
-  onDetect,
-  onContinue,
+function StepShell({
+  children,
+  maxWidth = 640,
 }: {
-  detection: DetectionResult | null;
-  detecting: boolean;
-  checking: boolean;
-  onDetect: () => void;
-  onContinue: () => void;
+  children: React.ReactNode;
+  maxWidth?: number;
 }) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  const backends = detection?.backends || [];
-  const ready = detection?.anyAvailable || false;
-
-  const copyCmd = (id: string) => {
-    const cmd = INSTALL_COMMANDS[id];
-    if (!cmd) return;
-    navigator.clipboard.writeText(cmd).then(() => {
-      setCopiedId(id);
-      setTimeout(() => setCopiedId(null), 2000);
-    }).catch(() => {});
-  };
-
   return (
     <div style={fullscreen}>
-      <div style={{ maxWidth: 520, width: "100%" }}>
-        {/* Branding header */}
-        <div style={{ textAlign: "center", marginBottom: "2rem" }}>
-          <div
-            style={{
-              width: 48,
-              height: 48,
-              borderRadius: 12,
-              border: "1px solid var(--border-light)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              margin: "0 auto 1rem",
-              fontSize: "1.2rem",
-            }}
-          >
-            &#9672;
-          </div>
-          <div
-            style={{
-              fontSize: "1.4rem",
-              fontWeight: 700,
-              color: "var(--text)",
-              letterSpacing: "-0.03em",
-              lineHeight: 1.15,
-              marginBottom: "0.4rem",
-            }}
-          >
-            Pilot your company
-          </div>
-          <div style={{ fontSize: "0.8rem", color: "var(--text-dim)", lineHeight: 1.5 }}>
-            Cockpit needs an AI engine to run. Pick any one below.
-          </div>
-        </div>
-
-        {/* Engine cards */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-          {backends.map((backend) => {
-            const expanded = expandedId === backend.id;
-            const cmd = INSTALL_COMMANDS[backend.id];
-            return (
-              <div
-                key={backend.id}
-                style={{
-                  border: `1px solid ${backend.installed ? "var(--green)" : "var(--border-light)"}`,
-                  borderRadius: 8,
-                  background: backend.installed
-                    ? "color-mix(in srgb, var(--green) 3%, transparent)"
-                    : "var(--surface)",
-                  padding: "0.75rem 1rem",
-                  transition: "all 0.2s",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-                  <span
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 8,
-                      border: `1px solid ${backend.installed ? "var(--green)" : "var(--border-light)"}`,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: "0.9rem",
-                      flexShrink: 0,
-                      color: backend.installed ? "var(--green)" : "var(--text-dim)",
-                    }}
-                  >
-                    {backend.installed ? "✓" : (ENGINE_ICONS[backend.id] || "◆")}
-                  </span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--text)" }}>
-                      {backend.label}
-                    </div>
-                    <div style={{ fontSize: "0.72rem", color: "var(--text-dim)", marginTop: "0.1rem" }}>
-                      {backend.installed
-                        ? `Installed${backend.version ? ` (${backend.version})` : ""}`
-                        : (ENGINE_DESCRIPTIONS[backend.id] || backend.installHint || "")}
-                    </div>
-                  </div>
-                  <span
-                    style={{
-                      fontSize: "0.68rem",
-                      fontWeight: 600,
-                      padding: "0.15rem 0.45rem",
-                      borderRadius: 4,
-                      flexShrink: 0,
-                      ...(backend.installed
-                        ? { color: "var(--green)", background: "color-mix(in srgb, var(--green) 10%, transparent)" }
-                        : { color: "var(--text-muted)", background: "color-mix(in srgb, var(--text) 4%, transparent)" }),
-                    }}
-                  >
-                    {detecting && !detection ? "CHECKING..." : backend.installed ? "READY" : "NOT FOUND"}
-                  </span>
-                </div>
-
-                {/* Install actions for missing engines */}
-                {!backend.installed && cmd && (
-                  <div style={{ marginTop: "0.6rem", display: "flex", gap: "0.35rem", alignItems: "center" }}>
-                    <button
-                      onClick={() => setExpandedId(expanded ? null : backend.id)}
-                      style={secondaryBtn}
-                    >
-                      {expanded ? "Hide" : "Install"}
-                    </button>
-                  </div>
-                )}
-
-                {/* Install command */}
-                {expanded && !backend.installed && cmd && (
-                  <div
-                    style={{
-                      marginTop: "0.5rem",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      background: "var(--bg)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 5,
-                      padding: "0.4rem 0.6rem",
-                      gap: "0.5rem",
-                    }}
-                  >
-                    <code
-                      style={{
-                        fontSize: "0.7rem",
-                        color: "var(--green)",
-                        fontFamily: "inherit",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      $ {cmd}
-                    </code>
-                    <button onClick={() => copyCmd(backend.id)} style={{ ...secondaryBtn, flexShrink: 0 }}>
-                      {copiedId === backend.id ? "copied" : "copy"}
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          {/* Loading state before detection completes */}
-          {backends.length === 0 && detecting && (
-            <div style={{ textAlign: "center", padding: "1rem", fontSize: "0.75rem", color: "var(--text-muted)" }}>
-              Scanning for engines...
-            </div>
-          )}
-        </div>
-
-        {/* Continue */}
-        <div
-          style={{
-            marginTop: "1.5rem",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: "0.5rem",
-          }}
-        >
-          <button
-            onClick={onContinue}
-            disabled={checking}
-            style={{
-              ...primaryBtn,
-              padding: "0.5rem 1.6rem",
-              cursor: checking ? "default" : "pointer",
-            }}
-          >
-            {ready ? "Continue" : "Skip"}
-          </button>
-          {!ready && !detecting && backends.length > 0 && (
-            <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-              No engine detected. Install one above, or skip to explore.
-            </span>
-          )}
-          {!ready && detecting && (
-            <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-              Checking for engines...
-            </span>
-          )}
-        </div>
-
-        {/* App screenshot */}
-        <div
-          style={{
-            marginTop: "2rem",
-            borderRadius: 8,
-            overflow: "hidden",
-            border: "1px solid var(--border)",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-          }}
-        >
-          <img
-            src="/cockpit-screenshot.png"
-            alt="Cockpit dashboard"
-            style={{
-              width: "100%",
-              display: "block",
-            }}
-          />
-        </div>
-      </div>
+      <div style={{ maxWidth, width: "100%" }}>{children}</div>
     </div>
   );
 }
 
-/* =====================
-   Step 2 — Datasources
-   ===================== */
+function StepIndicator({ active }: { active: OnboardingStep }) {
+  const steps: { id: OnboardingStep; label: string }[] = [
+    { id: "intro", label: "Fit" },
+    { id: "datasources", label: "Tools" },
+    { id: "engine", label: "Agent" },
+  ];
 
-function DatasourcesScreen({ onContinue }: { onContinue: () => void }) {
+  return (
+    <div style={{ display: "flex", gap: "0.35rem", marginBottom: "1.25rem" }}>
+      {steps.map((step) => (
+        <div
+          key={step.id}
+          style={{
+            flex: 1,
+            borderTop: `2px solid ${step.id === active ? "var(--text)" : "var(--border)"}`,
+            paddingTop: "0.35rem",
+            fontSize: "0.68rem",
+            color: step.id === active ? "var(--text)" : "var(--text-muted)",
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            fontWeight: 700,
+          }}
+        >
+          {step.label}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function IntroScreen({ onContinue }: { onContinue: () => void }) {
+  return (
+    <StepShell maxWidth={680}>
+      <StepIndicator active="intro" />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 220px", gap: "1.25rem", alignItems: "center" }}>
+        <div>
+          <div style={labelStyle}>Cockpit setup</div>
+          <h1 style={headlineStyle}>Built for founders operating from live company context.</h1>
+          <p style={copyStyle}>
+            Cockpit turns your calendar, inbox, team messages, issues, docs, and meeting notes into a local operating
+            workspace. It is for founders who need to inspect the business, ask a local agent for help, and take action
+            without stitching tools together by hand.
+          </p>
+          <div style={{ display: "grid", gap: "0.45rem", marginTop: "1rem" }}>
+            {[
+              "Local-first by default: company context and tokens stay on this machine.",
+              "Opinionated setup: connect the tools most founders already run on.",
+              "Bring your own agent: Claude, Codex, or Ollama can power the chat layer.",
+            ].map((item) => (
+              <div key={item} style={checkRowStyle}>
+                <span style={checkIconStyle}>✓</span>
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+          <button onClick={onContinue} style={{ ...primaryBtn, marginTop: "1.35rem", padding: "0.5rem 1.35rem" }}>
+            Set up tools
+          </button>
+        </div>
+
+        <div
+          style={{
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            overflow: "hidden",
+            background: "var(--surface)",
+            boxShadow: "0 10px 28px rgba(0,0,0,0.32)",
+          }}
+        >
+          <img src="/cockpit-screenshot.png" alt="Cockpit dashboard" style={{ width: "100%", display: "block" }} />
+        </div>
+      </div>
+    </StepShell>
+  );
+}
+
+function DatasourcesScreen({
+  onBack,
+  onContinue,
+}: {
+  onBack: () => void;
+  onContinue: () => void;
+}) {
   const [datasources, setDatasources] = useState<DatasourceInfo[]>([]);
   const [connecting, setConnecting] = useState<string | null>(null);
+  const [connectError, setConnectError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const connectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    return () => { if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current); };
+    return () => {
+      if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
+    };
   }, []);
 
   const fetchStatus = useCallback(async () => {
@@ -364,90 +210,155 @@ function DatasourcesScreen({ onContinue }: { onContinue: () => void }) {
 
   useEffect(() => {
     fetchStatus();
-    // Poll for connection status updates (user may be completing OAuth in browser)
     const interval = setInterval(fetchStatus, 3000);
     return () => clearInterval(interval);
   }, [fetchStatus]);
 
+  useEffect(() => {
+    if (connecting && datasources.find((d) => d.id === connecting)?.connected) {
+      setConnectError(null);
+      setConnecting(null);
+    }
+  }, [connecting, datasources]);
+
   const handleConnect = useCallback(async (serviceId: string) => {
     setConnecting(serviceId);
+    setConnectError(null);
     try {
       const res = await fetch(`/api/datasources/connect?service=${serviceId}`);
-      const data = await res.json();
-      if (data.url) {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Couldn't start the connection.");
+      }
+      if (data.reconnected) {
+        await fetchStatus();
+        setConnecting(null);
+      } else if (data.url) {
         window.open(data.url, "_blank", "noopener,noreferrer");
       }
-    } catch {
-      // Will show as not connected
+    } catch (err) {
+      setConnecting(null);
+      setConnectError(err instanceof Error ? err.message : "Couldn't start the connection.");
     }
-    // Don't clear connecting state — polling will update status
     connectTimeoutRef.current = setTimeout(() => setConnecting(null), 5000);
-  }, []);
+  }, [fetchStatus]);
 
-  const connectedCount = datasources.filter((d) => d.connected).length;
+  const coreDatasources = buildCoreDatasources(datasources);
+  const connectedCount = coreDatasources.filter((d) => d.connected).length;
 
   return (
-    <div style={fullscreen}>
-      <div style={{ maxWidth: 480, width: "100%" }}>
-        {/* Header */}
-        <div style={{ marginBottom: "1.5rem" }}>
-          <div style={labelStyle}>Cockpit — last step</div>
+    <StepShell maxWidth={620}>
+      <StepIndicator active="datasources" />
+      <div style={{ marginBottom: "1.2rem" }}>
+        <div style={labelStyle}>Core tools</div>
+        <h1 style={headlineStyle}>Connect the systems Cockpit expects first.</h1>
+        <p style={copyStyle}>
+          These integrations feed the operating view: schedule, email, team signals, issues, pull requests, docs, and
+          meeting notes. You can connect one now and add the rest later in Settings.
+        </p>
+        {connectError && (
           <div
             style={{
-              fontSize: "1.1rem",
-              fontWeight: 700,
-              color: "var(--text)",
-              letterSpacing: "-0.02em",
-              lineHeight: 1.2,
+              marginTop: "0.7rem",
+              border: "1px solid color-mix(in srgb, var(--red) 22%, transparent)",
+              borderRadius: 6,
+              padding: "0.55rem 0.65rem",
+              color: "var(--red)",
+              background: "color-mix(in srgb, var(--red) 8%, transparent)",
+              fontSize: "0.72rem",
+              lineHeight: 1.45,
             }}
           >
-            Connect a tool
+            {connectError}
           </div>
-          <div
-            style={{
-              fontSize: "0.78rem",
-              color: "var(--text-dim)",
-              marginTop: "0.35rem",
-              lineHeight: 1.5,
-            }}
-          >
-            Pick one to start — you can add the rest anytime in Settings.
-            <br />
-            All data stays on your machine. Cockpit runs entirely locally and
-            no one else, including us, can access your data or tokens.
-          </div>
-        </div>
-
-        {/* Datasource list */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-          {loaded &&
-            datasources.map((ds) => (
-              <DatasourceCard
-                key={ds.id}
-                datasource={ds}
-                connecting={connecting === ds.id}
-                onConnect={() => handleConnect(ds.id)}
-              />
-            ))}
-        </div>
-
-        {/* Continue */}
-        <div style={{ marginTop: "1.5rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
-          <button
-            onClick={onContinue}
-            style={{ ...primaryBtn, padding: "0.5rem 1.6rem" }}
-          >
-            {connectedCount > 0 ? "Enter cockpit" : "Skip for now"}
-          </button>
-          {connectedCount > 0 && (
-            <span style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>
-              {connectedCount} connected
-            </span>
-          )}
-        </div>
+        )}
       </div>
-    </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.45rem" }}>
+        {loaded
+          ? coreDatasources.map((ds) => (
+              <DatasourceCard
+                key={ds.displayId}
+                datasource={ds}
+                connecting={connecting === ds.connectId}
+                onConnect={() => handleConnect(ds.connectId)}
+              />
+            ))
+          : CORE_DATASOURCE_ORDER.map((id) => (
+              <div key={id} style={{ ...skeletonCardStyle, minHeight: 64 }} />
+            ))}
+      </div>
+
+      <div style={{ marginTop: "0.75rem" }}>
+        <button onClick={() => setShowAdvanced((v) => !v)} style={advancedBtn}>
+          <span style={{ transform: showAdvanced ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>›</span>
+          Advanced
+        </button>
+        {showAdvanced && (
+          <div style={advancedPanelStyle}>
+            MCP servers, custom skills, and bring-your-own data tools are available from Settings after setup. They are
+            intentionally out of the first-run path so the core operating view is useful before you customize it.
+          </div>
+        )}
+      </div>
+
+      <div style={footerStyle}>
+        <button onClick={onBack} style={secondaryBtn}>Back</button>
+        <button onClick={onContinue} style={{ ...primaryBtn, padding: "0.5rem 1.35rem" }}>
+          Continue
+        </button>
+        <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+          {connectedCount > 0 ? `${connectedCount} connected` : "No tools connected yet"}
+        </span>
+      </div>
+    </StepShell>
   );
+}
+
+function buildCoreDatasources(datasources: DatasourceInfo[]): OnboardingDatasource[] {
+  const byId = new Map(datasources.map((d) => [d.id, d]));
+  const google = byId.get("google");
+
+  const virtual: OnboardingDatasource[] = [
+    {
+      ...(google || {
+        id: "google",
+        name: "Calendar",
+        icon: "CAL",
+        description: "Upcoming meetings and schedule context",
+        connected: false,
+        needsOAuth: true,
+      }),
+      displayId: "calendar",
+      connectId: "google",
+      name: "Calendar",
+      icon: "CAL",
+      description: "Meetings, attendees, and timing",
+    },
+    {
+      ...(google || {
+        id: "google",
+        name: "Gmail",
+        icon: "GM",
+        description: "Recent email and follow-ups",
+        connected: false,
+        needsOAuth: true,
+      }),
+      displayId: "gmail",
+      connectId: "google",
+      name: "Gmail",
+      icon: "GM",
+      description: "Email threads and follow-ups",
+    },
+  ];
+
+  for (const id of ["slack", "linear", "github", "notion", "granola"]) {
+    const ds = byId.get(id);
+    if (!ds) continue;
+    virtual.push({ ...ds, displayId: id, connectId: id });
+  }
+
+  return virtual.sort((a, b) => CORE_DATASOURCE_ORDER.indexOf(a.displayId) - CORE_DATASOURCE_ORDER.indexOf(b.displayId));
 }
 
 function DatasourceCard({
@@ -455,139 +366,230 @@ function DatasourceCard({
   connecting,
   onConnect,
 }: {
-  datasource: DatasourceInfo;
+  datasource: OnboardingDatasource;
   connecting: boolean;
   onConnect: () => void;
 }) {
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "0.6rem",
-        padding: "0.5rem 0.65rem",
-        border: `1px solid ${datasource.connected ? "var(--green)" : "var(--border)"}`,
-        borderRadius: 6,
-        background: datasource.connected
-          ? "color-mix(in srgb, var(--green) 4%, transparent)"
-          : "transparent",
-        transition: "all 0.2s",
-      }}
-    >
-      {/* Icon */}
-      <div
-        style={{
-          width: 28,
-          height: 28,
-          borderRadius: 6,
-          border: `1px solid ${datasource.connected ? "var(--green)" : "var(--border-light)"}`,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: "0.75rem",
-          fontWeight: 700,
-          color: datasource.connected ? "var(--green)" : "var(--text-dim)",
-          flexShrink: 0,
-        }}
-      >
-        {datasource.icon}
-      </div>
-
-      {/* Info */}
+    <div style={cardStyle(datasource.connected)}>
+      <div style={miniIconStyle(datasource.connected)}>{datasource.icon}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: "0.78rem",
-            fontWeight: 600,
-            color: "var(--text)",
-          }}
-        >
-          {datasource.name}
-        </div>
-        <div
-          style={{
-            fontSize: "0.72rem",
-            color: "var(--text-muted)",
-            marginTop: "0.1rem",
-          }}
-        >
+        <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text)" }}>{datasource.name}</div>
+        <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "0.1rem", lineHeight: 1.35 }}>
           {datasource.description}
         </div>
       </div>
-
-      {/* Action */}
       {datasource.connected ? (
-        <span
-          style={{
-            fontSize: "0.72rem",
-            color: "var(--green)",
-            fontWeight: 600,
-            flexShrink: 0,
-          }}
-        >
-          Connected
-        </span>
+        <span style={connectedTextStyle}>Connected</span>
       ) : datasource.needsOAuth ? (
-        <button
-          onClick={onConnect}
-          disabled={connecting}
-          style={{
-            background: connecting ? "var(--border)" : "color-mix(in srgb, var(--text) 8%, transparent)",
-            color: connecting ? "var(--text-muted)" : "var(--text)",
-            border: "1px solid var(--border-light)",
-            borderRadius: 4,
-            padding: "0.2rem 0.6rem",
-            fontSize: "0.72rem",
-            fontWeight: 600,
-            cursor: connecting ? "default" : "pointer",
-            fontFamily: "inherit",
-            flexShrink: 0,
-            display: "flex",
-            alignItems: "center",
-            gap: "0.3rem",
-            transition: "all 0.15s",
-          }}
-        >
-          {connecting && (
-            <span
-              style={{
-                width: 4,
-                height: 4,
-                borderRadius: "50%",
-                background: "var(--text-muted)",
-                animation: "pulse 1s ease-in-out infinite",
-              }}
-            />
-          )}
+        <button onClick={onConnect} disabled={connecting} style={connectBtnStyle(connecting)}>
           {connecting ? "Connecting..." : "Connect"}
         </button>
       ) : (
-        <span
-          style={{
-            fontSize: "0.72rem",
-            color: datasource.connected ? "var(--green)" : "var(--text-muted)",
-            fontWeight: 600,
-            flexShrink: 0,
-          }}
-        >
-          {datasource.connected ? "Detected" : "Not found"}
+        <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 600, flexShrink: 0 }}>
+          Detects locally
         </span>
       )}
     </div>
   );
 }
 
-/* =====================
-   Shared styles
-   ===================== */
+function EngineSetupScreen({
+  detection,
+  detecting,
+  checking,
+  onDetect,
+  onBack,
+  onContinue,
+}: {
+  detection: DetectionResult | null;
+  detecting: boolean;
+  checking: boolean;
+  onDetect: () => void;
+  onBack: () => void;
+  onContinue: () => void;
+}) {
+  const [installingClaude, setInstallingClaude] = useState(false);
+  const [showManual, setShowManual] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const ready = detection?.anyAvailable || false;
+
+  const handleInstallClaude = useCallback(async () => {
+    setInstallingClaude(true);
+    try {
+      const res = await fetch("/api/install-claude", { method: "POST" });
+      const data = await res.json();
+      if (data.success) onDetect();
+    } catch {
+      // Manual instructions remain available.
+    } finally {
+      setInstallingClaude(false);
+    }
+  }, [onDetect]);
+
+  const handleSignInClaude = useCallback(async () => {
+    try {
+      await fetch("/api/authenticate-claude", { method: "POST" });
+    } catch {
+      // Browser login may still have been opened by the route.
+    }
+  }, []);
+
+  const copyCmd = () => {
+    navigator.clipboard.writeText(CLAUDE_INSTALL_CMD).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
+  };
+
+  return (
+    <StepShell maxWidth={660}>
+      <StepIndicator active="engine" />
+      <div style={{ marginBottom: "1.2rem" }}>
+        <div style={labelStyle}>Local agent</div>
+        <h1 style={headlineStyle}>Make sure a CLI agent is available.</h1>
+        <p style={copyStyle}>
+          Cockpit routes chat through a local backend. Claude, Codex, or Ollama works; install one and sign in where the
+          provider requires it. Detection refreshes automatically after setup.
+        </p>
+      </div>
+
+      <div style={{ display: "grid", gap: "0.45rem" }}>
+        {(detection?.backends || fallbackBackends).map((backend) => (
+          <BackendCard
+            key={backend.id}
+            backend={backend}
+            detecting={detecting && !detection}
+            installingClaude={installingClaude}
+            onInstallClaude={handleInstallClaude}
+            onSignInClaude={handleSignInClaude}
+          />
+        ))}
+      </div>
+
+      <div style={{ marginTop: "0.7rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <button onClick={onDetect} disabled={detecting} style={secondaryBtn}>
+          {detecting ? "Checking..." : "Check again"}
+        </button>
+        <button onClick={() => setShowManual((v) => !v)} style={secondaryBtn}>
+          {showManual ? "Hide install command" : "Manual Claude install"}
+        </button>
+      </div>
+
+      {showManual && (
+        <div style={commandRowStyle}>
+          <code style={commandStyle}>$ {CLAUDE_INSTALL_CMD}</code>
+          <button onClick={copyCmd} style={{ ...secondaryBtn, flexShrink: 0 }}>{copied ? "Copied" : "Copy"}</button>
+        </div>
+      )}
+
+      <div style={footerStyle}>
+        <button onClick={onBack} style={secondaryBtn}>Back</button>
+        <button
+          onClick={onContinue}
+          disabled={checking}
+          style={{ ...primaryBtn, padding: "0.5rem 1.35rem", cursor: checking ? "default" : "pointer" }}
+        >
+          {ready ? "Enter Cockpit" : "Skip for now"}
+        </button>
+        <span style={{ fontSize: "0.75rem", color: ready ? "var(--green)" : "var(--text-muted)" }}>
+          {ready ? "Agent ready" : "No agent detected yet"}
+        </span>
+      </div>
+    </StepShell>
+  );
+}
+
+function BackendCard({
+  backend,
+  detecting,
+  installingClaude,
+  onInstallClaude,
+  onSignInClaude,
+}: {
+  backend: BackendStatus;
+  detecting: boolean;
+  installingClaude: boolean;
+  onInstallClaude: () => void;
+  onSignInClaude: () => void;
+}) {
+  const isClaude = backend.id === "claude";
+  const installHint = backend.installHint || installHints[backend.id] || "Install the CLI, then check again.";
+
+  return (
+    <div style={cardStyle(backend.installed)}>
+      <div style={miniIconStyle(backend.installed)}>{backendIcons[backend.id] || "AI"}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+          <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text)" }}>{backend.label}</span>
+          <span style={statusPillStyle(backend.installed)}>
+            {detecting ? "Checking" : backend.installed ? "Ready" : "Not found"}
+          </span>
+        </div>
+        <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "0.12rem", lineHeight: 1.35 }}>
+          {backend.installed
+            ? backend.version
+              ? `Detected ${backend.version}.`
+              : "Detected locally."
+            : installHint}
+        </div>
+      </div>
+      {isClaude && (
+        <div style={{ display: "flex", gap: "0.35rem", flexShrink: 0 }}>
+          {!backend.installed ? (
+            <button onClick={onInstallClaude} disabled={installingClaude} style={connectBtnStyle(installingClaude)}>
+              {installingClaude ? "Installing..." : "Install"}
+            </button>
+          ) : (
+            <button onClick={onSignInClaude} style={connectBtnStyle(false)}>Sign in</button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const fallbackBackends: BackendStatus[] = [
+  { id: "claude", label: "Claude", installed: false, installHint: "Install Claude Code and sign in with your account." },
+  { id: "codex", label: "Codex", installed: false, installHint: "Install Codex CLI and sign in." },
+  { id: "ollama", label: "Ollama", installed: false, installHint: "Install Ollama and pull a local model." },
+];
+
+const installHints: Record<string, string> = {
+  claude: "Install Claude Code and sign in with your Claude account.",
+  codex: "Install Codex CLI and sign in before using it in Cockpit.",
+  ollama: "Install Ollama, start it locally, and pull a model.",
+};
+
+const backendIcons: Record<string, string> = {
+  claude: "CL",
+  codex: "CX",
+  ollama: "OL",
+};
 
 const fullscreen: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  height: "100vh",
+  minHeight: "100vh",
   background: "var(--bg)",
   padding: "2rem",
+};
+
+const headlineStyle: React.CSSProperties = {
+  fontSize: "1.28rem",
+  fontWeight: 800,
+  color: "var(--text)",
+  letterSpacing: "-0.02em",
+  lineHeight: 1.18,
+  margin: 0,
+};
+
+const copyStyle: React.CSSProperties = {
+  fontSize: "0.8rem",
+  color: "var(--text-dim)",
+  lineHeight: 1.55,
+  marginTop: "0.55rem",
 };
 
 const primaryBtn: React.CSSProperties = {
@@ -615,11 +617,145 @@ const secondaryBtn: React.CSSProperties = {
   padding: "0.3rem 0.6rem",
 };
 
+const advancedBtn: React.CSSProperties = {
+  ...secondaryBtn,
+  border: "none",
+  padding: 0,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "0.25rem",
+};
+
 const labelStyle: React.CSSProperties = {
   fontSize: "0.72rem",
-  fontWeight: 600,
+  fontWeight: 700,
   color: "var(--text-muted)",
   textTransform: "uppercase",
   letterSpacing: "0.1em",
   marginBottom: "0.5rem",
+};
+
+const checkRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: "0.45rem",
+  fontSize: "0.78rem",
+  color: "var(--text-dim)",
+  lineHeight: 1.4,
+};
+
+const checkIconStyle: React.CSSProperties = {
+  color: "var(--green)",
+  fontWeight: 800,
+  flexShrink: 0,
+};
+
+const footerStyle: React.CSSProperties = {
+  marginTop: "1.25rem",
+  display: "flex",
+  alignItems: "center",
+  gap: "0.65rem",
+};
+
+const skeletonCardStyle: React.CSSProperties = {
+  border: "1px solid var(--border)",
+  borderRadius: 7,
+  background: "color-mix(in srgb, var(--text) 2%, transparent)",
+};
+
+const advancedPanelStyle: React.CSSProperties = {
+  marginTop: "0.45rem",
+  border: "1px solid var(--border)",
+  borderRadius: 6,
+  padding: "0.65rem 0.75rem",
+  color: "var(--text-muted)",
+  fontSize: "0.74rem",
+  lineHeight: 1.45,
+};
+
+const commandRowStyle: React.CSSProperties = {
+  marginTop: "0.6rem",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
+  borderRadius: 6,
+  padding: "0.45rem 0.6rem",
+  gap: "0.5rem",
+};
+
+const commandStyle: React.CSSProperties = {
+  fontSize: "0.72rem",
+  color: "var(--green)",
+  fontFamily: "inherit",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+function cardStyle(active: boolean): React.CSSProperties {
+  return {
+    display: "flex",
+    alignItems: "center",
+    gap: "0.6rem",
+    padding: "0.55rem 0.65rem",
+    minHeight: 64,
+    border: `1px solid ${active ? "var(--green)" : "var(--border)"}`,
+    borderRadius: 7,
+    background: active ? "color-mix(in srgb, var(--green) 4%, transparent)" : "var(--surface)",
+  };
+}
+
+function miniIconStyle(active: boolean): React.CSSProperties {
+  return {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    border: `1px solid ${active ? "var(--green)" : "var(--border-light)"}`,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "0.65rem",
+    fontWeight: 800,
+    color: active ? "var(--green)" : "var(--text-dim)",
+    flexShrink: 0,
+  };
+}
+
+function connectBtnStyle(disabled: boolean): React.CSSProperties {
+  return {
+    background: disabled ? "var(--border)" : "color-mix(in srgb, var(--text) 8%, transparent)",
+    color: disabled ? "var(--text-muted)" : "var(--text)",
+    border: "1px solid var(--border-light)",
+    borderRadius: 4,
+    padding: "0.24rem 0.6rem",
+    fontSize: "0.72rem",
+    fontWeight: 700,
+    cursor: disabled ? "default" : "pointer",
+    fontFamily: "inherit",
+    flexShrink: 0,
+  };
+}
+
+function statusPillStyle(active: boolean): React.CSSProperties {
+  return {
+    fontSize: "0.65rem",
+    fontWeight: 800,
+    textTransform: "uppercase",
+    letterSpacing: "0.06em",
+    padding: "0.12rem 0.35rem",
+    borderRadius: 4,
+    color: active ? "var(--green)" : "var(--text-muted)",
+    background: active
+      ? "color-mix(in srgb, var(--green) 10%, transparent)"
+      : "color-mix(in srgb, var(--text) 4%, transparent)",
+  };
+}
+
+const connectedTextStyle: React.CSSProperties = {
+  fontSize: "0.72rem",
+  color: "var(--green)",
+  fontWeight: 700,
+  flexShrink: 0,
 };

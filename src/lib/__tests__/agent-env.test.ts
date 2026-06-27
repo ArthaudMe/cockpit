@@ -1,8 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, mkdirSync, rmSync } from "fs";
+import { join } from "path";
+import { tmpdir } from "os";
 import { buildAgentEnv } from "../agent-env";
 
 describe("buildAgentEnv", () => {
   const originalEnv = { ...process.env };
+  const tempDirs: string[] = [];
 
   beforeEach(() => {
     // Set a known baseline
@@ -25,6 +29,9 @@ describe("buildAgentEnv", () => {
 
   afterEach(() => {
     process.env = originalEnv;
+    for (const dir of tempDirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("passes through allowed env vars", () => {
@@ -68,6 +75,21 @@ describe("buildAgentEnv", () => {
   it("extra vars override env vars", () => {
     const env = buildAgentEnv({ HOME: "/override" });
     expect(env.HOME).toBe("/override");
+  });
+
+  it("adds real user-local CLI install locations to PATH", () => {
+    const home = mkdtempSync(join(tmpdir(), "cockpit-home-"));
+    tempDirs.push(home);
+    mkdirSync(join(home, ".nvm", "versions", "node", "v24.13.0", "bin"), { recursive: true });
+    mkdirSync(join(home, ".local", "bin"), { recursive: true });
+    mkdirSync(join(home, ".bun", "bin"), { recursive: true });
+    process.env.HOME = home;
+
+    const env = buildAgentEnv();
+
+    expect(env.PATH).toContain(join(home, ".nvm", "versions", "node", "v24.13.0", "bin"));
+    expect(env.PATH).toContain(join(home, ".local", "bin"));
+    expect(env.PATH).toContain(join(home, ".bun", "bin"));
   });
 
   it("returns an object usable as ProcessEnv (no undefined values)", () => {

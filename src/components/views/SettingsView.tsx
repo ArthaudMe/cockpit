@@ -100,6 +100,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
   const [editingField, setEditingField] = useState<string | null>(null);
   const [datasources, setDatasources] = useState<DatasourceInfo[]>([]);
   const [connecting, setConnecting] = useState<string | null>(null);
+  const [connectError, setConnectError] = useState<{ service: string; message: string } | null>(null);
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
   const [showAddMcp, setShowAddMcp] = useState(false);
   const [testingMcp, setTestingMcp] = useState<string | null>(null);
@@ -184,9 +185,13 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
 
   const handleConnect = useCallback(async (serviceId: string) => {
     try {
+      setConnectError(null);
       setConnecting(serviceId);
       const res = await fetch(`/api/datasources/connect?service=${serviceId}`);
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Couldn't start the connection.");
+      }
       if (data.reconnected) {
         // Auto-detected service re-enabled — refresh immediately
         fetchDatasources();
@@ -194,9 +199,12 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
       } else if (data.url) {
         window.open(data.url, "_blank", "width=600,height=700");
       }
-    } catch {
+    } catch (err) {
       setConnecting(null);
-      alert("Couldn't start the connection. Please check your internet and try again.");
+      setConnectError({
+        service: serviceId,
+        message: err instanceof Error ? err.message : "Couldn't start the connection.",
+      });
     }
   }, [fetchDatasources]);
 
@@ -530,6 +538,22 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
         >
           All data stays on your machine. Tokens are stored locally and no one else, including us, can access your accounts.
         </div>
+        {connectError && (
+          <div
+            style={{
+              padding: "0.45rem 0.6rem",
+              marginBottom: "0.5rem",
+              background: "color-mix(in srgb, var(--red) 8%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--red) 22%, transparent)",
+              borderRadius: 4,
+              fontSize: "0.65rem",
+              color: "var(--red)",
+              lineHeight: 1.45,
+            }}
+          >
+            {connectError.message}
+          </div>
+        )}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.4rem" }}>
           {datasources.map((ds) => {
             const isConnecting = connecting === ds.id;
@@ -588,6 +612,18 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                     }}
                   >
                     {ds.scopeUpgradeReason || "Reconnect to enable write actions"}
+                  </div>
+                )}
+                {connectError?.service === ds.id && (
+                  <div
+                    style={{
+                      marginTop: "0.3rem",
+                      fontSize: "0.65rem",
+                      color: "var(--red)",
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    Connection setup failed.
                   </div>
                 )}
                 <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>

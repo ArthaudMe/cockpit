@@ -14,7 +14,7 @@ import {
   providerUsesClaudeHooks,
   type ProviderDef,
 } from "./provider-registry";
-import { buildAgentEnv } from "./agent-env";
+import { getSpawnTarget } from "./provider-runtime";
 import { startEventServer, getEventServerInfo, onAgentEvent, removeAgentListeners } from "./agent-event-server";
 import { setupClaudeHooks, cleanupClaudeHooks } from "./claude-hooks";
 
@@ -141,10 +141,11 @@ function spawnForBackend(
 ): ChildProcess {
   const def = getProviderOrThrow(backend);
   const args = def.buildArgs(model, systemPrompt);
+  const target = getSpawnTarget(def.binary, extraEnv);
 
-  const proc = spawn(def.binary, args, {
+  const proc = spawn(target.command, args, {
     stdio: ["pipe", "pipe", "pipe"],
-    env: buildAgentEnv(extraEnv),
+    env: target.env,
     cwd,
   });
 
@@ -363,6 +364,7 @@ export function sendToAgent(
     }
 
     const args = def.buildArgs(model, systemPrompt, { images: tempImagePaths });
+    const target = getSpawnTarget(def.binary, extraEnv);
     let cwd: string | undefined;
     if (providerUsesClaudeHooks(def) && eventInfo) {
       const hookDir = setupClaudeHooks({
@@ -373,9 +375,9 @@ export function sendToAgent(
       cwd = hookDir;
     }
 
-    proc = spawn(def.binary, args, {
+    proc = spawn(target.command, args, {
       stdio: ["pipe", "pipe", "pipe"],
-      env: buildAgentEnv(extraEnv),
+      env: target.env,
       cwd,
     });
     proc.stderr?.on("data", (chunk: Buffer) => {
