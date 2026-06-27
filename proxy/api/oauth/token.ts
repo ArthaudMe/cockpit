@@ -3,8 +3,9 @@
  *
  * Holds client secrets server-side so they never ship in the desktop app.
  * Handles two operations:
+ *   - grant_type=preflight          → verify proxy auth + provider config
  *   - grant_type=authorization_code → exchange auth code for tokens
- *   - grant_type=refresh_token     → refresh an expired access token
+ *   - grant_type=refresh_token      → refresh an expired access token
  *
  * Deploy to Vercel with env vars:
  *   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
@@ -93,8 +94,8 @@ export default async function handler(
     return res.status(400).json({ error: `Invalid service. Must be one of: ${Object.keys(SERVICES).join(", ")}` });
   }
 
-  if (!grant_type || !["authorization_code", "refresh_token"].includes(grant_type)) {
-    return res.status(400).json({ error: "grant_type must be authorization_code or refresh_token" });
+  if (!grant_type || !["preflight", "authorization_code", "refresh_token"].includes(grant_type)) {
+    return res.status(400).json({ error: "grant_type must be preflight, authorization_code, or refresh_token" });
   }
 
   const svc = SERVICES[service];
@@ -103,6 +104,10 @@ export default async function handler(
 
   if (!clientId || !clientSecret) {
     return res.status(500).json({ error: `${service} credentials not configured on proxy` });
+  }
+
+  if (grant_type === "preflight") {
+    return res.status(200).json({ ok: true, service });
   }
 
   try {

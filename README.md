@@ -114,6 +114,16 @@ Open http://localhost:3939. The onboarding flow guides you through the rest.
 
 `OAUTH_PROXY_URL` and `OAUTH_PROXY_SECRET` enable the OAuth token-exchange proxy. The secret is inlined at build time and must match `PROXY_SECRET` on the deployed proxy (see `proxy/README.md`). If either proxy value is blank, the app falls back to direct local OAuth credentials.
 
+Before building a release, verify the deployed Vercel proxy and provider secrets:
+
+```bash
+pnpm oauth:check
+```
+
+`pnpm release:mac` runs this automatically before packaging so a DMG cannot be
+built with a missing proxy URL, mismatched shared secret, or missing GitHub,
+Linear, Slack, or Notion credentials on the proxy.
+
 ### Connecting datasources
 
 Connect services from onboarding or Settings. You'll be redirected to each service's OAuth page; tokens are stored locally in `~/.cockpit/tokens.json`. Granola needs no OAuth — its local cache is detected automatically.

@@ -19,13 +19,51 @@ export function isProxyEnabled(): boolean {
   return !!(PROXY_URL && PROXY_SECRET);
 }
 
+function tokenEndpoint(): string {
+  return `${PROXY_URL.replace(/\/+$/, "")}/api/oauth/token`;
+}
+
+async function readJson(res: Response): Promise<Record<string, any>> {
+  try {
+    return await res.json();
+  } catch {
+    throw new Error(`OAuth proxy returned a non-JSON response (${res.status})`);
+  }
+}
+
+export async function proxyPreflight(service: ServiceId): Promise<void> {
+  if (!PROXY_URL || !PROXY_SECRET) {
+    throw new Error(
+      "OAuth proxy is not configured in this build. Rebuild Cockpit with OAUTH_PROXY_URL and OAUTH_PROXY_SECRET."
+    );
+  }
+
+  const res = await fetch(tokenEndpoint(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${PROXY_SECRET}`,
+    },
+    body: JSON.stringify({
+      service,
+      grant_type: "preflight",
+    }),
+  });
+
+  const data = await readJson(res);
+  if (!res.ok || data.error || data.ok !== true) {
+    const detail = data.error_description || data.error || `HTTP ${res.status}`;
+    throw new Error(`OAuth proxy preflight failed for ${service}: ${detail}`);
+  }
+}
+
 export async function proxyExchangeCode(
   service: ServiceId,
   code: string,
   redirectUri: string,
   codeVerifier?: string
 ): Promise<Record<string, any>> {
-  const res = await fetch(`${PROXY_URL}/api/oauth/token`, {
+  const res = await fetch(tokenEndpoint(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -40,7 +78,7 @@ export async function proxyExchangeCode(
     }),
   });
 
-  const data = await res.json();
+  const data = await readJson(res);
   if (!res.ok || data.error) {
     throw new Error(data.error_description || data.error || "Token exchange failed");
   }
@@ -51,7 +89,7 @@ export async function proxyRefreshToken(
   service: ServiceId,
   refreshToken: string
 ): Promise<Record<string, any>> {
-  const res = await fetch(`${PROXY_URL}/api/oauth/token`, {
+  const res = await fetch(tokenEndpoint(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -64,7 +102,7 @@ export async function proxyRefreshToken(
     }),
   });
 
-  const data = await res.json();
+  const data = await readJson(res);
   if (!res.ok || data.error) {
     throw new Error(data.error_description || data.error || "Token refresh failed");
   }
