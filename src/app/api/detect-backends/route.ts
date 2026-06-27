@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
-import { execFile } from "child_process";
-import { promisify } from "util";
 import { listProviders, type ProviderDef } from "@/lib/provider-registry";
-import { buildAgentEnv } from "@/lib/agent-env";
-
-const execFileAsync = promisify(execFile);
+import { detectProvider as detectProviderRuntime } from "@/lib/provider-runtime";
 
 type BackendStatus = {
   id: string;
@@ -12,28 +8,26 @@ type BackendStatus = {
   installed: boolean;
   version?: string;
   installHint?: string;
+  binaryPath?: string;
+  error?: string;
 };
 
-async function detectProvider(provider: ProviderDef): Promise<BackendStatus> {
-  try {
-    const { stdout } = await execFileAsync(provider.binary, provider.versionArgs, {
-      timeout: 5000,
-      env: buildAgentEnv(),
-    });
-    return { id: provider.id, label: provider.label, installed: true, version: stdout.trim() };
-  } catch {
-    return {
-      id: provider.id,
-      label: provider.label,
-      installed: false,
-      installHint: provider.capabilities.install.hint,
-    };
-  }
+async function detectBackend(provider: ProviderDef): Promise<BackendStatus> {
+  const result = await detectProviderRuntime(provider);
+  return {
+    id: provider.id,
+    label: provider.label,
+    installed: result.ok,
+    version: result.version,
+    binaryPath: result.binaryPath,
+    error: result.error,
+    installHint: result.ok ? undefined : provider.capabilities.install.hint,
+  };
 }
 
 export async function GET() {
   const providers = listProviders();
-  const results = await Promise.all(providers.map(detectProvider));
+  const results = await Promise.all(providers.map(detectBackend));
 
   return NextResponse.json({
     backends: results,

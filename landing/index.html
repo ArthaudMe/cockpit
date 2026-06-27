@@ -109,7 +109,7 @@
     }
 
     .container {
-      max-width: 900px;
+      max-width: 980px;
       width: 100%;
       padding: 0 2rem;
     }
@@ -121,45 +121,82 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      max-width: 900px;
+      max-width: 980px;
     }
 
     .logo {
       display: flex;
       align-items: center;
-      gap: 0.6rem;
-      font-size: 1.275rem;
-      font-weight: 600;
+      gap: 0.7rem;
       color: var(--text);
       text-decoration: none;
-      letter-spacing: 0.05em;
+    }
+
+    .logo-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 9px;
+      box-shadow:
+        0 12px 26px rgba(0,0,0,0.35),
+        0 0 0 1px rgba(255,255,255,0.08);
+    }
+
+    .logo-name {
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
     }
 
-    .logo img {
-      width: 32px;
-      height: 32px;
-      border-radius: 4px;
+    .logo-tagline {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: lowercase;
     }
 
     .gh-link {
-      font-size: 1.1rem;
-      color: var(--text-muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text);
       text-decoration: none;
-      border: 1px solid var(--border);
-      padding: 0.3rem 0.7rem;
-      border-radius: 4px;
-      transition: all 0.15s;
+      border: 1px solid rgba(255,255,255,0.26);
+      background: rgba(255,255,255,0.1);
+      padding: 0.65rem 0.95rem;
+      border-radius: 6px;
+      box-shadow:
+        0 10px 28px rgba(0,0,0,0.22),
+        inset 0 1px 0 rgba(255,255,255,0.08);
+      transition: border-color 0.15s, background 0.15s, transform 0.15s, box-shadow 0.15s;
     }
+
+    .gh-link svg {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+    }
+
     .gh-link:hover {
-      border-color: var(--border-light);
-      color: var(--text-dim);
+      border-color: rgba(255,255,255,0.44);
+      background: rgba(255,255,255,0.16);
+      box-shadow:
+        0 14px 34px rgba(0,0,0,0.28),
+        inset 0 1px 0 rgba(255,255,255,0.12);
+      transform: translateY(-1px);
     }
 
     /* Hero */
     .hero {
-      padding: 6rem 0 3rem;
+      min-height: calc(100vh - 86px);
+      padding: clamp(4.5rem, 8vh, 7.25rem) 0 0;
       text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
 
     .hero h1 {
@@ -209,16 +246,28 @@
 
     /* Screenshot */
     .hero-screenshot {
-      margin-top: 3rem;
-      border-radius: 10px;
+      width: min(1220px, calc(100vw - 2.5rem));
+      margin: clamp(3.25rem, 8vh, 6rem) auto 0;
+      border-radius: 14px;
       overflow: hidden;
       border: 1px solid var(--border);
-      box-shadow: 0 12px 48px rgba(0,0,0,0.5);
+      box-shadow:
+        0 44px 130px rgba(0,0,0,0.72),
+        0 22px 52px rgba(0,0,0,0.52),
+        0 0 0 1px rgba(255,255,255,0.06),
+        0 -18px 60px rgba(255,255,255,0.055);
+      transform: translateZ(0);
+      animation: screenshot-float 7s ease-in-out infinite;
     }
 
     .hero-screenshot img {
       width: 100%;
       display: block;
+    }
+
+    @keyframes screenshot-float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
     }
 
     /* Features */
@@ -412,11 +461,26 @@
 
     /* Responsive */
     @media (max-width: 600px) {
+      .logo { gap: 0.45rem; }
+      .logo-icon { width: 32px; height: 32px; border-radius: 8px; }
+      .logo-name { font-size: 1rem; }
+      .logo-tagline { display: none; }
+      .gh-link { font-size: 0.82rem; padding: 0.5rem 0.65rem; }
+      .gh-link svg { width: 16px; height: 16px; }
       .hero h1 { font-size: 2.55rem; }
       .features { grid-template-columns: 1fr; }
-      .hero { padding: 4rem 0 2rem; }
+      .hero { min-height: calc(100vh - 64px); padding: 4.2rem 0 0; }
+      .hero-screenshot { width: calc(100vw - 1.5rem); margin-top: clamp(2.6rem, 7vh, 4rem); }
       header { padding: 1rem; }
       .container { padding: 0 1.2rem; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .hero-screenshot,
+      .bg-glow::before,
+      .bg-glow::after {
+        animation: none;
+      }
     }
   </style>
 </head>
@@ -425,10 +489,16 @@
   <div class="bg-grid"></div>
   <header>
     <a href="/" class="logo">
-      <img src="/icon.png" alt="Cockpit">
-      Cockpit
+      <img class="logo-icon" src="/icon.png" alt="" aria-hidden="true">
+      <span class="logo-name">Cockpit</span>
+      <span class="logo-tagline">pilot your company</span>
     </a>
-    <a href="https://github.com/ArthaudMe/cockpit" class="gh-link">GitHub</a>
+    <a href="https://github.com/ArthaudMe/cockpit" class="gh-link" target="_blank" rel="noreferrer">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 2C6.48 2 2 6.58 2 12.24c0 4.53 2.87 8.37 6.84 9.72.5.09.68-.22.68-.49 0-.24-.01-.88-.01-1.73-2.78.62-3.37-1.37-3.37-1.37-.45-1.19-1.11-1.51-1.11-1.51-.91-.64.07-.63.07-.63 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.37-2.22-.26-4.56-1.14-4.56-5.06 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.31.1-2.71 0 0 .84-.28 2.75 1.05A9.3 9.3 0 0 1 12 6.98c.85 0 1.71.12 2.51.34 1.91-1.33 2.75-1.05 2.75-1.05.55 1.4.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.93-2.34 4.8-4.57 5.05.36.32.68.94.68 1.9 0 1.37-.01 2.47-.01 2.8 0 .27.18.59.69.49A10.18 10.18 0 0 0 22 12.24C22 6.58 17.52 2 12 2Z"/>
+      </svg>
+      View on GitHub
+    </a>
   </header>
 
   <div class="container">

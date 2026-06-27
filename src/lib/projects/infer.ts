@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { readJsonCached, invalidateFileCache } from "@/lib/fs-cache";
-import { buildAgentEnv } from "@/lib/agent-env";
+import { getSpawnTarget } from "@/lib/provider-runtime";
 import type {
   DatasourceData,
   LinearIssue,
@@ -209,9 +209,10 @@ Example: [{"name":"Platform","category":"Product","status":"Active","linear_proj
 
 function askClaude(prompt: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const proc = spawn("claude", ["-p", "--output-format", "text"], {
+    const target = getSpawnTarget("claude");
+    const proc = spawn(target.command, ["-p", "--output-format", "text"], {
       stdio: ["pipe", "pipe", "pipe"],
-      env: buildAgentEnv(),
+      env: target.env,
     });
 
     let stdout = "";

@@ -11,16 +11,12 @@ function formatCachedTime(cachedAt?: number): string {
 }
 
 export function Header({
-  claudeStatus,
-  onRetryConnection,
   onSettingsClick,
   notifications = [],
   unreadCount = 0,
   onMarkAllRead,
   offlineInfo,
 }: {
-  claudeStatus: { connected: boolean; version?: string; checking: boolean };
-  onRetryConnection: () => void;
   onSettingsClick?: () => void;
   notifications?: NotificationItem[];
   unreadCount?: number;
@@ -82,40 +78,6 @@ export function Header({
       </div>
 
       <div className="cockpit-header-actions" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-        <button
-          onClick={onRetryConnection}
-          disabled={claudeStatus.checking}
-          aria-label={claudeStatus.connected ? "Claude CLI connected" : "Retry Claude CLI connection"}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.35rem",
-            background: "none",
-            border: "1px solid var(--border)",
-            borderRadius: 3,
-            padding: "0.2rem 0.5rem",
-            cursor: claudeStatus.checking ? "wait" : "pointer",
-            fontSize: "0.75rem",
-            color: "var(--text-dim)",
-          }}
-        >
-          <span
-            className="dot"
-            style={{
-              background: claudeStatus.checking
-                ? "var(--yellow)"
-                : claudeStatus.connected
-                  ? "var(--green)"
-                  : "var(--red)",
-              animation: claudeStatus.checking ? "spin 1s linear infinite" : undefined,
-            }}
-          />
-          {claudeStatus.checking
-            ? "CHECKING..."
-            : claudeStatus.connected
-              ? `CLAUDE CLI ${claudeStatus.version || ""}`
-              : "CLAUDE DISCONNECTED"}
-        </button>
         <NotificationBell
           notifications={notifications}
           unreadCount={unreadCount}
