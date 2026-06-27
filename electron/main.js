@@ -4,6 +4,7 @@ const { spawn, execFileSync } = require("child_process");
 const path = require("path");
 const net = require("net");
 const http = require("http");
+const https = require("https");
 const fs = require("fs");
 const os = require("os");
 const { randomBytes } = require("crypto");
@@ -158,6 +159,62 @@ function debouncedSaveWindowState() {
 }
 
 // ─── Auto-Update ──────────────────────────────────────────────────
+function releaseMetadataUrl() {
+  return `https://github.com/ArthaudMe/cockpit/releases/download/v${app.getVersion()}/latest-mac.yml`;
+}
+
+function requestStatus(url, redirects = 0) {
+  return new Promise((resolve) => {
+    const req = https.request(url, { method: "HEAD" }, (res) => {
+      const location = res.headers.location;
+      if (
+        location &&
+        [301, 302, 303, 307, 308].includes(res.statusCode || 0) &&
+        redirects < 5
+      ) {
+        res.resume();
+        resolve(requestStatus(new URL(location, url).toString(), redirects + 1));
+        return;
+      }
+      res.resume();
+      resolve(res.statusCode || 0);
+    });
+    req.on("error", () => resolve(0));
+    req.setTimeout(5000, () => {
+      req.destroy();
+      resolve(0);
+    });
+    req.end();
+  });
+}
+
+async function hasReleaseMetadata() {
+  const status = await requestStatus(releaseMetadataUrl());
+  return status >= 200 && status < 300;
+}
+
+async function checkForUpdatesQuietly({ manual = false } = {}) {
+  if (isDev || !app.isPackaged) return;
+
+  if (!(await hasReleaseMetadata())) {
+    console.log("[updater] release metadata unavailable; skipping update check");
+    if (manual) {
+      showMessageBox({
+        type: "info",
+        title: "No Update Available",
+        message: "No update metadata is published for this build yet.",
+      });
+    }
+    return;
+  }
+
+  try {
+    await autoUpdater.checkForUpdates();
+  } catch (err) {
+    console.error("[updater] check failed:", err.message);
+  }
+}
+
 function setupAutoUpdate() {
   if (isDev || !app.isPackaged) return;
 
@@ -188,8 +245,8 @@ function setupAutoUpdate() {
   });
 
   // Check for updates after a short delay, then every 4 hours
-  setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), 5000);
-  setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 4 * 60 * 60 * 1000);
+  setTimeout(() => checkForUpdatesQuietly(), 5000);
+  setInterval(() => checkForUpdatesQuietly(), 4 * 60 * 60 * 1000);
 }
 
 // ─── Tray Icon ────────────────────────────────────────────────────
@@ -619,7 +676,7 @@ function buildMenu() {
         { type: "separator" },
         {
           label: "Check for Updates...",
-          click: () => autoUpdater.checkForUpdates().catch(() => {}),
+          click: () => checkForUpdatesQuietly({ manual: true }),
         },
         { type: "separator" },
         { role: "hide" },
@@ -676,7 +733,7 @@ function buildMenu() {
       submenu: [
         {
           label: "Check for Updates...",
-          click: () => autoUpdater.checkForUpdates().catch(() => {}),
+          click: () => checkForUpdatesQuietly({ manual: true }),
         },
         { type: "separator" },
         {
