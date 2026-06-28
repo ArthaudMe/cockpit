@@ -1,6 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { buildAgentEnv } from "../../agent-env";
 import type { McpServerConfig } from "../mcp-store";
 import type { McpResourceItem } from "../types";
 
@@ -21,17 +22,16 @@ const DANGEROUS_ENV_KEYS = new Set([
   "ELECTRON_RUN_AS_NODE",
 ]);
 
-function sanitizeEnv(
+export function buildMcpServerEnv(
   env: Record<string, string> | undefined,
-): Record<string, string> | undefined {
-  if (!env) return undefined;
+): Record<string, string> {
   const safe: Record<string, string> = {};
-  for (const [key, value] of Object.entries(env)) {
+  for (const [key, value] of Object.entries(env ?? {})) {
     if (!DANGEROUS_ENV_KEYS.has(key.toUpperCase()) && typeof value === "string") {
       safe[key] = value;
     }
   }
-  return { ...process.env, ...safe } as Record<string, string>;
+  return buildAgentEnv(safe) as Record<string, string>;
 }
 
 const clientCache = new Map<string, Client>();
@@ -42,7 +42,7 @@ async function createTransport(config: McpServerConfig) {
     return new StdioClientTransport({
       command: config.command,
       args: config.args,
-      env: sanitizeEnv(config.env),
+      env: buildMcpServerEnv(config.env),
       stderr: "ignore",
     });
   }

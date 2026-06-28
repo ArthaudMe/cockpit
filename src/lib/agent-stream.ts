@@ -1,7 +1,9 @@
-import { sendToAgent } from "./agent-manager";
+import { getAgent, sendToAgent } from "./agent-manager";
+import { AgentOutputParser } from "./agent-output";
 import { extractAndProcessMemories } from "./memory";
 import { extractAndProcessSkills } from "./skills-extract";
 import { persistMessage } from "./knowledge/conversations";
+import { getProvider } from "./provider-registry";
 
 /**
  * Send a message to an agent and stream the CLI process output as a
@@ -14,17 +16,28 @@ export function streamAgentResponse(
 ): Response {
   const { message, focusContext, images } = opts;
   const encoder = new TextEncoder();
+  const agent = getAgent(agentId);
+  const provider = agent ? getProvider(agent.backend) : undefined;
+  const outputParser = new AgentOutputParser(provider?.capabilities.output.kind ?? "plain-text");
   const proc = sendToAgent(agentId, message, focusContext, images);
 
   let responseText = "";
   let stderrText = "";
+  let eventErrorText = "";
 
   const stream = new ReadableStream({
     start(controller) {
       proc.stdout!.on("data", (chunk: Buffer) => {
-        const text = chunk.toString();
-        responseText += text;
-        controller.enqueue(encoder.encode(text));
+        for (const parsed of outputParser.push(chunk.toString())) {
+          if (parsed.kind === "assistant_delta") {
+            responseText += parsed.text;
+            controller.enqueue(encoder.encode(parsed.text));
+          } else {
+            eventErrorText += parsed.text;
+            stderrText += parsed.text;
+            console.error(`[agent:${agentId}:event-error]`, parsed.text);
+          }
+        }
       });
 
       proc.stderr!.on("data", (chunk: Buffer) => {
@@ -34,6 +47,17 @@ export function streamAgentResponse(
       });
 
       proc.on("close", (code) => {
+        for (const parsed of outputParser.flush()) {
+          if (parsed.kind === "assistant_delta") {
+            responseText += parsed.text;
+            controller.enqueue(encoder.encode(parsed.text));
+          } else {
+            eventErrorText += parsed.text;
+            stderrText += parsed.text;
+            console.error(`[agent:${agentId}:event-error]`, parsed.text);
+          }
+        }
+
         if (code !== 0) {
           // Detect "not logged in" from Claude CLI
           const combined = (responseText + stderrText).toLowerCase();
@@ -49,6 +73,8 @@ export function streamAgentResponse(
                 `\n\n**Claude CLI is not authenticated.** A browser window should open for you to log in. If not, open Terminal and run \`claude login\`, then restart Cockpit.`
               )
             );
+          } else if (eventErrorText.trim()) {
+            controller.enqueue(encoder.encode(`\n\n${eventErrorText.trim()}`));
           } else {
             controller.enqueue(
               encoder.encode(`\n\nSomething went wrong. Please try sending your message again.`)
@@ -94,7 +120,8 @@ export function streamAgentResponse(
 
       proc.on("error", (err) => {
         console.error(`[agent:${agentId}:error]`, err);
-        controller.enqueue(encoder.encode("Couldn't connect to the AI backend. Please check that Claude is installed and try again."));
+        const backendLabel = provider?.label ?? "AI backend";
+        controller.enqueue(encoder.encode(`Couldn't connect to ${backendLabel}. Please check that it is installed and try again.`));
         controller.close();
       });
     },
