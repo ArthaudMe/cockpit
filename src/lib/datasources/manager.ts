@@ -1,6 +1,7 @@
 import type { ServiceId, DatasourceStatus, DatasourceData } from "./types";
 import { getConnectedServices, getTokens, isServiceDisabled, isGoogleConnectedViaComposio } from "./token-store";
 import { isGranolaAvailable, fetchGranolaMeetings } from "./connectors/granola";
+import { fetchPostHogMetrics, isPostHogConfigured } from "./connectors/posthog";
 import { fetchCalendarEventsAuto, fetchRecentEmailsAuto } from "./connectors/google";
 import { fetchLinearIssues } from "./connectors/linear";
 import { fetchGitHubPRs, fetchGitHubNotifications } from "./connectors/github";
@@ -67,7 +68,13 @@ const SERVICE_META: Record<
   granola: {
     name: "Granola",
     icon: "GR",
-    description: "Meeting notes",
+    description: "Local meeting notes",
+    needsOAuth: false,
+  },
+  posthog: {
+    name: "PostHog",
+    icon: "PH",
+    description: "Product analytics and usage metrics",
     needsOAuth: false,
   },
 };
@@ -86,6 +93,8 @@ export function getDatasourceStatuses(): DatasourceStatus[] {
     const isConnected =
       id === "granola"
         ? granolaAvailable && !isServiceDisabled("granola")
+        : id === "posthog"
+          ? isPostHogConfigured()
         : id === "google"
           ? connected.includes("google") || isGoogleConnectedViaComposio()
           : id === "notion"
@@ -174,6 +183,12 @@ export function getCachedData(): DatasourceData | null {
   return _cachedData;
 }
 
+export function clearDatasourceDataCache() {
+  _cachedData = null;
+  _cacheTime = 0;
+  _inFlight = null;
+}
+
 export async function fetchAllData(): Promise<DatasourceData> {
   // Return cached data if fresh enough
   if (_cachedData && Date.now() - _cacheTime < DATA_CACHE_TTL) {
@@ -214,6 +229,7 @@ async function doFetchAllData(): Promise<DatasourceData> {
   ]);
 
   const granolaMeetings = granolaAvailable ? fetchGranolaMeetings() : [];
+  const posthogMetrics = isPostHogConfigured() ? await fetchPostHogMetrics() : {};
 
   // Fetch MCP resources from all enabled servers
   const mcpServers = getMcpServers().filter((s) => s.enabled);
@@ -236,6 +252,7 @@ async function doFetchAllData(): Promise<DatasourceData> {
     notionPages,
     slackMessages,
     granolaMeetings,
+    posthogMetrics,
     mcpResources: mcpResources.length > 0 ? mcpResources : undefined,
   };
 

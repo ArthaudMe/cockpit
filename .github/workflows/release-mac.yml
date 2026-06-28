@@ -45,6 +45,9 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           OAUTH_PROXY_URL: ${{ secrets.OAUTH_PROXY_URL }}
           OAUTH_PROXY_SECRET: ${{ secrets.OAUTH_PROXY_SECRET }}
+          COMPOSIO_API_KEY: ${{ secrets.COMPOSIO_API_KEY }}
+          COMPOSIO_GCAL_AUTH_CONFIG: ${{ secrets.COMPOSIO_GCAL_AUTH_CONFIG }}
+          COMPOSIO_GMAIL_AUTH_CONFIG: ${{ secrets.COMPOSIO_GMAIL_AUTH_CONFIG }}
         run: pnpm release:check-secrets
 
       - name: Import Apple signing certificate
@@ -64,6 +67,9 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           OAUTH_PROXY_URL: ${{ secrets.OAUTH_PROXY_URL }}
           OAUTH_PROXY_SECRET: ${{ secrets.OAUTH_PROXY_SECRET }}
+          COMPOSIO_API_KEY: ${{ secrets.COMPOSIO_API_KEY }}
+          COMPOSIO_GCAL_AUTH_CONFIG: ${{ secrets.COMPOSIO_GCAL_AUTH_CONFIG }}
+          COMPOSIO_GMAIL_AUTH_CONFIG: ${{ secrets.COMPOSIO_GMAIL_AUTH_CONFIG }}
         run: pnpm release:mac
 
       - name: Publish verified artifacts

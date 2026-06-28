@@ -215,6 +215,7 @@ export const ChatColumn = memo(function ChatColumn({
     setStreamingAgents((prev) => new Set(prev).add(targetAgentId));
     setMessagesFor(targetAgentId, (prev) => [...prev, { role: "assistant", content: "" }]);
 
+    let responseAgentId = targetAgentId;
     try {
       const res = await fetch(`/api/agents/${targetAgentId}/chat`, {
         method: "POST",
@@ -245,6 +246,34 @@ export const ChatColumn = memo(function ChatColumn({
         return;
       }
 
+      const fallbackAgentId = res.headers.get("X-Cockpit-Fallback-Agent");
+      const fallbackReason = res.headers.get("X-Cockpit-Fallback-Reason");
+      if (fallbackAgentId && fallbackAgentId !== targetAgentId) {
+        const fallbackAgent = agents.find((agent) => agent.id === fallbackAgentId);
+        const fallbackName = fallbackAgent?.name || "another agent";
+        setMessagesFor(targetAgentId, (prev) => {
+          const next = [...prev];
+          next[next.length - 1] = {
+            role: "assistant",
+            content: `The selected backend failed${fallbackReason ? `: ${fallbackReason}` : ""}. Continuing with ${fallbackName}.`,
+          };
+          return next;
+        });
+        setMessagesFor(fallbackAgentId, (prev) => [
+          ...prev,
+          { role: "user", content: text, ...(images.length > 0 ? { images } : {}) },
+          { role: "assistant", content: "" },
+        ]);
+        setActiveAgentId(fallbackAgentId);
+        setStreamingAgents((prev) => {
+          const next = new Set(prev);
+          next.delete(targetAgentId);
+          next.add(fallbackAgentId);
+          return next;
+        });
+        responseAgentId = fallbackAgentId;
+      }
+
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
 
@@ -252,7 +281,7 @@ export const ChatColumn = memo(function ChatColumn({
         const { done, value } = await reader.read();
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
-        setMessagesFor(targetAgentId, (prev) => {
+        setMessagesFor(responseAgentId, (prev) => {
           const next = [...prev];
           const last = next[next.length - 1];
           next[next.length - 1] = { ...last, content: last.content + chunk };
@@ -275,13 +304,14 @@ export const ChatColumn = memo(function ChatColumn({
     setStreamingAgents((prev) => {
       const next = new Set(prev);
       next.delete(targetAgentId);
+      next.delete(responseAgentId);
       return next;
     });
     // Notify if user switched away from this agent while it was working
     if (activeAgentIdRef.current !== targetAgentId) {
       setNotifiedAgents((prev) => new Set(prev).add(targetAgentId));
     }
-  }, [inputValue, pendingImages, streaming, activeAgentId, onInputChange, setMessagesFor]);
+  }, [inputValue, pendingImages, streaming, activeAgentId, onInputChange, setMessagesFor, agents, setActiveAgentId]);
 
   const handleDrop = useCallback((e: React.DragEvent<HTMLTextAreaElement>) => {
     const files = e.dataTransfer?.files;

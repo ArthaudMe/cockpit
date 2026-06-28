@@ -9,13 +9,9 @@ const root = path.resolve(__dirname, "..", "..");
 const args = new Set(process.argv.slice(2));
 const startServer = args.has("--start");
 const servicesArg = process.argv.find((arg) => arg.startsWith("--services="));
-const services = (servicesArg ? servicesArg.slice("--services=".length).split(",") : [
-  "google",
-  "slack",
-  "linear",
-  "github",
-  "notion",
-])
+const services = (servicesArg
+  ? servicesArg.slice("--services=".length).split(",")
+  : ["google", "slack", "linear", "github", "notion"])
   .map((service) => service.trim())
   .filter(Boolean);
 
@@ -99,6 +95,19 @@ async function assertConnect(baseUrl, service, headers) {
   if (!res.ok || !/^https?:\/\//.test(url)) {
     fail(`connect ${service} failed (${res.status}): ${JSON.stringify(data).slice(0, 500)}`);
   }
+
+  if (service === "google") {
+    const host = new URL(url).hostname.toLowerCase();
+    const composioHost =
+      host === "composio.dev" ||
+      host.endsWith(".composio.dev") ||
+      host === "composio.com" ||
+      host.endsWith(".composio.com");
+    if (!composioHost) {
+      fail(`connect google returned ${host}; expected Composio hosted OAuth`);
+    }
+  }
+
   log(`connect ${service}: ${res.status} provider URL ok`);
 }
 

@@ -11,6 +11,9 @@ const REQUIRED = [
   "CERTIFICATE_PASSWORD",
   "OAUTH_PROXY_URL",
   "OAUTH_PROXY_SECRET",
+  "COMPOSIO_API_KEY",
+  "COMPOSIO_GCAL_AUTH_CONFIG",
+  "COMPOSIO_GMAIL_AUTH_CONFIG",
 ];
 
 const APPLE_ID_GROUP = [
@@ -44,7 +47,7 @@ const hasAppleApiCreds = APPLE_API_GROUP.every(isSet);
 
 if (!hasAppleIdCreds && !hasAppleApiCreds) {
   fail(
-    "Missing Apple notarization credentials. Set either APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID or APPLE_API_KEY, APPLE_API_KEY_ID, APPLE_API_ISSUER."
+    "Missing Apple notarization credentials. Set either APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID or APPLE_API_KEY, APPLE_API_KEY_ID, APPLE_API_ISSUER.",
   );
 }
 

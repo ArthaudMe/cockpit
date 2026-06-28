@@ -17,7 +17,6 @@ import type { SearchResult } from "@/lib/search/types";
 import {
   focusCalendarEvent,
   focusMetric,
-  focusSlackMessage,
   focusCompetitor,
   focusTodo,
 } from "@/lib/focus";
@@ -60,7 +59,6 @@ export default function Home() {
   const [showRightColumn, setShowRightColumn] = useState(true);
   const [onboardingComplete, setOnboardingComplete] = useState(false);
   const [onboardingPreferenceLoaded, setOnboardingPreferenceLoaded] = useState(false);
-  const [datasourceStatusChecked, setDatasourceStatusChecked] = useState(false);
 
   useEffect(() => {
     setOnboardingComplete(localStorage.getItem("cockpit:onboarding-complete") === "true");
@@ -82,7 +80,6 @@ export default function Home() {
     (data: DatasourceData & { _offline?: boolean; _cachedAt?: number }) => {
       setRawDatasourceData(data);
       setContextData(buildContextFromLiveData(data, userName));
-      setDatasourceStatusChecked(true);
       setOfflineInfo({
         offline: !!data._offline,
         cachedAt: data._cachedAt,
@@ -114,7 +111,7 @@ export default function Home() {
       fetch("/api/datasources/data")
         .then((r) => r.json())
         .then(handleDatasourceData)
-        .catch(() => setDatasourceStatusChecked(true));
+        .catch(() => {});
     };
 
     const tick = () => {
@@ -264,10 +261,6 @@ export default function Home() {
     handleOpenFocus(focusMetric(key, metric));
   }, [handleOpenFocus, contextData.usage_analytics]);
 
-  const handleSlackClick = useCallback((index: number) => {
-    handleOpenFocus(focusSlackMessage(contextData.slack_highlights[index]));
-  }, [handleOpenFocus, contextData.slack_highlights]);
-
   const handleCompetitorClick = useCallback((index: number) => {
     handleOpenFocus(focusCompetitor(contextData.competitor_updates[index]));
   }, [handleOpenFocus, contextData.competitor_updates]);
@@ -375,16 +368,12 @@ export default function Home() {
 
   const shouldShowOnboarding =
     onboardingPreferenceLoaded &&
-    datasourceStatusChecked &&
-    !onboardingComplete &&
-    !claudeStatus.checking &&
-    (!claudeStatus.connected || !hasAnyDatasource);
+    !onboardingComplete;
 
   if (shouldShowOnboarding) {
     return (
       <OnboardingView
         onComplete={handleCompleteOnboarding}
-        checking={claudeStatus.checking}
       />
     );
   }
@@ -483,7 +472,6 @@ export default function Home() {
               onConnectService={handleConnectService}
               onCalendarClick={handleCalendarClick}
               onMetricClick={handleMetricClick}
-              onSlackClick={handleSlackClick}
               onCompetitorClick={handleCompetitorClick}
               onTodoClick={handleTodoClick}
               onSettingsClick={handleSettingsClick}

@@ -69,6 +69,9 @@ Required GitHub environment secrets:
 - `CERTIFICATE_PASSWORD`
 - `OAUTH_PROXY_URL`
 - `OAUTH_PROXY_SECRET`
+- `COMPOSIO_API_KEY`
+- `COMPOSIO_GCAL_AUTH_CONFIG`
+- `COMPOSIO_GMAIL_AUTH_CONFIG`
 - either `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`, or
   `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`
 
@@ -78,6 +81,12 @@ fails, fix GitHub environment secrets rather than trying to recover release
 credentials on a local machine.
 
 ## Manual Verification
+
+For the release validation gate:
+
+```bash
+pnpm release:verify
+```
 
 For the deployed OAuth proxy:
 
@@ -96,8 +105,8 @@ This validates stapling and Gatekeeper without submitting to Apple again.
 ## Files
 
 - `package.json` - Electron builder config and release scripts.
-- `scripts/release/check-oauth-proxy.js` - Vercel OAuth proxy preflight.
 - `scripts/release/check-ci-secrets.js` - CI release secret preflight.
+- `scripts/release/check-oauth-proxy.js` - Vercel OAuth proxy preflight.
 - `scripts/release/notarize-mac.js` - Notarization, stapling, and Gatekeeper checks.
 - `scripts/smoke/datasources.js` - protected API and datasource connect smoke.
 - `scripts/smoke/packaged-mac.js` - signed packaged app layout/startup smoke.

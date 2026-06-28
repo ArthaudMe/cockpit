@@ -15,7 +15,27 @@ type DetectionResult = {
   anyAvailable: boolean;
 };
 
-type OnboardingStep = "intro" | "datasources" | "engine";
+type BackendModel = {
+  id: string;
+  label: string;
+};
+
+type BackendDef = {
+  id: string;
+  label: string;
+  models: BackendModel[];
+  defaultModel: string;
+};
+
+type AgentInfo = {
+  id: string;
+  name: string;
+  role: string;
+  backend: string;
+  model: string;
+};
+
+type OnboardingStep = "intro" | "agent" | "datasources";
 
 const CLAUDE_INSTALL_CMD = "curl -fsSL https://claude.ai/install.sh | bash";
 const CORE_DATASOURCE_ORDER = ["calendar", "gmail", "slack", "linear", "github", "notion", "granola"];
@@ -36,22 +56,46 @@ type OnboardingDatasource = DatasourceInfo & {
 
 export function OnboardingView({
   onComplete,
-  checking,
 }: {
   onComplete: () => void;
-  checking: boolean;
   error?: string;
 }) {
   const [step, setStep] = useState<OnboardingStep>("intro");
   const [detection, setDetection] = useState<DetectionResult | null>(null);
+  const [backendDefs, setBackendDefs] = useState<BackendDef[]>([]);
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [selectedBackend, setSelectedBackend] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [detecting, setDetecting] = useState(false);
+  const [savingAgent, setSavingAgent] = useState(false);
+  const [agentError, setAgentError] = useState<string | null>(null);
 
   const detect = useCallback(async () => {
     setDetecting(true);
     try {
-      const res = await fetch("/api/detect-backends");
-      const data: DetectionResult = await res.json();
+      const [detectRes, backendsRes, agentsRes] = await Promise.all([
+        fetch("/api/detect-backends"),
+        fetch("/api/backends"),
+        fetch("/api/agents"),
+      ]);
+      const data: DetectionResult = await detectRes.json();
+      const defs: BackendDef[] = await backendsRes.json();
+      const agentList: AgentInfo[] = await agentsRes.json();
       setDetection(data);
+      setBackendDefs(defs);
+      setAgents(agentList);
+
+      const installed = data.backends.filter((backend) => backend.installed);
+      const current = agentList[0];
+      const recommended =
+        installed.find((backend) => backend.id === current?.backend) ||
+        installed[0] ||
+        data.backends[0];
+      if (recommended) {
+        const def = defs.find((backend) => backend.id === recommended.id);
+        setSelectedBackend((prev) => prev || recommended.id);
+        setSelectedModel((prev) => prev || current?.model || def?.defaultModel || def?.models[0]?.id || null);
+      }
     } catch {
       // Keep the install guidance visible if detection fails.
     } finally {
@@ -60,31 +104,90 @@ export function OnboardingView({
   }, []);
 
   useEffect(() => {
-    if (step !== "engine") return;
+    if (step !== "agent") return;
     detect();
     if (detection?.anyAvailable) return;
     const interval = setInterval(detect, 5000);
     return () => clearInterval(interval);
   }, [step, detect, detection?.anyAvailable]);
 
+  const handleConfirmAgent = useCallback(async () => {
+    setAgentError(null);
+    if (!selectedBackend) {
+      setStep("datasources");
+      return;
+    }
+
+    const def = backendDefs.find((backend) => backend.id === selectedBackend);
+    const model = selectedModel || def?.defaultModel || def?.models[0]?.id;
+    if (!model) {
+      setAgentError("Choose a model before continuing.");
+      return;
+    }
+
+    setSavingAgent(true);
+    try {
+      const agent = agents[0];
+      const res = agent
+        ? await fetch(`/api/agents/${agent.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ backend: selectedBackend, model }),
+          })
+        : await fetch("/api/agents", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: "Pilot", role: "general", backend: selectedBackend, model }),
+          });
+
+      const updated = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(updated.error || "Couldn't save the default agent.");
+      }
+      if (updated.id) {
+        localStorage.setItem("cockpit-active-agent", JSON.stringify(updated.id));
+      }
+      setAgents((prev) => (prev.length > 0 ? prev.map((agent, i) => (i === 0 ? updated : agent)) : [updated]));
+      setStep("datasources");
+    } catch (err) {
+      setAgentError(err instanceof Error ? err.message : "Couldn't save the default agent.");
+    } finally {
+      setSavingAgent(false);
+    }
+  }, [agents, backendDefs, selectedBackend, selectedModel]);
+
   if (step === "intro") {
-    return <IntroScreen onContinue={() => setStep("datasources")} />;
+    return <IntroScreen onContinue={() => setStep("agent")} />;
+  }
+
+  if (step === "agent") {
+    return (
+      <AgentSetupScreen
+        detection={detection}
+        backendDefs={backendDefs}
+        selectedBackend={selectedBackend}
+        selectedModel={selectedModel}
+        detecting={detecting}
+        saving={savingAgent}
+        error={agentError}
+        onSelectBackend={(backendId) => {
+          const def = backendDefs.find((backend) => backend.id === backendId);
+          setSelectedBackend(backendId);
+          setSelectedModel(def?.defaultModel || def?.models[0]?.id || null);
+        }}
+        onSelectModel={setSelectedModel}
+        onDetect={detect}
+        onBack={() => setStep("intro")}
+        onContinue={handleConfirmAgent}
+      />
+    );
   }
 
   if (step === "datasources") {
-    return <DatasourcesScreen onBack={() => setStep("intro")} onContinue={() => setStep("engine")} />;
+    return <DatasourcesScreen onBack={() => setStep("agent")} onContinue={onComplete} />;
   }
 
-  return (
-    <EngineSetupScreen
-      detection={detection}
-      detecting={detecting}
-      checking={checking}
-      onDetect={detect}
-      onBack={() => setStep("datasources")}
-      onContinue={onComplete}
-    />
-  );
+  return null;
 }
 
 function StepShell({
@@ -103,9 +206,9 @@ function StepShell({
 
 function StepIndicator({ active }: { active: OnboardingStep }) {
   const steps: { id: OnboardingStep; label: string }[] = [
-    { id: "intro", label: "Fit" },
+    { id: "intro", label: "Intro" },
+    { id: "agent", label: "Agent" },
     { id: "datasources", label: "Tools" },
-    { id: "engine", label: "Agent" },
   ];
 
   return (
@@ -120,7 +223,7 @@ function StepIndicator({ active }: { active: OnboardingStep }) {
             fontSize: "0.68rem",
             color: step.id === active ? "var(--text)" : "var(--text-muted)",
             textTransform: "uppercase",
-            letterSpacing: "0.08em",
+            letterSpacing: 0,
             fontWeight: 700,
           }}
         >
@@ -157,7 +260,7 @@ function IntroScreen({ onContinue }: { onContinue: () => void }) {
             ))}
           </div>
           <button onClick={onContinue} style={{ ...primaryBtn, marginTop: "1.35rem", padding: "0.5rem 1.35rem" }}>
-            Set up tools
+            Choose default agent
           </button>
         </div>
 
@@ -394,17 +497,29 @@ function DatasourceCard({
   );
 }
 
-function EngineSetupScreen({
+function AgentSetupScreen({
   detection,
+  backendDefs,
+  selectedBackend,
+  selectedModel,
   detecting,
-  checking,
+  saving,
+  error,
+  onSelectBackend,
+  onSelectModel,
   onDetect,
   onBack,
   onContinue,
 }: {
   detection: DetectionResult | null;
+  backendDefs: BackendDef[];
+  selectedBackend: string | null;
+  selectedModel: string | null;
   detecting: boolean;
-  checking: boolean;
+  saving: boolean;
+  error: string | null;
+  onSelectBackend: (backendId: string) => void;
+  onSelectModel: (modelId: string) => void;
   onDetect: () => void;
   onBack: () => void;
   onContinue: () => void;
@@ -412,7 +527,10 @@ function EngineSetupScreen({
   const [installingClaude, setInstallingClaude] = useState(false);
   const [showManual, setShowManual] = useState(false);
   const [copied, setCopied] = useState(false);
-  const ready = detection?.anyAvailable || false;
+  const backends = detection?.backends || fallbackBackends;
+  const ready = backends.some((backend) => backend.installed);
+  const selectedDef = backendDefs.find((backend) => backend.id === selectedBackend);
+  const selectedInstalled = backends.some((backend) => backend.id === selectedBackend && backend.installed);
 
   const handleInstallClaude = useCallback(async () => {
     setInstallingClaude(true);
@@ -444,28 +562,64 @@ function EngineSetupScreen({
 
   return (
     <StepShell maxWidth={660}>
-      <StepIndicator active="engine" />
+      <StepIndicator active="agent" />
       <div style={{ marginBottom: "1.2rem" }}>
         <div style={labelStyle}>Local agent</div>
-        <h1 style={headlineStyle}>Make sure a CLI agent is available.</h1>
+        <h1 style={headlineStyle}>Confirm the agent Cockpit should use.</h1>
         <p style={copyStyle}>
-          Cockpit routes chat through a local backend. Claude, Codex, or Ollama works; install one and sign in where the
-          provider requires it. Detection refreshes automatically after setup.
+          Cockpit detected the CLI agents on this machine. Pick the default now; you can change backend and model later
+          in Settings.
         </p>
       </div>
 
       <div style={{ display: "grid", gap: "0.45rem" }}>
-        {(detection?.backends || fallbackBackends).map((backend) => (
+        {backends.map((backend) => (
           <BackendCard
             key={backend.id}
             backend={backend}
+            selected={selectedBackend === backend.id}
             detecting={detecting && !detection}
             installingClaude={installingClaude}
+            onSelect={() => backend.installed && onSelectBackend(backend.id)}
             onInstallClaude={handleInstallClaude}
             onSignInClaude={handleSignInClaude}
           />
         ))}
       </div>
+
+      {selectedDef && selectedDef.models.length > 0 && (
+        <label style={selectLabelStyle}>
+          <span>Model</span>
+          <select
+            value={selectedModel || selectedDef.defaultModel}
+            onChange={(event) => onSelectModel(event.target.value)}
+            style={selectStyle}
+          >
+            {selectedDef.models.map((model) => (
+              <option key={model.id} value={model.id}>
+                {model.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      {error && (
+        <div
+          style={{
+            marginTop: "0.7rem",
+            border: "1px solid color-mix(in srgb, var(--red) 22%, transparent)",
+            borderRadius: 6,
+            padding: "0.55rem 0.65rem",
+            color: "var(--red)",
+            background: "color-mix(in srgb, var(--red) 8%, transparent)",
+            fontSize: "0.72rem",
+            lineHeight: 1.45,
+          }}
+        >
+          {error}
+        </div>
+      )}
 
       <div style={{ marginTop: "0.7rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
         <button onClick={onDetect} disabled={detecting} style={secondaryBtn}>
@@ -487,13 +641,13 @@ function EngineSetupScreen({
         <button onClick={onBack} style={secondaryBtn}>Back</button>
         <button
           onClick={onContinue}
-          disabled={checking}
-          style={{ ...primaryBtn, padding: "0.5rem 1.35rem", cursor: checking ? "default" : "pointer" }}
+          disabled={saving}
+          style={{ ...primaryBtn, padding: "0.5rem 1.35rem", cursor: saving ? "default" : "pointer" }}
         >
-          {ready ? "Enter Cockpit" : "Skip for now"}
+          {saving ? "Saving..." : selectedInstalled ? "Confirm agent" : "Continue without agent"}
         </button>
         <span style={{ fontSize: "0.75rem", color: ready ? "var(--green)" : "var(--text-muted)" }}>
-          {ready ? "Agent ready" : "No agent detected yet"}
+          {selectedInstalled ? "Agent ready" : ready ? "Choose one detected agent" : "No agent detected yet"}
         </span>
       </div>
     </StepShell>
@@ -502,14 +656,18 @@ function EngineSetupScreen({
 
 function BackendCard({
   backend,
+  selected,
   detecting,
   installingClaude,
+  onSelect,
   onInstallClaude,
   onSignInClaude,
 }: {
   backend: BackendStatus;
+  selected: boolean;
   detecting: boolean;
   installingClaude: boolean;
+  onSelect: () => void;
   onInstallClaude: () => void;
   onSignInClaude: () => void;
 }) {
@@ -517,13 +675,29 @@ function BackendCard({
   const installHint = backend.installHint || installHints[backend.id] || "Install the CLI, then check again.";
 
   return (
-    <div style={cardStyle(backend.installed)}>
+    <div
+      onClick={onSelect}
+      role={backend.installed ? "button" : undefined}
+      tabIndex={backend.installed ? 0 : undefined}
+      onKeyDown={(event) => {
+        if (!backend.installed) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
+      style={{
+        ...cardStyle(selected || backend.installed),
+        cursor: backend.installed ? "pointer" : "default",
+        outline: selected ? "1px solid var(--green)" : "none",
+      }}
+    >
       <div style={miniIconStyle(backend.installed)}>{backendIcons[backend.id] || "AI"}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
           <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text)" }}>{backend.label}</span>
           <span style={statusPillStyle(backend.installed)}>
-            {detecting ? "Checking" : backend.installed ? "Ready" : "Not found"}
+            {detecting ? "Checking" : selected ? "Selected" : backend.installed ? "Ready" : "Not found"}
           </span>
         </div>
         <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "0.12rem", lineHeight: 1.35 }}>
@@ -580,7 +754,7 @@ const headlineStyle: React.CSSProperties = {
   fontSize: "1.28rem",
   fontWeight: 800,
   color: "var(--text)",
-  letterSpacing: "-0.02em",
+  letterSpacing: 0,
   lineHeight: 1.18,
   margin: 0,
 };
@@ -602,7 +776,7 @@ const primaryBtn: React.CSSProperties = {
   fontWeight: 700,
   cursor: "pointer",
   fontFamily: "inherit",
-  letterSpacing: "-0.01em",
+  letterSpacing: 0,
   transition: "opacity 0.15s",
 };
 
@@ -631,7 +805,7 @@ const labelStyle: React.CSSProperties = {
   fontWeight: 700,
   color: "var(--text-muted)",
   textTransform: "uppercase",
-  letterSpacing: "0.1em",
+  letterSpacing: 0,
   marginBottom: "0.5rem",
 };
 
@@ -694,6 +868,26 @@ const commandStyle: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+const selectLabelStyle: React.CSSProperties = {
+  marginTop: "0.75rem",
+  display: "grid",
+  gap: "0.3rem",
+  fontSize: "0.72rem",
+  color: "var(--text-muted)",
+  fontWeight: 700,
+};
+
+const selectStyle: React.CSSProperties = {
+  width: "100%",
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
+  borderRadius: 5,
+  color: "var(--text)",
+  fontFamily: "inherit",
+  fontSize: "0.76rem",
+  padding: "0.45rem 0.55rem",
+};
+
 function cardStyle(active: boolean): React.CSSProperties {
   return {
     display: "flex",
@@ -743,7 +937,7 @@ function statusPillStyle(active: boolean): React.CSSProperties {
     fontSize: "0.65rem",
     fontWeight: 800,
     textTransform: "uppercase",
-    letterSpacing: "0.06em",
+    letterSpacing: 0,
     padding: "0.12rem 0.35rem",
     borderRadius: 4,
     color: active ? "var(--green)" : "var(--text-muted)",

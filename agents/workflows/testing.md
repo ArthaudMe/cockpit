@@ -82,5 +82,12 @@ pnpm smoke:packaged:launch
 
 - `pnpm lint` is not a reliable gate until the deprecated `next lint` script is
   replaced with an installed linter.
+- `pnpm smoke:datasources` starts the production standalone server and verifies
+  OAuth connect URL generation for Google, Slack, Linear, GitHub, and Notion,
+  including that Google routes through Composio. It does not complete
+  provider-hosted OAuth unless test accounts are supplied.
+- `pnpm smoke:packaged` verifies the built macOS app layout, code signature,
+  and packaged standalone server startup. Use `pnpm smoke:packaged:launch` when
+  a GUI launch check is also needed.
 - `pnpm smoke:packaged:launch` opens the macOS app and is local/manual only; CI
   should use `pnpm smoke:packaged`.
