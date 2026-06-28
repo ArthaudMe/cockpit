@@ -3,6 +3,7 @@ import { getAgent, listAgents, ensureAgentRuntimeStarted } from "@/lib/agent-man
 import { streamAgentResponse } from "@/lib/agent-stream";
 import { getProvider } from "@/lib/provider-registry";
 import { detectProvider } from "@/lib/provider-runtime";
+import { isProviderAuthError, providerLoginNeededMessage } from "@/lib/provider-auth";
 
 export const maxDuration = 300;
 
@@ -27,6 +28,10 @@ export async function POST(
     const detected = provider ? await detectProvider(provider) : { ok: false, error: "Unknown backend" };
     if (detected.ok) {
       return streamAgentResponse(id, { message: message || "", focusContext, images });
+    }
+
+    if (provider && isProviderAuthError(provider, detected.error)) {
+      return loginNeededResponse(providerLoginNeededMessage(provider));
     }
 
     const fallback = await findFallbackAgent(id);
@@ -55,4 +60,14 @@ async function findFallbackAgent(skipId: string) {
     if (detected.ok) return candidate;
   }
   return null;
+}
+
+function loginNeededResponse(message: string) {
+  return new Response(message, {
+    status: 401,
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "X-Cockpit-Login-Needed": "1",
+    },
+  });
 }

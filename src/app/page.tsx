@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { type Context, buildContextFromLiveData } from "@/lib/context-client";
 import type { DatasourceData } from "@/lib/datasources/types";
 import { Header } from "@/components/layout/Header";
@@ -39,6 +39,47 @@ const EMPTY_CONTEXT: Context = {
   connected: {},
 };
 
+function projectSignalKey(data: DatasourceData): string | null {
+  const linear = (data.linearIssues || []).map((issue) => [
+    issue.id,
+    issue.project || "",
+    issue.state,
+    issue.updatedAt,
+  ]);
+  const github = (data.githubPRs || []).map((pr) => [
+    pr.url || `${pr.repo}:${pr.title}`,
+    pr.repo,
+    pr.status,
+    pr.time,
+  ]);
+  const slack = (data.slackMessages || []).map((message) => [
+    message.channel,
+    message.author,
+    message.time,
+    message.message,
+  ]);
+  const meetings = [
+    ...(data.calendar || []).map((event) => [
+      "calendar",
+      event.date,
+      event.time,
+      event.title,
+    ]),
+    ...(data.granolaMeetings || []).map((meeting) => [
+      "granola",
+      meeting.time,
+      meeting.title,
+      meeting.summary || "",
+    ]),
+  ];
+
+  if (!linear.length && !github.length && !slack.length && !meetings.length) {
+    return null;
+  }
+
+  return JSON.stringify({ linear, github, slack, meetings });
+}
+
 export default function Home() {
   const [chatInput, setChatInput] = useState("");
   const [centerView, setCenterView] = useState<CenterView>({ type: "chat" });
@@ -59,6 +100,7 @@ export default function Home() {
   const [showRightColumn, setShowRightColumn] = useState(true);
   const [onboardingComplete, setOnboardingComplete] = useState(false);
   const [onboardingPreferenceLoaded, setOnboardingPreferenceLoaded] = useState(false);
+  const lastProjectSignalKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     setOnboardingComplete(localStorage.getItem("cockpit:onboarding-complete") === "true");
@@ -180,6 +222,18 @@ export default function Home() {
   useEffect(() => {
     fetchProjects();
   }, [fetchProjects]);
+
+  const liveProjectSignalKey = useMemo(
+    () => projectSignalKey(rawDatasourceData),
+    [rawDatasourceData],
+  );
+
+  useEffect(() => {
+    if (!liveProjectSignalKey) return;
+    if (lastProjectSignalKeyRef.current === liveProjectSignalKey) return;
+    lastProjectSignalKeyRef.current = liveProjectSignalKey;
+    fetchProjects();
+  }, [fetchProjects, liveProjectSignalKey]);
 
   useEffect(() => {
     fetch("/api/status")

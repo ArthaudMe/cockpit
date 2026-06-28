@@ -5,9 +5,10 @@ import { createComposioOAuthState, createOAuthState, enableService } from "@/lib
 import type { ServiceId } from "@/lib/datasources/types";
 import { isComposioEnabled, createConnectLink, isAllowedComposioRedirectUrl } from "@/lib/datasources/composio";
 import { assertProxyClientId, isProxyEnabled, proxyPreflight } from "@/lib/datasources/oauth-proxy";
-import { isGranolaAvailable } from "@/lib/datasources/connectors/granola";
 import CREDENTIALS from "@/lib/datasources/credentials";
 import { clearDatasourceDataCache } from "@/lib/datasources/manager";
+import { ensurePresetMcpServer } from "@/lib/datasources/mcp-store";
+import { startMcpAuthorization } from "@/lib/datasources/mcp-oauth";
 
 const OAUTH_SERVICES: ServiceId[] = [
   "google",
@@ -17,8 +18,7 @@ const OAUTH_SERVICES: ServiceId[] = [
   "slack",
 ];
 
-// Auto-detected services just need to be re-enabled
-const AUTO_DETECTED: ServiceId[] = ["granola"];
+const MCP_PRESET_SERVICES: ServiceId[] = ["granola", "attio"];
 
 // Always use localhost callback — the local Next.js server handles it directly.
 // This avoids custom-scheme issues (Google blocks cockpit://, Slack needs PKCE, etc.)
@@ -81,27 +81,53 @@ async function assertOAuthReady(service: ServiceId): Promise<void> {
 export async function GET(req: NextRequest) {
   const service = req.nextUrl.searchParams.get("service") as ServiceId | null;
 
-  if (!service || ![...OAUTH_SERVICES, ...AUTO_DETECTED].includes(service)) {
+  if (!service || ![...OAUTH_SERVICES, ...MCP_PRESET_SERVICES].includes(service)) {
     return NextResponse.json(
       { error: "Invalid service" },
       { status: 400 }
     );
   }
 
-  // Auto-detected services: just re-enable, no OAuth needed
-  if (AUTO_DETECTED.includes(service)) {
-    if (service === "granola" && !isGranolaAvailable()) {
+  if (MCP_PRESET_SERVICES.includes(service)) {
+    const preset = service === "attio" ? "attio" : "granola";
+    const server = ensurePresetMcpServer(preset);
+    const redirectUri = `${req.nextUrl.origin}/api/datasources/mcp/callback`;
+    let result: Awaited<ReturnType<typeof startMcpAuthorization>>;
+    try {
+      result = await startMcpAuthorization(server, redirectUri);
+    } catch (err) {
+      console.error("[MCP OAuth preflight]", err);
       return NextResponse.json(
-        {
-          error:
-            "Granola is detected from local meeting notes. Open Granola, make sure you are signed in, then record or sync at least one meeting before checking again.",
-        },
+        { error: err instanceof Error ? err.message : "Couldn't start MCP authorization." },
         { status: 503 },
       );
     }
+
+    if (!result.authorized) {
+      return NextResponse.json({
+        url: result.url,
+        redirectUri,
+        mcp: {
+          id: server.id,
+          name: server.name,
+          url: server.url,
+          transport: server.transport,
+        },
+      });
+    }
+
     enableService(service);
     clearDatasourceDataCache();
-    return NextResponse.json({ reconnected: true });
+    return NextResponse.json({
+      reconnected: true,
+      mcp: {
+        id: server.id,
+        name: server.name,
+        url: server.url,
+        transport: server.transport,
+      },
+      message: `${server.name} MCP connected.`,
+    });
   }
 
   const origin = req.nextUrl.origin;

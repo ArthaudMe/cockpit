@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { removeTokens, disableService, removeComposioConnections } from "@/lib/datasources/token-store";
 import { removePostHogConfig } from "@/lib/datasources/connectors/posthog";
 import { clearDatasourceDataCache } from "@/lib/datasources/manager";
+import { removeMcpServerByPreset } from "@/lib/datasources/mcp-store";
 import type { ServiceId } from "@/lib/datasources/types";
 
 const VALID_SERVICES: ServiceId[] = [
@@ -12,10 +13,10 @@ const VALID_SERVICES: ServiceId[] = [
   "slack",
   "granola",
   "posthog",
+  "attio",
 ];
 
-// Auto-detected services use disable instead of token removal
-const AUTO_DETECTED: ServiceId[] = ["granola"];
+const MCP_PRESET_SERVICES: ServiceId[] = ["granola", "attio"];
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -30,7 +31,8 @@ export async function POST(req: NextRequest) {
 
   if (service === "posthog") {
     removePostHogConfig();
-  } else if (AUTO_DETECTED.includes(service)) {
+  } else if (MCP_PRESET_SERVICES.includes(service)) {
+    removeMcpServerByPreset(service === "attio" ? "attio" : "granola");
     disableService(service);
   } else {
     removeTokens(service);

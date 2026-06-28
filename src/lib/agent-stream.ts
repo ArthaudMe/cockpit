@@ -1,7 +1,9 @@
-import { sendToAgent } from "./agent-manager";
+import { getAgent, sendToAgent } from "./agent-manager";
 import { extractAndProcessMemories } from "./memory";
 import { extractAndProcessSkills } from "./skills-extract";
 import { persistMessage } from "./knowledge/conversations";
+import { getProvider } from "./provider-registry";
+import { isProviderAuthError, providerLoginNeededMessage } from "./provider-auth";
 
 /**
  * Send a message to an agent and stream the CLI process output as a
@@ -13,6 +15,8 @@ export function streamAgentResponse(
   opts: { message: string; focusContext?: string; images?: string[] }
 ): Response {
   const { message, focusContext, images } = opts;
+  const agent = getAgent(agentId);
+  const provider = agent ? getProvider(agent.backend) : undefined;
   const encoder = new TextEncoder();
   const proc = sendToAgent(agentId, message, focusContext, images);
 
@@ -35,24 +39,18 @@ export function streamAgentResponse(
 
       proc.on("close", (code) => {
         if (code !== 0) {
-          // Detect "not logged in" from Claude CLI
           const combined = (responseText + stderrText).toLowerCase();
-          if (
-            combined.includes("not logged in") ||
-            combined.includes("please run /login") ||
-            combined.includes("authentication")
-          ) {
-            // Trigger login flow automatically
-            fetch("http://localhost:" + (process.env.PORT || "3939") + "/api/authenticate-claude", { method: "POST" }).catch(() => {});
-            controller.enqueue(
-              encoder.encode(
-                `\n\n**Claude CLI is not authenticated.** A browser window should open for you to log in. If not, open Terminal and run \`claude login\`, then restart Cockpit.`
-              )
-            );
+          if (provider && isProviderAuthError(provider, combined)) {
+            if (provider.auth?.loginRoute) {
+              fetch("http://localhost:" + (process.env.PORT || "3939") + provider.auth.loginRoute, { method: "POST" }).catch(() => {});
+            }
+            const loginMessage = `\n\n${providerLoginNeededMessage(provider)}`;
+            responseText += loginMessage;
+            controller.enqueue(encoder.encode(loginMessage));
           } else {
-            controller.enqueue(
-              encoder.encode(`\n\nSomething went wrong. Please try sending your message again.`)
-            );
+            const failureMessage = `\n\nSomething went wrong. Please try sending your message again.`;
+            responseText += failureMessage;
+            controller.enqueue(encoder.encode(failureMessage));
           }
         }
         controller.close();
@@ -94,7 +92,8 @@ export function streamAgentResponse(
 
       proc.on("error", (err) => {
         console.error(`[agent:${agentId}:error]`, err);
-        controller.enqueue(encoder.encode("Couldn't connect to the AI backend. Please check that Claude is installed and try again."));
+        const providerLabel = provider?.label || "AI backend";
+        controller.enqueue(encoder.encode(`Couldn't connect to ${providerLabel}. Please check that it is installed and try again.`));
         controller.close();
       });
     },

@@ -49,6 +49,26 @@ function stripImagesForPersist(byAgent: Record<string, Message[]>): Record<strin
   return out;
 }
 
+async function readErrorBody(res: Response): Promise<string> {
+  try {
+    return (await res.text()).trim();
+  } catch {
+    return "";
+  }
+}
+
+function chatFailureMessage(res: Response, body: string): string {
+  if (res.headers.get("X-Cockpit-Login-Needed") === "1" && body) return body;
+  if (res.status === 401 && body) return body;
+  if (res.status === 503 && body) return body;
+  if (res.status === 503) {
+    return "I'm having trouble connecting right now. Please check your AI backend and try again.";
+  }
+  if (res.status === 401) return "Your session may have expired. Try reloading the app.";
+  if (res.status >= 500) return "Something went wrong on my end. Please try again in a moment.";
+  return body || "Sorry, I couldn't process that request. Please try again.";
+}
+
 export const ChatColumn = memo(function ChatColumn({
   inputValue,
   onInputChange,
@@ -125,16 +145,27 @@ export const ChatColumn = memo(function ChatColumn({
       .then(([agentsData, backendsData]: [AgentInfo[], BackendDef[]]) => {
         setAgents(agentsData);
         setBackends(backendsData);
-        if (agentsData.length > 0 && !activeAgentId) {
-          setActiveAgentId(agentsData[0].id);
-        }
+        setActiveAgentId((current) => {
+          if (agentsData.length === 0) return null;
+          if (current && agentsData.some((agent) => agent.id === current)) return current;
+          return agentsData[0].id;
+        });
       })
       .catch(() => setLoadError(true));
-  }, [activeAgentId, setActiveAgentId]);
+  }, [setActiveAgentId]);
 
   useEffect(() => {
     loadAgentsAndBackends();
   }, []);
+
+  useEffect(() => {
+    if (agents.length === 0) {
+      if (activeAgentId) setActiveAgentId(null);
+      return;
+    }
+    if (!activeAgentId || agents.some((agent) => agent.id === activeAgentId)) return;
+    setActiveAgentId(agents[0].id);
+  }, [activeAgentId, agents, setActiveAgentId]);
 
   const messages = activeAgentId ? messagesByAgent[activeAgentId] || [] : [];
   const streaming = activeAgentId ? streamingAgents.has(activeAgentId) : false;
@@ -227,14 +258,12 @@ export const ChatColumn = memo(function ChatColumn({
       });
 
       if (!res.ok || !res.body) {
+        const body = await readErrorBody(res);
         setMessagesFor(targetAgentId, (prev) => {
           const next = [...prev];
           next[next.length - 1] = {
             role: "assistant",
-            content: res.status === 503 ? "I'm having trouble connecting right now. Please check your internet connection and try again."
-                    : res.status === 401 ? "Your session may have expired. Try reloading the app."
-                    : res.status >= 500 ? "Something went wrong on my end. Please try again in a moment."
-                    : "Sorry, I couldn't process that request. Please try again.",
+            content: chatFailureMessage(res, body),
           };
           return next;
         });
@@ -486,9 +515,10 @@ export const ChatColumn = memo(function ChatColumn({
         });
 
         if (!chatRes.ok || !chatRes.body) {
+          const body = await readErrorBody(chatRes);
           setMessagesFor(agent.id, (prev) => {
             const next = [...prev];
-            next[next.length - 1] = { role: "assistant", content: "Something went wrong starting this agent. Please try again." };
+            next[next.length - 1] = { role: "assistant", content: chatFailureMessage(chatRes, body) };
             return next;
           });
           setStreamingAgents((prev) => { const next = new Set(prev); next.delete(agent.id); return next; });

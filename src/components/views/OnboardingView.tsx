@@ -38,7 +38,17 @@ type AgentInfo = {
 type OnboardingStep = "intro" | "agent" | "datasources";
 
 const CLAUDE_INSTALL_CMD = "curl -fsSL https://claude.ai/install.sh | bash";
-const CORE_DATASOURCE_ORDER = ["calendar", "gmail", "slack", "linear", "github", "notion", "granola"];
+const CORE_DATASOURCE_ORDER = [
+  "calendar",
+  "gmail",
+  "slack",
+  "linear",
+  "github",
+  "notion",
+  "granola",
+  "posthog",
+  "attio",
+];
 
 interface DatasourceInfo {
   id: string;
@@ -93,8 +103,11 @@ export function OnboardingView({
         data.backends[0];
       if (recommended) {
         const def = defs.find((backend) => backend.id === recommended.id);
+        const currentModelMatchesRecommended = current?.backend === recommended.id;
         setSelectedBackend((prev) => prev || recommended.id);
-        setSelectedModel((prev) => prev || current?.model || def?.defaultModel || def?.models[0]?.id || null);
+        setSelectedModel((prev) =>
+          prev || (currentModelMatchesRecommended ? current?.model : null) || def?.defaultModel || def?.models[0]?.id || null
+        );
       }
     } catch {
       // Keep the install guidance visible if detection fails.
@@ -292,6 +305,7 @@ function DatasourcesScreen({
   const [connectError, setConnectError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showPostHogForm, setShowPostHogForm] = useState(false);
   const connectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -325,6 +339,12 @@ function DatasourcesScreen({
   }, [connecting, datasources]);
 
   const handleConnect = useCallback(async (serviceId: string) => {
+    if (serviceId === "posthog") {
+      setShowPostHogForm(true);
+      setConnectError(null);
+      return;
+    }
+
     setConnecting(serviceId);
     setConnectError(null);
     try {
@@ -354,11 +374,24 @@ function DatasourcesScreen({
       <StepIndicator active="datasources" />
       <div style={{ marginBottom: "1.2rem" }}>
         <div style={labelStyle}>Core tools</div>
-        <h1 style={headlineStyle}>Connect the systems Cockpit expects first.</h1>
+        <h1 style={headlineStyle}>Pilot your company from one screen.</h1>
         <p style={copyStyle}>
-          These integrations feed the operating view: schedule, email, team signals, issues, pull requests, docs, and
-          meeting notes. You can connect one now and add the rest later in Settings.
+          Cockpit is the harness for founders to stay ontop of their work and the work being done in the company.
+          Cockpit turns your calendar, inbox, team messages, issues, docs, and meeting notes into a local operating
+          workspace.
         </p>
+        <div style={{ display: "grid", gap: "0.45rem", marginTop: "0.8rem" }}>
+          {[
+            "Local-first by default: company context and tokens stay on this machine.",
+            "Opinionated setup: connect the tools most founders already run on.",
+            "Bring your own agent subscription: Claude, Codex, or Ollama can power the chat layer.",
+          ].map((item) => (
+            <div key={item} style={checkRowStyle}>
+              <span style={checkIconStyle}>✓</span>
+              <span>{item}</span>
+            </div>
+          ))}
+        </div>
         {connectError && (
           <div
             style={{
@@ -376,6 +409,16 @@ function DatasourcesScreen({
           </div>
         )}
       </div>
+
+      {showPostHogForm && (
+        <PostHogSetupCard
+          onSaved={async () => {
+            setShowPostHogForm(false);
+            await fetchStatus();
+          }}
+          onCancel={() => setShowPostHogForm(false)}
+        />
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.45rem" }}>
         {loaded
@@ -455,13 +498,93 @@ function buildCoreDatasources(datasources: DatasourceInfo[]): OnboardingDatasour
     },
   ];
 
-  for (const id of ["slack", "linear", "github", "notion", "granola"]) {
+  for (const id of ["slack", "linear", "github", "notion", "granola", "posthog", "attio"]) {
     const ds = byId.get(id);
     if (!ds) continue;
     virtual.push({ ...ds, displayId: id, connectId: id });
   }
 
   return virtual.sort((a, b) => CORE_DATASOURCE_ORDER.indexOf(a.displayId) - CORE_DATASOURCE_ORDER.indexOf(b.displayId));
+}
+
+function PostHogSetupCard({
+  onSaved,
+  onCancel,
+}: {
+  onSaved: () => void | Promise<void>;
+  onCancel: () => void;
+}) {
+  const [apiHost, setApiHost] = useState("https://us.posthog.com");
+  const [projectId, setProjectId] = useState("");
+  const [personalApiKey, setPersonalApiKey] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const inputStyle: React.CSSProperties = {
+    background: "var(--bg)",
+    border: "1px solid var(--border)",
+    borderRadius: 4,
+    color: "var(--text)",
+    fontFamily: "inherit",
+    fontSize: "0.7rem",
+    padding: "0.35rem 0.45rem",
+    width: "100%",
+  };
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/datasources/posthog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiHost, projectId, personalApiKey }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "PostHog connection failed");
+      await onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "PostHog connection failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      style={{
+        border: "1px solid var(--border)",
+        borderRadius: 8,
+        background: "var(--surface)",
+        padding: "0.7rem",
+        margin: "0.75rem 0",
+      }}
+    >
+      <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text)", marginBottom: "0.45rem" }}>
+        Configure PostHog
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.45rem" }}>
+        <input value={apiHost} onChange={(e) => setApiHost(e.target.value)} placeholder="API host" style={inputStyle} />
+        <input value={projectId} onChange={(e) => setProjectId(e.target.value)} placeholder="Project ID" style={inputStyle} />
+      </div>
+      <input
+        value={personalApiKey}
+        onChange={(e) => setPersonalApiKey(e.target.value)}
+        placeholder="Personal API key"
+        type="password"
+        style={{ ...inputStyle, marginTop: "0.45rem" }}
+      />
+      {error && <div style={{ color: "var(--red)", fontSize: "0.68rem", marginTop: "0.4rem" }}>{error}</div>}
+      <div style={{ display: "flex", gap: "0.45rem", marginTop: "0.6rem" }}>
+        <button onClick={save} disabled={saving || !projectId.trim() || !personalApiKey.trim()} style={connectBtnStyle(saving)}>
+          {saving ? "Validating..." : "Save PostHog"}
+        </button>
+        <button onClick={onCancel} style={secondaryBtn}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function DatasourceCard({
@@ -484,9 +607,15 @@ function DatasourceCard({
       </div>
       {datasource.connected ? (
         <span style={connectedTextStyle}>Connected</span>
-      ) : datasource.needsOAuth ? (
+      ) : datasource.needsOAuth || datasource.connectId === "granola" || datasource.connectId === "posthog" || datasource.connectId === "attio" ? (
         <button onClick={onConnect} disabled={connecting} style={connectBtnStyle(connecting)}>
-          {connecting ? "Connecting..." : "Connect"}
+          {connecting
+            ? "Connecting..."
+            : datasource.connectId === "granola" || datasource.connectId === "attio"
+              ? "Connect MCP"
+              : datasource.connectId === "posthog"
+                ? "Configure"
+                : "Connect"}
         </button>
       ) : (
         <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 600, flexShrink: 0 }}>

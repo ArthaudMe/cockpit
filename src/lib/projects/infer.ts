@@ -68,6 +68,7 @@ interface ProjectMapping {
 
 let cachedResult: InferredProject[] | null = null;
 let cacheTimestamp = 0;
+let cachedResultKey: string | null = null;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 // The LLM clustering (mappings) only depends on the *names* of Linear
@@ -90,6 +91,58 @@ function signalsKey(signals: SignalSummary): string {
     slack: [...signals.slackChannels.keys()].sort(),
   };
   return createHash("sha256").update(JSON.stringify(names)).digest("hex").slice(0, 24);
+}
+
+function resultKey(signals: SignalSummary): string {
+  const linear = [...signals.linearProjects.entries()]
+    .flatMap(([project, issues]) =>
+      issues.map((issue) => [
+        project,
+        issue.id,
+        issue.state,
+        issue.priority,
+        issue.assignee,
+        issue.updatedAt,
+        issue.title,
+      ]),
+    )
+    .sort();
+  const github = [...signals.githubRepos.entries()]
+    .flatMap(([repo, prs]) =>
+      prs.map((pr) => [
+        repo,
+        pr.url,
+        pr.status,
+        pr.time,
+        pr.author,
+        pr.title,
+      ]),
+    )
+    .sort();
+  const slack = [...signals.slackChannels.entries()]
+    .flatMap(([channel, messages]) =>
+      messages.map((message) => [
+        channel,
+        message.author,
+        message.time,
+        message.message,
+      ]),
+    )
+    .sort();
+  const meetings = signals.meetings
+    .map((meeting) => [
+      "date" in meeting ? meeting.date : "",
+      meeting.time,
+      meeting.title,
+      meeting.attendees.join(","),
+      "summary" in meeting ? meeting.summary || "" : "",
+    ])
+    .sort();
+
+  return createHash("sha256")
+    .update(JSON.stringify({ linear, github, slack, meetings }))
+    .digest("hex")
+    .slice(0, 24);
 }
 
 function loadPersistedMappings(key: string): ProjectMapping[] | null {
@@ -288,6 +341,50 @@ function askClaude(prompt: string): Promise<string> {
 
 // ─── Assembly ───────────────────────────────────────────────────────
 
+function parseActivityTimestamp(time: string | undefined, dateKey?: string): number {
+  if (!time) return 0;
+  const lower = time.toLowerCase();
+
+  if (dateKey) {
+    const dateMatch = dateKey.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const timeMatch = time.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);
+    if (dateMatch && timeMatch) {
+      const [, year, month, day] = dateMatch;
+      let hours = parseInt(timeMatch[1], 10);
+      const minutes = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0;
+      const period = timeMatch[3].toUpperCase();
+      if (period === "PM" && hours !== 12) hours += 12;
+      if (period === "AM" && hours === 12) hours = 0;
+      return new Date(
+        parseInt(year, 10),
+        parseInt(month, 10) - 1,
+        parseInt(day, 10),
+        hours,
+        minutes,
+        0,
+        0,
+      ).getTime();
+    }
+  }
+
+  if (lower.includes("just now") || lower === "now") return Date.now();
+  const relative = lower.match(/(\d+)\s*(s|sec|second|m|min|minute|h|hr|hour|d|day|w|week)s?\s*ago/);
+  if (relative) {
+    const amount = parseInt(relative[1], 10);
+    const unit = relative[2];
+    const multiplier =
+      unit.startsWith("s") ? 1_000 :
+      unit.startsWith("m") ? 60_000 :
+      unit.startsWith("h") ? 3_600_000 :
+      unit.startsWith("d") ? 86_400_000 :
+      604_800_000;
+    return Date.now() - amount * multiplier;
+  }
+
+  const parsed = Date.parse(time);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
 function assembleProject(
   mapping: ProjectMapping,
   signals: SignalSummary,
@@ -312,12 +409,18 @@ function assembleProject(
     const msgs = signals.slackChannels.get(channel);
     if (msgs) slackMessages.push(...msgs);
   }
+  linearIssues.sort((a, b) => parseActivityTimestamp(b.updatedAt) - parseActivityTimestamp(a.updatedAt));
+  githubPRs.sort((a, b) => parseActivityTimestamp(b.time) - parseActivityTimestamp(a.time));
+  slackMessages.sort((a, b) => parseActivityTimestamp(b.time) - parseActivityTimestamp(a.time));
 
   // Match meetings by keywords
   const keywords = mapping.meeting_keywords.map((k) => k.toLowerCase());
-  const matchedMeetings = signals.meetings.filter((m) =>
-    keywords.some((kw) => m.title.toLowerCase().includes(kw))
-  );
+  const matchedMeetings = signals.meetings
+    .filter((m) => keywords.some((kw) => m.title.toLowerCase().includes(kw)))
+    .sort((a, b) =>
+      parseActivityTimestamp(b.time, "date" in b ? b.date : undefined) -
+      parseActivityTimestamp(a.time, "date" in a ? a.date : undefined)
+    );
 
   // Build tools list
   const tools: string[] = [];
@@ -337,6 +440,7 @@ function assembleProject(
   for (const msg of slackMessages.slice(0, 2)) {
     recent_activity.push({ date: msg.time, event: `${msg.author}: ${compactDisplayText(msg.message)}`, source: "Slack" });
   }
+  recent_activity.sort((a, b) => parseActivityTimestamp(b.date) - parseActivityTimestamp(a.date));
 
   // Build linear sub-object
   let linear: InferredProject["linear"] = null;
@@ -489,12 +593,18 @@ function heuristicProjects(signals: SignalSummary): InferredProject[] {
 // ─── Main entry ─────────────────────────────────────────────────────
 
 export async function inferProjects(data: DatasourceData): Promise<InferredProject[]> {
-  // Check cache
-  if (cachedResult && Date.now() - cacheTimestamp < CACHE_TTL) {
+  const signals = buildSignals(data);
+  const freshResultKey = resultKey(signals);
+
+  // Check cache after summarizing the current data so app-open refreshes do
+  // not reuse an assembly from older issues, PRs, messages, or meetings.
+  if (
+    cachedResult &&
+    cachedResultKey === freshResultKey &&
+    Date.now() - cacheTimestamp < CACHE_TTL
+  ) {
     return cachedResult;
   }
-
-  const signals = buildSignals(data);
 
   // If there's nothing to cluster, return empty
   const hasData =
@@ -504,6 +614,7 @@ export async function inferProjects(data: DatasourceData): Promise<InferredProje
 
   if (!hasData) {
     cachedResult = [];
+    cachedResultKey = freshResultKey;
     cacheTimestamp = Date.now();
     return [];
   }
@@ -538,6 +649,7 @@ export async function inferProjects(data: DatasourceData): Promise<InferredProje
   }
 
   cachedResult = projects;
+  cachedResultKey = freshResultKey;
   cacheTimestamp = Date.now();
   return projects;
 }
@@ -545,6 +657,7 @@ export async function inferProjects(data: DatasourceData): Promise<InferredProje
 /** Force-clear the caches so the next call re-runs the LLM clustering */
 export function clearInferCache() {
   cachedResult = null;
+  cachedResultKey = null;
   cacheTimestamp = 0;
   try {
     rmSync(MAPPINGS_CACHE_PATH, { force: true });

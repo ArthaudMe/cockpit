@@ -6,8 +6,15 @@ import {
 } from "@/lib/datasources/mcp-store";
 import type { McpServerConfig } from "@/lib/datasources/mcp-store";
 
+function publicMcpServer(config: McpServerConfig) {
+  const safe: Partial<McpServerConfig> = { ...config };
+  delete safe.oauth;
+  delete safe.env;
+  return safe;
+}
+
 export async function GET() {
-  return NextResponse.json(getMcpServers());
+  return NextResponse.json(getMcpServers().map(publicMcpServer));
 }
 
 export async function POST(req: NextRequest) {
@@ -41,5 +48,5 @@ export async function POST(req: NextRequest) {
   };
 
   saveMcpServer(config);
-  return NextResponse.json(config, { status: 201 });
+  return NextResponse.json(publicMcpServer(config), { status: 201 });
 }

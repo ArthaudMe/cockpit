@@ -5,7 +5,8 @@ export type ServiceId =
   | "notion"
   | "slack"
   | "granola"
-  | "posthog";
+  | "posthog"
+  | "attio";
 
 export interface TokenSet {
   access_token: string;
@@ -87,6 +88,7 @@ export interface NotionPage {
 }
 
 export interface SlackMessage {
+  id?: string;
   channel: string;
   message: string;
   author: string;

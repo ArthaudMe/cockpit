@@ -34,6 +34,10 @@ describe("provider-registry", () => {
       expect(def.capabilities.install.hint).toBe(def.installHint);
       expect(def.capabilities.models.defaultModel).toBe(def.defaultModel);
       expect(def.capabilities.models.options).toBe(def.models);
+      if (def.auth) {
+        expect(def.auth.loginCommand).toBeTruthy();
+        expect(def.auth.unauthenticatedMatchers.length).toBeGreaterThan(0);
+      }
     }
   });
 
@@ -129,6 +133,7 @@ describe("provider-registry", () => {
     expect(PROVIDERS.codex.capabilities.lifecycle.hooks).toEqual({ kind: "none" });
     expect(providerUsesClaudeHooks(PROVIDERS.codex)).toBe(false);
     expect(providerSupportsImages(PROVIDERS.codex)).toBe(false);
+    expect(PROVIDERS.codex.auth?.loginCommand).toBe("codex login");
 
     expect(PROVIDERS.ollama.capabilities.prompt.systemPrompt).toEqual({
       kind: "ollama-system-flag",

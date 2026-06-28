@@ -69,7 +69,7 @@ type DatasourceInfo = {
 type McpServer = {
   id: string;
   name: string;
-  transport: "stdio" | "sse";
+  transport: "stdio" | "sse" | "streamable-http";
   command?: string;
   args?: string[];
   env?: Record<string, string>;
@@ -613,9 +613,17 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
           {datasources.map((ds) => {
             const isConnecting = connecting === ds.id;
             const connectedLabel =
-              ds.id === "granola" ? "Detected locally" : ds.id === "posthog" ? "Configured" : "Connected";
+              ds.id === "granola" || ds.id === "attio"
+                ? "MCP connected"
+                : ds.id === "posthog"
+                  ? "Configured"
+                  : "Connected";
             const connectLabel =
-              ds.id === "granola" ? "Check again" : ds.id === "posthog" ? "Configure" : "Connect";
+              ds.id === "granola" || ds.id === "attio"
+                ? "Connect MCP"
+                : ds.id === "posthog"
+                  ? "Configure"
+                  : "Connect";
             const actionBtn: React.CSSProperties = {
               background: "none",
               border: "1px solid var(--border)",
@@ -1445,7 +1453,7 @@ function AddMcpForm({
   card: React.CSSProperties;
 }) {
   const [name, setName] = useState("");
-  const [transport, setTransport] = useState<"stdio" | "sse">("stdio");
+  const [transport, setTransport] = useState<"stdio" | "sse" | "streamable-http">("stdio");
   const [command, setCommand] = useState("");
   const [args, setArgs] = useState("");
   const [url, setUrl] = useState("");
@@ -1492,7 +1500,7 @@ function AddMcpForm({
       <div style={{ marginBottom: "0.4rem" }}>
         <label style={labelStyle}>Transport</label>
         <div style={{ display: "flex", gap: "0.5rem" }}>
-          {(["stdio", "sse"] as const).map((t) => (
+          {(["stdio", "sse", "streamable-http"] as const).map((t) => (
             <label key={t} style={{ fontSize: "0.65rem", color: "var(--text)", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.2rem" }}>
               <input
                 type="radio"
@@ -1501,7 +1509,7 @@ function AddMcpForm({
                 onChange={() => setTransport(t)}
                 style={{ accentColor: "var(--accent)" }}
               />
-              {t.toUpperCase()}
+              {t === "streamable-http" ? "HTTP" : t.toUpperCase()}
             </label>
           ))}
         </div>
@@ -1549,7 +1557,7 @@ function AddMcpForm({
               transport,
               command: transport === "stdio" ? command.trim() : undefined,
               args: transport === "stdio" && args.trim() ? args.trim().split(/\s+/) : undefined,
-              url: transport === "sse" ? url.trim() : undefined,
+              url: transport !== "stdio" ? url.trim() : undefined,
             });
           }}
           disabled={!canSubmit}

@@ -23,15 +23,18 @@ import { NextRequest, NextResponse } from "next/server";
  *     (dev Electron polling, local tooling)            → allowed
  *
  * When COCKPIT_API_TOKEN is absent (browser dev / next dev), only the
- * browser-origin protection is applied. The OAuth callback stays exempt from
- * the token gate because providers redirect an external browser to that GET
- * endpoint; it remains protected by its own OAuth state validation.
+ * browser-origin protection is applied. OAuth callbacks stay exempt from the
+ * token gate because providers redirect an external browser to those GET
+ * endpoints; they remain protected by their own OAuth state validation.
  */
 
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const API_TOKEN_COOKIE = "cockpit_api_token";
 const API_TOKEN_HEADER = "x-cockpit-token";
-const OAUTH_CALLBACK_PATH = "/api/datasources/callback";
+const OAUTH_CALLBACK_PATHS = new Set([
+  "/api/datasources/callback",
+  "/api/datasources/mcp/callback",
+]);
 
 function blocked(message = "Cross-origin request blocked") {
   return new NextResponse(
@@ -50,7 +53,7 @@ export function middleware(req: NextRequest) {
   const apiToken = process.env.COCKPIT_API_TOKEN;
   if (
     apiToken &&
-    req.nextUrl.pathname !== OAUTH_CALLBACK_PATH &&
+    !OAUTH_CALLBACK_PATHS.has(req.nextUrl.pathname) &&
     !hasValidApiToken(req, apiToken)
   ) {
     return blocked("Unauthorized local API request");

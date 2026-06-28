@@ -1,13 +1,12 @@
 import type { ServiceId, DatasourceStatus, DatasourceData } from "./types";
 import { getConnectedServices, getTokens, isServiceDisabled, isGoogleConnectedViaComposio } from "./token-store";
-import { isGranolaAvailable, fetchGranolaMeetings } from "./connectors/granola";
 import { fetchPostHogMetrics, isPostHogConfigured } from "./connectors/posthog";
 import { fetchCalendarEventsAuto, fetchRecentEmailsAuto } from "./connectors/google";
 import { fetchLinearIssues } from "./connectors/linear";
 import { fetchGitHubPRs, fetchGitHubNotifications } from "./connectors/github";
 import { fetchNotionPages, isNotionConnected } from "./connectors/notion";
 import { fetchSlackMessages } from "./connectors/slack";
-import { getMcpServers } from "./mcp-store";
+import { getMcpServerByPreset, getMcpServers, hasMcpOAuthTokens } from "./mcp-store";
 import { fetchMcpResources } from "./connectors/mcp";
 import { isComposioEnabled } from "./composio";
 import {
@@ -68,14 +67,20 @@ const SERVICE_META: Record<
   granola: {
     name: "Granola",
     icon: "GR",
-    description: "Local meeting notes",
-    needsOAuth: false,
+    description: "Meeting notes via MCP",
+    needsOAuth: true,
   },
   posthog: {
     name: "PostHog",
     icon: "PH",
     description: "Product analytics and usage metrics",
     needsOAuth: false,
+  },
+  attio: {
+    name: "Attio",
+    icon: "AT",
+    description: "CRM, companies, and pipeline via MCP",
+    needsOAuth: true,
   },
 };
 
@@ -86,13 +91,16 @@ const WRITE_SCOPE_REQUIREMENTS: Partial<Record<ServiceId, { required: string; re
 
 export function getDatasourceStatuses(): DatasourceStatus[] {
   const connected = getConnectedServices();
-  const granolaAvailable = isGranolaAvailable();
+  const granolaMcp = getMcpServerByPreset("granola");
+  const attioMcp = getMcpServerByPreset("attio");
 
   return Object.entries(SERVICE_META).map(([id, meta]) => {
     const serviceId = id as ServiceId;
     const isConnected =
       id === "granola"
-        ? granolaAvailable && !isServiceDisabled("granola")
+        ? Boolean(granolaMcp?.enabled) && hasMcpOAuthTokens(granolaMcp) && !isServiceDisabled("granola")
+        : id === "attio"
+          ? Boolean(attioMcp?.enabled) && hasMcpOAuthTokens(attioMcp) && !isServiceDisabled("attio")
         : id === "posthog"
           ? isPostHogConfigured()
         : id === "google"
@@ -205,7 +213,6 @@ export async function fetchAllData(): Promise<DatasourceData> {
 
 async function doFetchAllData(): Promise<DatasourceData> {
   const connected = getConnectedServices();
-  const granolaAvailable = isGranolaAvailable();
   const googleAvailable =
     connected.includes("google") || isGoogleConnectedViaComposio();
 
@@ -228,7 +235,6 @@ async function doFetchAllData(): Promise<DatasourceData> {
     connected.includes("slack") ? fetchSlackMessages() : [],
   ]);
 
-  const granolaMeetings = granolaAvailable ? fetchGranolaMeetings() : [];
   const posthogMetrics = isPostHogConfigured() ? await fetchPostHogMetrics() : {};
 
   // Fetch MCP resources from all enabled servers
@@ -251,7 +257,7 @@ async function doFetchAllData(): Promise<DatasourceData> {
     githubNotifications,
     notionPages,
     slackMessages,
-    granolaMeetings,
+    granolaMeetings: [],
     posthogMetrics,
     mcpResources: mcpResources.length > 0 ? mcpResources : undefined,
   };

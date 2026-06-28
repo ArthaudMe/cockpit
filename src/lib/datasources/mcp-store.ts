@@ -1,7 +1,12 @@
 import fs from "fs";
 import path from "path";
 import os from "os";
+import crypto from "crypto";
 import { readJsonCached, invalidateFileCache } from "../fs-cache";
+import type {
+  OAuthClientInformationMixed,
+  OAuthTokens,
+} from "@modelcontextprotocol/sdk/shared/auth.js";
 
 const STORE_DIR = path.join(os.homedir(), ".cockpit");
 const STORE_PATH = path.join(STORE_DIR, "mcp-servers.json");
@@ -9,7 +14,14 @@ const STORE_PATH = path.join(STORE_DIR, "mcp-servers.json");
 export interface McpServerConfig {
   id: string;
   name: string;
-  transport: "stdio" | "sse";
+  transport: "stdio" | "sse" | "streamable-http";
+  preset?: "granola" | "attio";
+  oauth?: {
+    state?: string;
+    codeVerifier?: string;
+    clientInformation?: OAuthClientInformationMixed;
+    tokens?: OAuthTokens;
+  };
   // stdio
   command?: string;
   args?: string[];
@@ -21,7 +33,7 @@ export interface McpServerConfig {
   addedAt: number;
 }
 
-const VALID_TRANSPORTS = new Set<string>(["stdio", "sse"]);
+const VALID_TRANSPORTS = new Set<string>(["stdio", "sse", "streamable-http"]);
 
 /**
  * Validate a complete MCP server config (transport, command, url, args, env).
@@ -31,7 +43,7 @@ export function validateMcpServerConfig(
   config: Partial<McpServerConfig>,
 ): string | null {
   if (!config.transport || !VALID_TRANSPORTS.has(config.transport)) {
-    return "transport must be 'stdio' or 'sse'";
+    return "transport must be 'stdio', 'sse', or 'streamable-http'";
   }
 
   if (config.transport === "stdio") {
@@ -49,9 +61,9 @@ export function validateMcpServerConfig(
     }
   }
 
-  if (config.transport === "sse") {
+  if (config.transport === "sse" || config.transport === "streamable-http") {
     if (!config.url || typeof config.url !== "string") {
-      return "url is required for sse transport";
+      return "url is required for remote MCP transport";
     }
     try {
       const parsed = new URL(config.url);
@@ -106,6 +118,76 @@ export function getMcpServers(): McpServerConfig[] {
 
 export function getMcpServer(id: string): McpServerConfig | null {
   return read().find((s) => s.id === id) ?? null;
+}
+
+export function getMcpServerByPreset(preset: NonNullable<McpServerConfig["preset"]>): McpServerConfig | null {
+  return read().find((s) => s.preset === preset) ?? null;
+}
+
+export function getMcpServerByOAuthState(state: string): McpServerConfig | null {
+  return read().find((s) => s.oauth?.state === state) ?? null;
+}
+
+const MCP_PRESETS: Record<NonNullable<McpServerConfig["preset"]>, { name: string; url: string }> = {
+  granola: {
+    name: "Granola",
+    url: "https://mcp.granola.ai/mcp",
+  },
+  attio: {
+    name: "Attio",
+    url: "https://mcp.attio.com/mcp",
+  },
+};
+
+export function ensurePresetMcpServer(preset: NonNullable<McpServerConfig["preset"]>): McpServerConfig {
+  const definition = MCP_PRESETS[preset];
+  const existing = getMcpServerByPreset(preset);
+  if (existing) {
+    const updated: McpServerConfig = {
+      ...existing,
+      name: definition.name,
+      transport: "streamable-http",
+      url: definition.url,
+      enabled: true,
+      preset,
+    };
+    saveMcpServer(updated);
+    return updated;
+  }
+
+  const config: McpServerConfig = {
+    id: crypto.randomUUID(),
+    name: definition.name,
+    transport: "streamable-http",
+    url: definition.url,
+    enabled: true,
+    preset,
+    addedAt: Date.now(),
+  };
+  saveMcpServer(config);
+  return config;
+}
+
+export function removeMcpServerByPreset(preset: NonNullable<McpServerConfig["preset"]>) {
+  write(read().filter((s) => s.preset !== preset));
+}
+
+export function patchMcpServerOAuth(
+  id: string,
+  updater: (oauth: NonNullable<McpServerConfig["oauth"]>) => NonNullable<McpServerConfig["oauth"]>,
+) {
+  const configs = read();
+  const idx = configs.findIndex((s) => s.id === id);
+  if (idx < 0) return;
+  configs[idx] = {
+    ...configs[idx],
+    oauth: updater({ ...(configs[idx].oauth || {}) }),
+  };
+  write(configs);
+}
+
+export function hasMcpOAuthTokens(config: McpServerConfig | null | undefined): boolean {
+  return Boolean(config?.oauth?.tokens?.access_token);
 }
 
 export function saveMcpServer(config: McpServerConfig) {

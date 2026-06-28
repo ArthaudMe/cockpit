@@ -122,6 +122,7 @@ export async function searchSlackMessages(query: string): Promise<SlackMessage[]
       const ts = Number(match.ts) * 1000;
 
       messages.push({
+        id: match.ts ? `slack:${channelName}:${match.ts}` : undefined,
         channel: `#${channelName}`,
         message: (match.text || "").slice(0, 200),
         author,
@@ -193,6 +194,7 @@ export async function fetchSlackMessages(): Promise<SlackMessage[]> {
             : `${Math.round(diffH / 24)}d ago`;
 
       return {
+        id: msg.ts ? `slack:${channel.id}:${msg.ts}` : undefined,
         channel: `#${channel.name}`,
         message: (msg.text || "").slice(0, 200),
         author: nameById.get(msg.user || "unknown") || msg.user || "unknown",

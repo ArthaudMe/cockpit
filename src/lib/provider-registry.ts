@@ -54,6 +54,12 @@ type ProviderSpec = {
   /** Args to detect version (e.g., ["--version"]) */
   versionArgs: string[];
   capabilities: ProviderCapabilities;
+  auth?: {
+    loginCommand: string;
+    loginRoute?: string;
+    unauthenticatedMatchers: string[];
+    loginHint?: string;
+  };
   /** Build CLI args for a one-shot prompt */
   buildArgs: (model: string, systemPrompt: string, opts?: { images?: string[] }) => string[];
 };
@@ -124,6 +130,18 @@ export const PROVIDERS: Record<string, ProviderDef> = {
         autoApprove: { kind: "argv", args: ["--allowedTools", "mcp__*"] },
       },
     },
+    auth: {
+      loginCommand: "claude auth login",
+      loginRoute: "/api/authenticate-claude",
+      unauthenticatedMatchers: [
+        "not logged in",
+        "please run /login",
+        "authentication required",
+        "not authenticated",
+        "claude auth login",
+      ],
+      loginHint: "If the browser sign-in flow does not open, run the command manually.",
+    },
     buildArgs: (model, systemPrompt, opts) => {
       const args = [
         "-p",
@@ -173,6 +191,20 @@ export const PROVIDERS: Record<string, ProviderDef> = {
       permissions: {
         autoApprove: { kind: "none" },
       },
+    },
+    auth: {
+      loginCommand: "codex login",
+      unauthenticatedMatchers: [
+        "not logged in",
+        "login required",
+        "not authenticated",
+        "authentication required",
+        "codex login",
+        "run /login",
+        "run `/login`",
+        "sign in",
+      ],
+      loginHint: "You can also start Codex interactively and run /login.",
     },
     buildArgs: (model, systemPrompt) => [
       "-q",

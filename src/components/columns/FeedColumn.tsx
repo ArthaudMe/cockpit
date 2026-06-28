@@ -1,18 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import type { ContextFocus } from "../views/ContextualChatView";
 import { compactDisplayText } from "@/lib/compact-text";
-
-type FeedItem = {
-  type: string;
-  actor: string;
-  event: string;
-  project: string | null;
-  time: string;
-  icon: string;
-  detail?: string;
-};
+import { usePersistedState } from "@/lib/use-persisted-state";
+import type { FeedItem } from "@/lib/context-client";
 
 function Panel({
   title,
@@ -43,13 +35,21 @@ function Panel({
 
 function feedItemToFocus(item: FeedItem): ContextFocus {
   const displayEvent = compactDisplayText(item.event);
+  const displayTime = item.timeContext || item.time;
+  const absoluteTime = item.occurredAt ? new Date(item.occurredAt).toLocaleString() : undefined;
   return {
     title: displayEvent.length > 50 ? displayEvent.slice(0, 50) + "..." : displayEvent,
-    subtitle: `${item.actor} · ${item.time}${item.project ? ` · ${item.project}` : ""}`,
-    source: item.type === "agent" ? "Agent" : item.type === "code" ? "GitHub" : item.type === "sales" ? "Sales" : item.type === "meeting" ? "Calendar" : item.type === "milestone" ? "Linear" : "Feed",
+    subtitle: `${item.actor} · ${displayTime}${item.project ? ` · ${item.project}` : ""}`,
+    source: item.type === "agent" ? "Agent" : item.type === "code" ? "GitHub" : item.type === "sales" ? "Sales" : item.type === "meeting" ? "Calendar" : item.type === "milestone" ? "Linear" : item.type === "data" ? "Data" : "Feed",
     icon: item.icon,
     data: [
-      { Actor: item.actor, Event: item.event, ...(item.project ? { Project: item.project } : {}), Time: item.time },
+      {
+        Actor: item.actor,
+        Event: item.event,
+        ...(item.project ? { Project: item.project } : {}),
+        Time: displayTime,
+        ...(absoluteTime ? { Occurred: absoluteTime } : {}),
+      },
     ],
     suggestedQuestions: item.type === "agent"
       ? ["What did the agent do exactly?", "Show me the details", "Are there any issues?", "What's the agent working on next?"]
@@ -60,7 +60,7 @@ function feedItemToFocus(item: FeedItem): ContextFocus {
       : item.type === "meeting"
       ? ["Prep me for this", "What context do I need?", "Draft an agenda", "What are the open items?"]
       : ["Tell me more about this", "What's the context?", "What should I do about this?", "How does this affect our plans?"],
-    systemContext: `The user is looking at a company feed event: ${item.actor} — "${displayEvent}" (type: ${item.type}, ${item.time}${item.project ? `, project: ${item.project}` : ""}).${item.detail ? `\n\nFull details:\n${item.detail}` : ""}\n\nHelp them understand and take action. Use the details above to give a specific, informed answer.`,
+    systemContext: `The user is looking at a company feed event: ${item.actor} — "${displayEvent}" (type: ${item.type}, ${displayTime}${item.project ? `, project: ${item.project}` : ""}${absoluteTime ? `, occurred at: ${absoluteTime}` : ""}).${item.detail ? `\n\nFull details:\n${item.detail}` : ""}\n\nHelp them understand and take action. Use the details above to give a specific, informed answer.`,
   };
 }
 
@@ -71,6 +71,7 @@ const TYPE_COLOR: Record<string, string> = {
   meeting: "var(--yellow)",
   sales: "var(--yellow)",
   milestone: "var(--green)",
+  data: "var(--purple)",
 };
 
 export function FeedColumn({
@@ -86,14 +87,53 @@ export function FeedColumn({
 }) {
   const [visibleCount, setVisibleCount] = useState(0);
   const [filter, setFilter] = useState<string | null>(null);
+  const [showDone, setShowDone] = useState(false);
+  const [doneIds, setDoneIds] = usePersistedState<string[]>(
+    "cockpit-feed-done-ids",
+    [],
+    {
+      serialize: (ids) => Array.from(new Set(ids)).slice(-500),
+    },
+  );
+  const doneIdSet = useMemo(() => new Set(doneIds), [doneIds]);
+  const statusFeed = useMemo(
+    () => feed.filter((item) => doneIdSet.has(item.id) === showDone),
+    [doneIdSet, feed, showDone],
+  );
+  const filteredFeed = useMemo(
+    () => filter ? statusFeed.filter((f) => f.type === filter) : statusFeed,
+    [filter, statusFeed],
+  );
+  const types = useMemo(
+    () => Array.from(new Set(statusFeed.map((f) => f.type))),
+    [statusFeed],
+  );
+  const doneCount = useMemo(
+    () => feed.filter((item) => doneIdSet.has(item.id)).length,
+    [doneIdSet, feed],
+  );
+  const activeCount = feed.length - doneCount;
 
   // Show all items immediately (avoids dozens of rapid re-renders)
   useEffect(() => {
-    setVisibleCount(feed.length);
-  }, [feed.length]);
+    setVisibleCount(filteredFeed.length);
+  }, [filteredFeed.length]);
 
-  const filteredFeed = filter ? feed.filter((f) => f.type === filter) : feed;
-  const types = Array.from(new Set(feed.map((f) => f.type)));
+  useEffect(() => {
+    if (filter && !types.includes(filter)) {
+      setFilter(null);
+    }
+  }, [filter, types]);
+
+  const toggleDone = useCallback(
+    (id: string) => {
+      setDoneIds((prev) => {
+        if (prev.includes(id)) return prev.filter((existing) => existing !== id);
+        return [...prev, id].slice(-500);
+      });
+    },
+    [setDoneIds],
+  );
 
   if (feed.length === 0 && !hasAnyDatasource) {
     return (
@@ -141,10 +181,32 @@ export function FeedColumn({
   }
 
   return (
-    <Panel title="Live Feed" count={feed.length}>
+    <Panel title="Live Feed" count={showDone ? `${doneCount} done` : activeCount}>
       {/* Filter chips */}
       {feed.length > 0 && (
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.2rem", marginBottom: "0.4rem" }}>
+        <button
+          onClick={() => {
+            setShowDone(false);
+            setFilter(null);
+          }}
+          className={`tag ${!showDone ? "tag-green" : "tag-dim"}`}
+          style={{ cursor: "pointer", border: "none", fontFamily: "inherit" }}
+        >
+          Open
+        </button>
+        {doneCount > 0 && (
+          <button
+            onClick={() => {
+              setShowDone(true);
+              setFilter(null);
+            }}
+            className={`tag ${showDone ? "tag-green" : "tag-dim"}`}
+            style={{ cursor: "pointer", border: "none", fontFamily: "inherit" }}
+          >
+            Done {doneCount}
+          </button>
+        )}
         <button
           onClick={() => setFilter(null)}
           className={`tag ${!filter ? "tag-green" : "tag-dim"}`}
@@ -166,13 +228,24 @@ export function FeedColumn({
       )}
 
       {/* Feed items */}
-      {filteredFeed.map((item, i) => (
+      {filteredFeed.length === 0 ? (
+        <div className="empty-state">
+          {showDone
+            ? "No done feed items"
+            : doneCount > 0
+              ? "Feed is clear. Done items are hidden."
+              : "No live feed items yet."}
+        </div>
+      ) : filteredFeed.map((item, i) => {
+        const isDone = doneIdSet.has(item.id);
+        const displayTime = item.timeContext || item.time;
+        return (
         <div
-          key={i}
+          key={item.id}
           className="feed-item"
           onClick={() => onOpenFocus(feedItemToFocus(item))}
           style={{
-            opacity: i < visibleCount ? 1 : 0,
+            opacity: i < visibleCount ? (isDone ? 0.55 : 1) : 0,
             transform: i < visibleCount ? "translateY(0)" : "translateY(4px)",
             transition: "opacity 0.3s ease, transform 0.3s ease",
           }}
@@ -184,7 +257,26 @@ export function FeedColumn({
                 <span style={{ fontSize: "0.75rem", fontWeight: 600, color: TYPE_COLOR[item.type] || "var(--text)" }}>
                   {item.actor}
                 </span>
-                <span className="feed-time">{item.time}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", flexShrink: 0 }}>
+                  <span className="feed-time" title={item.time}>{displayTime}</span>
+                  <button
+                    className={`checkbox ${isDone ? "checked" : ""}`}
+                    type="button"
+                    aria-label={isDone ? "Mark feed item as open" : "Mark feed item as done"}
+                    title={isDone ? "Mark as open" : "Mark as done"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleDone(item.id);
+                    }}
+                    style={{
+                      background: isDone ? "color-mix(in srgb, var(--green) 10%, transparent)" : "transparent",
+                      cursor: "pointer",
+                      padding: 0,
+                    }}
+                  >
+                    {isDone ? "✓" : ""}
+                  </button>
+                </div>
               </div>
               <div className="feed-title">{compactDisplayText(item.event)}</div>
               {item.project && (
@@ -195,7 +287,8 @@ export function FeedColumn({
             </div>
           </div>
         </div>
-      ))}
+        );
+      })}
 
       {/* Live indicator */}
       <div

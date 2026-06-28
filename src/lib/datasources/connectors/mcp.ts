@@ -1,8 +1,10 @@
 import { Client } from "@modelcontextprotocol/sdk/client";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { McpServerConfig } from "../mcp-store";
 import type { McpResourceItem } from "../types";
+import { createMcpAuthProvider } from "../mcp-oauth";
 
 const MAX_RESOURCE_TEXT = 2000;
 const CONNECT_TIMEOUT = 15_000;
@@ -50,6 +52,13 @@ async function createTransport(config: McpServerConfig) {
   if (config.transport === "sse") {
     if (!config.url) throw new Error("sse transport requires a url");
     return new SSEClientTransport(new URL(config.url));
+  }
+
+  if (config.transport === "streamable-http") {
+    if (!config.url) throw new Error("streamable-http transport requires a url");
+    return new StreamableHTTPClientTransport(new URL(config.url), {
+      authProvider: createMcpAuthProvider(config.id),
+    });
   }
 
   throw new Error(`Unknown transport: ${config.transport}`);
@@ -176,7 +185,10 @@ export async function testMcpConnection(
     console.error("[MCP test]", err);
     return {
       success: false,
-      error: "Connection failed. Check the server URL and try again.",
+      error:
+        config.transport === "streamable-http"
+          ? "Connection needs browser authorization. Open the MCP provider's authorization flow, then try again."
+          : "Connection failed. Check the server URL and try again.",
     };
   }
 }

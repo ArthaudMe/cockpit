@@ -6,6 +6,14 @@ import {
   validateMcpServerConfig,
 } from "@/lib/datasources/mcp-store";
 import { disconnectClient } from "@/lib/datasources/connectors/mcp";
+import type { McpServerConfig } from "@/lib/datasources/mcp-store";
+
+function publicMcpServer(config: McpServerConfig) {
+  const safe: Partial<McpServerConfig> = { ...config };
+  delete safe.oauth;
+  delete safe.env;
+  return safe;
+}
 
 export async function GET(
   _req: NextRequest,
@@ -16,7 +24,7 @@ export async function GET(
   if (!server) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  return NextResponse.json(server);
+  return NextResponse.json(publicMcpServer(server));
 }
 
 export async function PATCH(
@@ -37,6 +45,7 @@ export async function PATCH(
   // Don't allow changing the id or addedAt
   delete updates.id;
   delete updates.addedAt;
+  delete updates.oauth;
 
   // Validate the merged config (existing + patch), not just the patch alone
   const merged = { ...server, ...updates };
@@ -58,7 +67,8 @@ export async function PATCH(
   // If config changed, disconnect so it reconnects with new config
   await disconnectClient(id);
 
-  return NextResponse.json(getMcpServer(id));
+  const updated = getMcpServer(id);
+  return NextResponse.json(updated ? publicMcpServer(updated) : null);
 }
 
 export async function DELETE(

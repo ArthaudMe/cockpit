@@ -99,6 +99,239 @@ function ConnectPrompt({
   );
 }
 
+type CalendarItem = Context["calendar"][number];
+type IndexedCalendarItem = { event: CalendarItem; index: number };
+
+function localDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseCalendarTime(event: CalendarItem): number {
+  if (!event.date) return Number.MAX_SAFE_INTEGER;
+  const [year, month, day] = event.date.split("-").map(Number);
+  const match = event.time.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if (!match) return new Date(year, month - 1, day, 12, 0, 0, 0).getTime();
+
+  let hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const period = match[3].toUpperCase();
+  if (period === "PM" && hours !== 12) hours += 12;
+  if (period === "AM" && hours === 12) hours = 0;
+  return new Date(year, month - 1, day, hours, minutes, 0, 0).getTime();
+}
+
+function dateLabel(dateStr: string, todayStr: string, tomorrowStr: string): { day: string; date: string } {
+  if (dateStr === "unknown") return { day: "Upcoming", date: "" };
+  const date = new Date(dateStr + "T12:00:00");
+  const day =
+    dateStr === todayStr
+      ? "Today"
+      : dateStr === tomorrowStr
+        ? "Tomorrow"
+        : date.toLocaleDateString("en-US", { weekday: "long" });
+  return {
+    day,
+    date: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+  };
+}
+
+function CalendarEventRow({
+  item,
+  color,
+  onClick,
+}: {
+  item: IndexedCalendarItem;
+  color: string;
+  onClick: (item: IndexedCalendarItem) => void;
+}) {
+  const { event } = item;
+  return (
+    <div
+      className="feed-item"
+      onClick={() => onClick(item)}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.35rem" }}>
+        <span className="feed-title">{event.title}</span>
+        <span className="feed-time">{event.duration}</span>
+      </div>
+      <div className="feed-meta">
+        <span style={{ fontSize: "0.75rem", color }}>{event.time}</span>
+        <span className="feed-time">{event.attendees?.length ? event.attendees.join(", ") : "Just you"}</span>
+      </div>
+    </div>
+  );
+}
+
+function CalendarDayGroup({
+  dateStr,
+  items,
+  color,
+  todayStr,
+  tomorrowStr,
+  onEventClick,
+}: {
+  dateStr: string;
+  items: IndexedCalendarItem[];
+  color: string;
+  todayStr: string;
+  tomorrowStr: string;
+  onEventClick: (item: IndexedCalendarItem) => void;
+}) {
+  const label = dateLabel(dateStr, todayStr, tomorrowStr);
+
+  return (
+    <div>
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "0.35rem",
+        padding: "0.3rem 0",
+      }}>
+        <span style={{
+          fontSize: "0.75rem",
+          fontWeight: 700,
+          color,
+          textTransform: "uppercase",
+          letterSpacing: "0.05em",
+        }}>
+          {label.day}
+        </span>
+        <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+          {label.date}
+        </span>
+        <div style={{ flex: 1, height: 1, background: color, opacity: 0.2 }} />
+      </div>
+      {items.map((item) => (
+        <CalendarEventRow
+          key={`${item.index}-${item.event.date}-${item.event.time}-${item.event.title}`}
+          item={item}
+          color={color}
+          onClick={onEventClick}
+        />
+      ))}
+    </div>
+  );
+}
+
+function CalendarAgenda({
+  events,
+  futureOpen,
+  onToggleFuture,
+  onCalendarClick,
+  onPrefill,
+}: {
+  events: CalendarItem[];
+  futureOpen: boolean;
+  onToggleFuture: () => void;
+  onCalendarClick?: (index: number) => void;
+  onPrefill: (text: string) => void;
+}) {
+  const today = new Date();
+  const todayStr = localDateKey(today);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = localDateKey(tomorrow);
+  const DAY_COLORS = ["var(--accent)", "var(--green)", "var(--yellow)", "var(--purple)", "var(--pink)", "var(--blue)", "var(--orange)"];
+  const grouped = new Map<string, IndexedCalendarItem[]>();
+
+  events.forEach((event, index) => {
+    const key = event.date || "unknown";
+    const items = grouped.get(key) || [];
+    items.push({ event, index });
+    grouped.set(key, items);
+  });
+
+  for (const items of grouped.values()) {
+    items.sort((a, b) => parseCalendarTime(a.event) - parseCalendarTime(b.event));
+  }
+
+  const todayItems = grouped.get(todayStr) || [];
+  const futureDates = [...grouped.keys()]
+    .filter((dateStr) => dateStr === "unknown" || dateStr > todayStr)
+    .sort((a, b) => a.localeCompare(b));
+  const futureCount = futureDates.reduce((sum, dateStr) => sum + (grouped.get(dateStr)?.length || 0), 0);
+  const nextFuture = futureDates.flatMap((dateStr) => grouped.get(dateStr) || [])[0];
+  const nextLabel = nextFuture
+    ? `${dateLabel(nextFuture.event.date || "unknown", todayStr, tomorrowStr).day} ${nextFuture.event.time}`
+    : "";
+
+  const handleClick = (item: IndexedCalendarItem) => {
+    if (onCalendarClick) onCalendarClick(item.index);
+    else onPrefill(`Prep me for the ${item.event.title} — what should I know?`);
+  };
+
+  return (
+    <div>
+      {todayItems.length > 0 ? (
+        <CalendarDayGroup
+          dateStr={todayStr}
+          items={todayItems}
+          color={DAY_COLORS[0]}
+          todayStr={todayStr}
+          tomorrowStr={tomorrowStr}
+          onEventClick={handleClick}
+        />
+      ) : (
+        <div style={{
+          fontSize: "0.68rem",
+          color: "var(--text-muted)",
+          padding: "0.35rem 0 0.45rem",
+          borderBottom: futureCount > 0 ? "1px solid var(--border)" : "none",
+        }}>
+          No more events today
+        </div>
+      )}
+
+      {futureCount > 0 && (
+        <div style={{ paddingTop: "0.35rem" }}>
+          <button
+            type="button"
+            onClick={onToggleFuture}
+            style={{
+              width: "100%",
+              background: "none",
+              border: "1px solid var(--border)",
+              borderRadius: 3,
+              color: "var(--text-dim)",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              fontSize: "0.68rem",
+              padding: "0.25rem 0.35rem",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "0.4rem",
+            }}
+          >
+            <span>{futureOpen ? "Hide future days" : `Future days (${futureCount})`}</span>
+            <span style={{ color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+              {nextLabel}
+            </span>
+          </button>
+          {futureOpen && (
+            <div style={{ maxHeight: "14rem", overflowY: "auto", paddingRight: "0.15rem", marginTop: "0.35rem" }}>
+              {futureDates.map((dateStr, i) => (
+                <CalendarDayGroup
+                  key={dateStr}
+                  dateStr={dateStr}
+                  items={grouped.get(dateStr) || []}
+                  color={DAY_COLORS[(i + 1) % DAY_COLORS.length]}
+                  todayStr={todayStr}
+                  tomorrowStr={tomorrowStr}
+                  onEventClick={handleClick}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ContextColumn({
   context,
   onPrefill,
@@ -119,6 +352,7 @@ export function ContextColumn({
   onConnectService?: (serviceId: string) => void;
 }) {
   const [todos, setTodos] = usePersistedState("cockpit-todos", context.todos);
+  const [futureCalendarOpen, setFutureCalendarOpen] = useState(false);
 
   const toggleTodo = (e: React.MouseEvent, index: number) => {
     e.stopPropagation();
@@ -141,78 +375,15 @@ export function ContextColumn({
               onConnect={() => onConnectService ? onConnectService("google") : onSettingsClick?.()}
             />
           )
-        ) : (() => {
-          // Group events by date
-          const groups: Record<string, typeof context.calendar> = {};
-          for (const m of context.calendar) {
-            const key = m.date || "unknown";
-            if (!groups[key]) groups[key] = [];
-            groups[key].push(m);
-          }
-          const DAY_COLORS = ["var(--accent)", "var(--green)", "var(--yellow)", "var(--purple)", "var(--pink)", "var(--blue)", "var(--orange)"];
-          const sortedDates = Object.keys(groups).sort();
-
-          return sortedDates.map((dateStr, di) => {
-            const events = groups[dateStr];
-            const date = dateStr !== "unknown" ? new Date(dateStr + "T12:00:00") : null;
-            const today = new Date();
-            today.setHours(12, 0, 0, 0);
-            const todayStr = today.toISOString().split("T")[0];
-            const tomorrow = new Date(today);
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            const tomorrowStr = tomorrow.toISOString().split("T")[0];
-            const isToday = dateStr === todayStr;
-            const isTomorrow = dateStr === tomorrowStr;
-            const dayLabel = !date ? "Upcoming" : isToday ? "Today" : isTomorrow ? "Tomorrow" : date.toLocaleDateString("en-US", { weekday: "long" });
-            const dateLabel = date ? date.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
-            const color = DAY_COLORS[di % DAY_COLORS.length];
-
-            return (
-              <div key={dateStr}>
-                <div style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.35rem",
-                  padding: "0.3rem 0",
-                  marginTop: di > 0 ? "0.25rem" : 0,
-                }}>
-                  <span style={{
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    color: color,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.05em",
-                  }}>
-                    {dayLabel}
-                  </span>
-                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                    {dateLabel}
-                  </span>
-                  <div style={{ flex: 1, height: 1, background: color, opacity: 0.2 }} />
-                </div>
-                {events.map((m, i) => {
-                  const globalIndex = context.calendar.indexOf(m);
-                  return (
-                    <div
-                      key={i}
-                      className="feed-item"
-                      onClick={() => onCalendarClick ? onCalendarClick(globalIndex) : onPrefill(`Prep me for the ${m.title} — what should I know?`)}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                        <span className="feed-title">{m.title}</span>
-                        <span className="feed-time">{m.duration}</span>
-                      </div>
-                      <div className="feed-meta">
-                        <span style={{ fontSize: "0.75rem", color }}>{m.time}</span>
-                        <span className="feed-time">{m.attendees?.length ? m.attendees.join(", ") : "Just you"}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          });
-        })()}
+        ) : (
+          <CalendarAgenda
+            events={context.calendar}
+            futureOpen={futureCalendarOpen}
+            onToggleFuture={() => setFutureCalendarOpen((open) => !open)}
+            onCalendarClick={onCalendarClick}
+            onPrefill={onPrefill}
+          />
+        )}
       </Panel>
 
       {/* Usage Analytics — only shown when data exists */}
