@@ -25,7 +25,8 @@ export type ProviderPromptCapability = {
   systemPrompt:
     | { kind: "append-system-prompt-flag" }
     | { kind: "system-prompt-flag" }
-    | { kind: "ollama-system-flag" };
+    | { kind: "ollama-system-flag" }
+    | { kind: "codex-developer-instructions-config" };
   images: { kind: "argv-image-flags"; flag: string } | { kind: "none" };
 };
 
@@ -44,6 +45,7 @@ export interface ProviderCapabilities {
   prompt: ProviderPromptCapability;
   lifecycle: ProviderLifecycleCapability;
   permissions: ProviderPermissionCapability;
+  output: { kind: "plain-text" } | { kind: "codex-jsonl" };
 }
 
 type ProviderSpec = {
@@ -129,6 +131,7 @@ export const PROVIDERS: Record<string, ProviderDef> = {
       permissions: {
         autoApprove: { kind: "argv", args: ["--allowedTools", "mcp__*"] },
       },
+      output: { kind: "plain-text" },
     },
     auth: {
       loginCommand: "claude auth login",
@@ -181,7 +184,7 @@ export const PROVIDERS: Record<string, ProviderDef> = {
       },
       prompt: {
         delivery: "stdin",
-        systemPrompt: { kind: "system-prompt-flag" },
+        systemPrompt: { kind: "codex-developer-instructions-config" },
         images: { kind: "none" },
       },
       lifecycle: {
@@ -191,6 +194,7 @@ export const PROVIDERS: Record<string, ProviderDef> = {
       permissions: {
         autoApprove: { kind: "none" },
       },
+      output: { kind: "codex-jsonl" },
     },
     auth: {
       loginCommand: "codex login",
@@ -207,9 +211,13 @@ export const PROVIDERS: Record<string, ProviderDef> = {
       loginHint: "You can also start Codex interactively and run /login.",
     },
     buildArgs: (model, systemPrompt) => [
-      "-q",
+      "exec",
+      "--json",
       "--model", model,
-      "--system-prompt", systemPrompt,
+      "--skip-git-repo-check",
+      "--ephemeral",
+      "-c", `developer_instructions=${JSON.stringify(systemPrompt)}`,
+      "-",
     ],
   }),
 
@@ -246,6 +254,7 @@ export const PROVIDERS: Record<string, ProviderDef> = {
       permissions: {
         autoApprove: { kind: "none" },
       },
+      output: { kind: "plain-text" },
     },
     buildArgs: (model, systemPrompt) => ["run", model, "--system", systemPrompt],
   }),

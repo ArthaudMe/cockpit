@@ -1,4 +1,5 @@
 import { getAgent, sendToAgent } from "./agent-manager";
+import { AgentOutputParser } from "./agent-output";
 import { extractAndProcessMemories } from "./memory";
 import { extractAndProcessSkills } from "./skills-extract";
 import { persistMessage } from "./knowledge/conversations";
@@ -12,23 +13,32 @@ import { isProviderAuthError, providerLoginNeededMessage } from "./provider-auth
  */
 export function streamAgentResponse(
   agentId: string,
-  opts: { message: string; focusContext?: string; images?: string[] }
+  opts: { message: string; focusContext?: string; images?: string[] },
 ): Response {
   const { message, focusContext, images } = opts;
   const agent = getAgent(agentId);
   const provider = agent ? getProvider(agent.backend) : undefined;
   const encoder = new TextEncoder();
+  const outputParser = new AgentOutputParser(provider?.capabilities.output.kind ?? "plain-text");
   const proc = sendToAgent(agentId, message, focusContext, images);
 
   let responseText = "";
   let stderrText = "";
+  let eventErrorText = "";
 
   const stream = new ReadableStream({
     start(controller) {
       proc.stdout!.on("data", (chunk: Buffer) => {
-        const text = chunk.toString();
-        responseText += text;
-        controller.enqueue(encoder.encode(text));
+        for (const parsed of outputParser.push(chunk.toString())) {
+          if (parsed.kind === "assistant_delta") {
+            responseText += parsed.text;
+            controller.enqueue(encoder.encode(parsed.text));
+          } else {
+            eventErrorText += parsed.text;
+            stderrText += parsed.text;
+            console.error(`[agent:${agentId}:event-error]`, parsed.text);
+          }
+        }
       });
 
       proc.stderr!.on("data", (chunk: Buffer) => {
@@ -38,17 +48,34 @@ export function streamAgentResponse(
       });
 
       proc.on("close", (code) => {
+        for (const parsed of outputParser.flush()) {
+          if (parsed.kind === "assistant_delta") {
+            responseText += parsed.text;
+            controller.enqueue(encoder.encode(parsed.text));
+          } else {
+            eventErrorText += parsed.text;
+            stderrText += parsed.text;
+            console.error(`[agent:${agentId}:event-error]`, parsed.text);
+          }
+        }
+
         if (code !== 0) {
-          const combined = (responseText + stderrText).toLowerCase();
+          const combined = (responseText + stderrText + eventErrorText).toLowerCase();
           if (provider && isProviderAuthError(provider, combined)) {
             if (provider.auth?.loginRoute) {
-              fetch("http://localhost:" + (process.env.PORT || "3939") + provider.auth.loginRoute, { method: "POST" }).catch(() => {});
+              fetch(`http://localhost:${process.env.PORT || "3939"}${provider.auth.loginRoute}`, {
+                method: "POST",
+              }).catch(() => {});
             }
             const loginMessage = `\n\n${providerLoginNeededMessage(provider)}`;
             responseText += loginMessage;
             controller.enqueue(encoder.encode(loginMessage));
+          } else if (eventErrorText.trim()) {
+            const eventMessage = `\n\n${eventErrorText.trim()}`;
+            responseText += eventMessage;
+            controller.enqueue(encoder.encode(eventMessage));
           } else {
-            const failureMessage = `\n\nSomething went wrong. Please try sending your message again.`;
+            const failureMessage = "\n\nSomething went wrong. Please try sending your message again.";
             responseText += failureMessage;
             controller.enqueue(encoder.encode(failureMessage));
           }
@@ -92,8 +119,10 @@ export function streamAgentResponse(
 
       proc.on("error", (err) => {
         console.error(`[agent:${agentId}:error]`, err);
-        const providerLabel = provider?.label || "AI backend";
-        controller.enqueue(encoder.encode(`Couldn't connect to ${providerLabel}. Please check that it is installed and try again.`));
+        const backendLabel = provider?.label ?? "AI backend";
+        controller.enqueue(
+          encoder.encode(`Couldn't connect to ${backendLabel}. Please check that it is installed and try again.`),
+        );
         controller.close();
       });
     },

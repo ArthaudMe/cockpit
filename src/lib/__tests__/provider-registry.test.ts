@@ -112,10 +112,15 @@ describe("provider-registry", () => {
   it("codex builds correct args", () => {
     const codex = PROVIDERS.codex;
     const args = codex.buildArgs("o4-mini", "Be concise.");
-    expect(args).toContain("-q");
+    expect(args).toContain("exec");
+    expect(args).toContain("--json");
     expect(args).toContain("--model");
     expect(args).toContain("o4-mini");
-    expect(args).toContain("--system-prompt");
+    expect(args).toContain("--skip-git-repo-check");
+    expect(args).toContain("--ephemeral");
+    expect(args).toContain("-c");
+    expect(args).toContain("developer_instructions=\"Be concise.\"");
+    expect(args[args.length - 1]).toBe("-");
   });
 
   it("each provider default model is in its models list", () => {
@@ -134,6 +139,7 @@ describe("provider-registry", () => {
     expect(providerUsesClaudeHooks(PROVIDERS.codex)).toBe(false);
     expect(providerSupportsImages(PROVIDERS.codex)).toBe(false);
     expect(PROVIDERS.codex.auth?.loginCommand).toBe("codex login");
+    expect(PROVIDERS.codex.capabilities.output).toEqual({ kind: "codex-jsonl" });
 
     expect(PROVIDERS.ollama.capabilities.prompt.systemPrompt).toEqual({
       kind: "ollama-system-flag",

@@ -3,6 +3,8 @@ import { homedir } from "os";
 import { readJsonCached } from "./fs-cache";
 import { buildSkillsPromptSection } from "./skills";
 import { buildMemoryPromptSection } from "./memory";
+import { buildActionPromptSection } from "./actions/schema";
+import { renderContextFragments, type ContextFragment } from "./context-fragments";
 import type { DatasourceData } from "./datasources/types";
 
 type Profile = {
@@ -42,52 +44,64 @@ export function buildSystemPrompt(live?: DatasourceData): string {
 
   // Live datasource sections
   const liveLinear = live?.linearIssues?.length
-    ? `\n\n## Linear Issues (assigned to you)\n${live.linearIssues
+    ? live.linearIssues
         .map(
           (i) =>
             `- ${i.id}: ${i.title} [${i.state}] (${i.priority}) — updated ${i.updatedAt}`
         )
-        .join("\n")}`
-    : "";
+        .join("\n")
+    : "No assigned Linear issues";
 
   const liveGitHub = live?.githubPRs?.length
-    ? `\n\n## GitHub Pull Requests\n${live.githubPRs
+    ? live.githubPRs
         .map(
           (pr) =>
             `- ${pr.repo}: ${pr.title} by ${pr.author} [${pr.status}] — ${pr.time}`
         )
-        .join("\n")}`
-    : "";
+        .join("\n")
+    : "No GitHub pull requests";
 
   const liveEmails = live?.emails?.length
-    ? `\n\n## Recent Emails\n${live.emails
+    ? live.emails
         .slice(0, 5)
         .map((e) => `- ${e.from}: ${e.subject} — ${e.snippet.slice(0, 80)}`)
-        .join("\n")}`
-    : "";
+        .join("\n")
+    : "No recent emails";
 
   const liveNotion = live?.notionPages?.length
-    ? `\n\n## Recent Notion Pages\n${live.notionPages
+    ? live.notionPages
         .slice(0, 8)
         .map((p) => `- ${p.title} (edited ${p.lastEdited})`)
-        .join("\n")}`
-    : "";
+        .join("\n")
+    : "No recent Notion pages";
 
   const liveGranola = live?.granolaMeetings?.length
-    ? `\n\n## Recent Meeting Notes (Granola)\n${live.granolaMeetings
+    ? live.granolaMeetings
         .slice(0, 5)
         .map(
           (m) =>
             `- ${m.title} (${m.time}) [${m.attendees.join(", ")}]${m.summary ? `\n  Summary: ${m.summary}` : ""}`
         )
-        .join("\n")}`
-    : "";
+        .join("\n")
+    : "No recent Granola meeting notes";
 
   const liveMcp = live?.mcpResources?.length
-    ? `\n\n## MCP Data Sources\n${live.mcpResources
+    ? live.mcpResources
         .map((r) => `- [${r.serverName}] ${r.name}: ${r.text.slice(0, 200)}`)
-        .join("\n")}`
-    : "";
+        .join("\n")
+    : "No MCP datasource resources";
+
+  const knowledgeFragments: ContextFragment[] = [
+    { tag: "profile", title: "User Profile", body: `Name: ${userName}${profile.role ? `\nRole: ${profile.role}` : ""}${profile.company ? `\nCompany: ${profile.company}` : ""}` },
+    { tag: "calendar", title: "Today's Calendar", body: calendarData },
+    { tag: "slack", title: "Recent Slack Activity", body: slack },
+    { tag: "linear", title: "Linear Issues Assigned To User", body: liveLinear },
+    { tag: "github", title: "GitHub Pull Requests", body: liveGitHub },
+    { tag: "email", title: "Recent Emails", body: liveEmails },
+    { tag: "notion", title: "Recent Notion Pages", body: liveNotion },
+    { tag: "granola", title: "Recent Meeting Notes", body: liveGranola },
+    { tag: "mcp", title: "MCP Data Sources", body: liveMcp },
+  ];
 
   return `You are a sharp AI co-pilot embedded in Cockpit, a founder's command center. The user is ${userName}.${roleLine}${companyLine}
 
@@ -105,11 +119,7 @@ Never ask "can you share your calendar?" if calendar data is already below. Use 
 
 Here is what you know:
 
-## Today's Calendar
-${calendarData}
-
-## Recent Slack Activity
-${slack}${liveLinear}${liveGitHub}${liveEmails}${liveNotion}${liveGranola}${liveMcp}
+${renderContextFragments(knowledgeFragments)}
 ${buildMemoryPromptSection()}
 
 When answering questions, use this context naturally. Don't say "based on the context I was given" — just answer as if you naturally know this information. Be concise and direct, like a sharp chief of staff. If you don't have information, say so clearly rather than making things up.
@@ -195,12 +205,7 @@ You can propose actions that the user can approve and execute directly from chat
 \`\`\`
 
 Available actions:
-- **linear_create_issue** — Create a Linear issue. Params: title (required), description, teamId (required), priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)
-- **github_comment_pr** — Comment on a GitHub pull request. Params: owner (required), repo (required), pull_number (required), body (required)
-- **slack_send_message** — Send a Slack message. Params: channel (required, channel name or ID), text (required)
-- **calendar_create_event** — Create a Google Calendar event. Params: summary (required), start (required, ISO datetime), end (required, ISO datetime), description, attendees (array of emails)
-- **gmail_draft** — Create a Gmail draft. Params: to (required, email), subject (required), body (required)
-- **notion_update_page** — Append content to a Notion page. Params: pageId (required), content (required, text with newlines for paragraphs)
+${buildActionPromptSection()}
 
 Always set \`confirm: true\` so the user can review and approve the action before it executes. The action will render as a card with Execute/Cancel buttons.
 

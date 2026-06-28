@@ -4,6 +4,7 @@ import { isComposioEnabled } from "@/lib/datasources/composio";
 import { isGoogleConnectedViaComposio } from "@/lib/datasources/token-store";
 import { appendToNotionPage } from "@/lib/datasources/connectors/notion";
 import type { ActionBlock, ActionResult } from "./types";
+import { isValidActionType as isKnownActionType, validateActionParams } from "./schema";
 
 async function executeLinearCreateIssue(
   params: Record<string, unknown>
@@ -249,21 +250,16 @@ async function executeGmailSend(
   });
 }
 
-const SUPPORTED_ACTIONS = new Set([
-  "linear_create_issue",
-  "github_comment_pr",
-  "slack_send_message",
-  "calendar_create_event",
-  "gmail_draft",
-  "gmail_send",
-  "notion_update_page",
-]);
-
 export function isValidActionType(type: string): boolean {
-  return SUPPORTED_ACTIONS.has(type);
+  return isKnownActionType(type);
 }
 
 export async function executeAction(action: ActionBlock): Promise<ActionResult> {
+  const validation = validateActionParams(action.cockpit_action, action.params);
+  if (!validation.ok) {
+    return { success: false, message: validation.message };
+  }
+
   switch (action.cockpit_action) {
     case "linear_create_issue":
       return executeLinearCreateIssue(action.params);
