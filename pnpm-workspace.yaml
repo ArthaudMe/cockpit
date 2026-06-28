@@ -1,3 +1,4 @@
 packages:
   - .
   - proxy
+approveBuilds: electron,esbuild,sharp,protobufjs

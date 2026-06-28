@@ -93,6 +93,7 @@ function nvmNodeBins(home: string): string[] {
   try {
     return readdirSync(nvmVersionsDir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
+      .sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true }))
       .map((entry) => join(nvmVersionsDir, entry.name, "bin"));
   } catch {
     return [];

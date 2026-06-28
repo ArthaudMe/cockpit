@@ -1,14 +1,12 @@
 #!/usr/bin/env node
 
-function present(name) {
-  return Boolean(process.env[name] && process.env[name].trim());
-}
+/**
+ * Fast-fails the release workflow when required GitHub environment secrets are
+ * absent. GitHub masks secret values but expands missing secrets to empty
+ * strings, so checking here gives a concrete error before signing/notarization.
+ */
 
-function missing(names) {
-  return names.filter((name) => !present(name));
-}
-
-const required = [
+const REQUIRED = [
   "CERTIFICATE_P12",
   "CERTIFICATE_PASSWORD",
   "OAUTH_PROXY_URL",
@@ -18,42 +16,39 @@ const required = [
   "COMPOSIO_GMAIL_AUTH_CONFIG",
 ];
 
-const appleIdGroup = [
+const APPLE_ID_GROUP = [
   "APPLE_ID",
   "APPLE_APP_SPECIFIC_PASSWORD",
   "APPLE_TEAM_ID",
 ];
 
-const apiKeyGroup = [
+const APPLE_API_GROUP = [
   "APPLE_API_KEY",
   "APPLE_API_KEY_ID",
   "APPLE_API_ISSUER",
 ];
 
-const missingRequired = missing(required);
-const hasAppleIdGroup = missing(appleIdGroup).length === 0;
-const hasApiKeyGroup = missing(apiKeyGroup).length === 0;
+function isSet(name) {
+  return Boolean((process.env[name] || "").trim());
+}
 
-if (missingRequired.length > 0 || (!hasAppleIdGroup && !hasApiKeyGroup)) {
-  for (const name of missingRequired) {
-    console.error(`[release:check-secrets] missing ${name}`);
-  }
-
-  if (!hasAppleIdGroup && !hasApiKeyGroup) {
-    const missingAppleId = missing(appleIdGroup);
-    const missingApiKey = missing(apiKeyGroup);
-    console.error(
-      `[release:check-secrets] missing notarization credentials: set either ${appleIdGroup.join(", ")} or ${apiKeyGroup.join(", ")}`,
-    );
-    console.error(
-      `[release:check-secrets] Apple ID group missing: ${missingAppleId.join(", ") || "none"}`,
-    );
-    console.error(
-      `[release:check-secrets] App Store Connect API key group missing: ${missingApiKey.join(", ") || "none"}`,
-    );
-  }
-
+function fail(message) {
+  console.error(`[release:secrets] ${message}`);
   process.exit(1);
 }
 
-console.log("[release:check-secrets] release secrets present");
+const missing = REQUIRED.filter((name) => !isSet(name));
+if (missing.length > 0) {
+  fail(`Missing required release secret(s): ${missing.join(", ")}`);
+}
+
+const hasAppleIdCreds = APPLE_ID_GROUP.every(isSet);
+const hasAppleApiCreds = APPLE_API_GROUP.every(isSet);
+
+if (!hasAppleIdCreds && !hasAppleApiCreds) {
+  fail(
+    "Missing Apple notarization credentials. Set either APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID or APPLE_API_KEY, APPLE_API_KEY_ID, APPLE_API_ISSUER.",
+  );
+}
+
+console.log("[release:secrets] ok");

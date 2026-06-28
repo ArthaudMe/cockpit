@@ -1,149 +1,170 @@
 #!/usr/bin/env node
 
-const { spawn } = require("child_process");
-const { existsSync } = require("fs");
-const net = require("net");
+const { existsSync, readFileSync } = require("fs");
+const { createServer } = require("net");
 const path = require("path");
+const { spawn } = require("child_process");
 
-const TOKEN = "smoke-token";
-const HOST = "127.0.0.1";
-const SERVICES = ["google", "slack", "linear", "github", "notion"];
+const root = path.resolve(__dirname, "..", "..");
+const args = new Set(process.argv.slice(2));
+const startServer = args.has("--start");
+const servicesArg = process.argv.find((arg) => arg.startsWith("--services="));
+const services = (servicesArg
+  ? servicesArg.slice("--services=".length).split(",")
+  : ["google", "slack", "linear", "github", "notion"])
+  .map((service) => service.trim())
+  .filter(Boolean);
+
+function log(message) {
+  console.log(`[smoke:datasources] ${message}`);
+}
 
 function fail(message) {
   console.error(`[smoke:datasources] ${message}`);
   process.exit(1);
 }
 
-function log(message) {
-  console.log(`[smoke:datasources] ${message}`);
-}
-
-function parseArgs() {
-  return new Set(process.argv.slice(2));
+function loadEnvFile(filePath) {
+  if (!existsSync(filePath)) return {};
+  const env = {};
+  for (const line of readFileSync(filePath, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const index = trimmed.indexOf("=");
+    if (index === -1) continue;
+    const key = trimmed.slice(0, index).trim();
+    let value = trimmed.slice(index + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    env[key] = value;
+  }
+  return env;
 }
 
 function getFreePort() {
   return new Promise((resolve, reject) => {
-    const server = net.createServer();
+    const server = createServer();
     server.on("error", reject);
-    server.listen(0, HOST, () => {
+    server.listen(0, "127.0.0.1", () => {
       const address = server.address();
       server.close(() => resolve(address.port));
     });
   });
 }
 
-async function requestJson(port, route) {
-  const res = await fetch(`http://${HOST}:${port}${route}`, {
-    headers: { "X-Cockpit-Token": TOKEN },
-  });
-  let data;
-  try {
-    data = await res.json();
-  } catch {
-    data = {};
-  }
-  return { res, data };
-}
-
-async function waitForServer(port, child) {
-  const deadline = Date.now() + 30_000;
-  while (Date.now() < deadline) {
-    if (child.exitCode !== null) {
-      fail(`server exited early with ${child.exitCode}`);
-    }
+async function waitForServer(baseUrl, headers) {
+  const started = Date.now();
+  while (Date.now() - started < 20_000) {
     try {
-      const { res } = await requestJson(port, "/api/status");
-      if (res.ok) return;
+      const res = await fetch(`${baseUrl}/api/status`, { headers });
+      if (res.status !== 503) return;
     } catch {
-      // keep polling
+      // Keep polling.
     }
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  fail("server did not become ready");
+  fail(`Server did not become ready at ${baseUrl}`);
 }
 
-function startServer(port) {
-  const serverJs = path.resolve(".next/standalone/server.js");
-  if (!existsSync(serverJs)) {
-    fail(`standalone server missing at ${serverJs}; run next build and prepare-standalone first`);
+async function readJson(res) {
+  const text = await res.text();
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    return { _raw: text };
   }
-
-  const child = spawn(process.execPath, [serverJs], {
-    cwd: path.dirname(serverJs),
-    env: {
-      ...process.env,
-      HOSTNAME: HOST,
-      PORT: String(port),
-      NODE_ENV: "production",
-      COCKPIT_API_TOKEN: TOKEN,
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-
-  child.stdout.on("data", (data) => process.stdout.write(`[smoke:server] ${data}`));
-  child.stderr.on("data", (data) => process.stderr.write(`[smoke:server:err] ${data}`));
-  return child;
 }
 
-async function checkRoute(port, route) {
-  const { res, data } = await requestJson(port, route);
+async function assertGet(baseUrl, endpoint, headers) {
+  const res = await fetch(`${baseUrl}${endpoint}`, { headers });
+  const data = await readJson(res);
   if (!res.ok) {
-    fail(`${route} returned HTTP ${res.status}: ${data.error || "no error detail"}`);
+    fail(`${endpoint} returned ${res.status}: ${JSON.stringify(data).slice(0, 500)}`);
   }
-  log(`${route}: ok`);
-  return data;
+  log(`${endpoint}: ${res.status}`);
 }
 
-async function checkConnect(port, service) {
-  const { res, data } = await requestJson(port, `/api/datasources/connect?service=${service}`);
-  if (!res.ok) {
-    fail(`${service} connect returned HTTP ${res.status}: ${data.error || "no error detail"}`);
+async function assertConnect(baseUrl, service, headers) {
+  const res = await fetch(`${baseUrl}/api/datasources/connect?service=${service}`, { headers });
+  const data = await readJson(res);
+  const url = typeof data.url === "string" ? data.url : "";
+  if (!res.ok || !/^https?:\/\//.test(url)) {
+    fail(`connect ${service} failed (${res.status}): ${JSON.stringify(data).slice(0, 500)}`);
   }
-  if (!data.url || !/^https?:\/\//.test(data.url)) {
-    fail(`${service} connect did not return a provider URL`);
-  }
+
   if (service === "google") {
-    const host = new URL(data.url).hostname.toLowerCase();
+    const host = new URL(url).hostname.toLowerCase();
     const composioHost =
       host === "composio.dev" ||
       host.endsWith(".composio.dev") ||
       host === "composio.com" ||
       host.endsWith(".composio.com");
     if (!composioHost) {
-      fail(`google connect returned ${host}; expected Composio hosted OAuth`);
+      fail(`connect google returned ${host}; expected Composio hosted OAuth`);
     }
   }
-  log(`connect ${service}: provider URL ok`);
+
+  log(`connect ${service}: ${res.status} provider URL ok`);
 }
 
 async function main() {
-  const args = parseArgs();
-  const shouldStart = args.has("--start");
-  const portArg = process.argv.find((arg) => arg.startsWith("--port="));
-  const port = portArg ? Number(portArg.slice("--port=".length)) : await getFreePort();
+  let child = null;
+  const token = process.env.SMOKE_API_TOKEN || "smoke-token";
+  const headers = { "X-Cockpit-Token": token };
+  let baseUrl = process.env.SMOKE_BASE_URL || "";
 
-  let child;
-  if (shouldStart) {
-    child = startServer(port);
-    await waitForServer(port, child);
+  if (startServer) {
+    const serverJs = path.join(root, ".next", "standalone", "server.js");
+    if (!existsSync(serverJs)) {
+      fail(".next/standalone/server.js not found. Run `pnpm build && node scripts/prepare-standalone.js` first.");
+    }
+
+    const port = Number(process.env.SMOKE_PORT || await getFreePort());
+    baseUrl = `http://127.0.0.1:${port}`;
+    const env = {
+      ...process.env,
+      ...loadEnvFile(path.join(root, ".env.local")),
+      PORT: String(port),
+      HOSTNAME: "127.0.0.1",
+      NODE_ENV: "production",
+      COCKPIT_API_TOKEN: token,
+    };
+
+    child = spawn(process.execPath, [serverJs], {
+      cwd: path.dirname(serverJs),
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    child.stdout.on("data", (data) => process.stdout.write(`[smoke:server] ${data}`));
+    child.stderr.on("data", (data) => process.stderr.write(`[smoke:server] ${data}`));
+    child.on("exit", (code) => {
+      if (code !== null && code !== 0) {
+        console.error(`[smoke:datasources] server exited with ${code}`);
+      }
+    });
   }
 
+  if (!baseUrl) fail("Set SMOKE_BASE_URL or pass --start.");
+
   try {
-    await checkRoute(port, "/api/status");
-    await checkRoute(port, "/api/backends");
-    await checkRoute(port, "/api/datasources");
-    await checkRoute(port, "/api/datasources/data");
-    for (const service of SERVICES) {
-      await checkConnect(port, service);
+    await waitForServer(baseUrl, headers);
+    for (const endpoint of ["/api/status", "/api/backends", "/api/datasources", "/api/datasources/data"]) {
+      await assertGet(baseUrl, endpoint, headers);
     }
+    for (const service of services) {
+      await assertConnect(baseUrl, service, headers);
+    }
+    log("ok");
   } finally {
-    if (child && child.exitCode === null) {
+    if (child) {
       child.kill("SIGTERM");
+      setTimeout(() => child.kill("SIGKILL"), 1000).unref();
     }
   }
 }
 
-main().catch((err) => {
-  fail(err instanceof Error ? err.message : "unexpected failure");
-});
+main().catch((err) => fail(err instanceof Error ? err.message : String(err)));

@@ -5,7 +5,33 @@
  * provider credentials configured before we build a release.
  */
 
+const fs = require("fs");
+
 const DEFAULT_SERVICES = ["github", "linear", "slack", "notion"];
+
+function loadEnvFile(path) {
+  if (!fs.existsSync(path)) return;
+
+  for (const line of fs.readFileSync(path, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+
+    const index = trimmed.indexOf("=");
+    if (index === -1) continue;
+
+    const key = trimmed.slice(0, index).trim();
+    let value = trimmed.slice(index + 1).trim();
+    if (!key || process.env[key] !== undefined) continue;
+
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    process.env[key] = value;
+  }
+}
 
 function fail(message) {
   console.error(`[oauth:check] ${message}`);
@@ -60,6 +86,8 @@ async function postJson(url, secret, service) {
 }
 
 async function main() {
+  loadEnvFile(".env.local");
+
   const rawUrl = process.env.OAUTH_PROXY_URL;
   const secret = process.env.OAUTH_PROXY_SECRET;
 
