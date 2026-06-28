@@ -1,4 +1,5 @@
 import type { DatasourceData } from "./datasources/types";
+import { compactDisplayText } from "./compact-text";
 
 export interface Context {
   user: string;
@@ -134,7 +135,7 @@ export function buildContextFromLiveData(live: DatasourceData, userName?: string
     company_feed.push({
       type: "message",
       actor: s.author,
-      event: s.message,
+      event: compactDisplayText(s.message),
       project: null,
       time: s.time,
       icon: "\u{1F4AC}",
@@ -182,7 +183,7 @@ export function buildContextFromLiveData(live: DatasourceData, userName?: string
     company_feed.push({
       type: "data",
       actor: r.serverName,
-      event: r.name,
+      event: compactDisplayText(r.name),
       project: null,
       time: new Date(r.fetchedAt).toLocaleTimeString("en-US", {
         hour: "numeric",
@@ -202,7 +203,7 @@ export function buildContextFromLiveData(live: DatasourceData, userName?: string
     user: userName || "User",
     projects: [],
     calendar,
-    usage_analytics: {},
+    usage_analytics: live.posthogMetrics || {},
     slack_highlights,
     competitor_updates: [],
     todos: [],

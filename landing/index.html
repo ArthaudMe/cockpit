@@ -9,26 +9,31 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" onload="this.onload=null;this.rel='stylesheet'">
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap"></noscript>
-  <link rel="icon" type="image/png" href="/icon.png">
+  <link rel="icon" type="image/png" sizes="1024x1024" href="/icon.png?v=metal-20260628">
+  <link rel="shortcut icon" type="image/png" href="/icon.png?v=metal-20260628">
+  <link rel="apple-touch-icon" href="/icon.png?v=metal-20260628">
+  <meta name="theme-color" content="#111313">
   <style>
     :root {
-      --bg: #1a1a1a;
-      --surface: #242424;
-      --border: #333;
-      --border-light: #444;
-      --text: #e8e8e8;
-      --text-dim: #888;
-      --text-muted: #666;
+      --bg: #111313;
+      --surface: #1a1c1d;
+      --surface-raised: #222425;
+      --border: #303233;
+      --border-light: #4a4d4e;
+      --text: #eeeeee;
+      --text-dim: #a3a3a3;
+      --text-muted: #757575;
       --accent: #fff;
       --green: #44ff88;
-      --purple: #a78bfa;
+      --steel: #c7c9c7;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       font-family: 'JetBrains Mono', 'SF Mono', Monaco, Inconsolata, monospace;
-      background: var(--bg);
+      background:
+        linear-gradient(180deg, #111313 0%, #171919 48%, #0b0c0d 100%);
       color: var(--text);
       min-height: 100vh;
       display: flex;
@@ -38,52 +43,61 @@
       overflow-x: hidden;
     }
 
-    /* Animated background glow */
-    .bg-glow {
+    body::before {
+      content: '';
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background:
+        linear-gradient(112deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.018) 22%, transparent 46%),
+        linear-gradient(248deg, rgba(68,255,136,0.08) 0%, rgba(68,255,136,0.018) 18%, transparent 42%),
+        linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.28) 82%, rgba(0,0,0,0.58) 100%);
+      opacity: 0.75;
+    }
+
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background:
+        repeating-linear-gradient(90deg, rgba(255,255,255,0.028) 0 1px, transparent 1px 72px),
+        repeating-linear-gradient(0deg, rgba(255,255,255,0.02) 0 1px, transparent 1px 72px);
+      mask-image: linear-gradient(180deg, black 0%, black 62%, transparent 96%);
+      -webkit-mask-image: linear-gradient(180deg, black 0%, black 62%, transparent 96%);
+      opacity: 0.68;
+    }
+
+    .bg-depth {
+      position: fixed;
+      inset: 0;
       pointer-events: none;
       z-index: 0;
       overflow: hidden;
     }
 
-    .bg-glow::before,
-    .bg-glow::after {
+    .bg-depth::before,
+    .bg-depth::after {
       content: '';
       position: absolute;
-      border-radius: 50%;
-      filter: blur(120px);
-      opacity: 0.07;
-      animation: glow-drift 20s ease-in-out infinite alternate;
+      top: 0;
+      bottom: 0;
+      width: 46vw;
+      opacity: 0.42;
     }
 
-    .bg-glow::before {
-      width: 600px;
-      height: 600px;
-      background: var(--green);
-      top: -200px;
-      right: -100px;
-      animation-duration: 25s;
+    .bg-depth::before {
+      left: 0;
+      clip-path: polygon(0 0, 76% 0, 46% 100%, 0 100%);
+      background: linear-gradient(118deg, rgba(255,255,255,0.08), rgba(255,255,255,0.018) 42%, transparent 74%);
     }
 
-    .bg-glow::after {
-      width: 500px;
-      height: 500px;
-      background: var(--purple);
-      bottom: 10%;
-      left: -100px;
-      animation-duration: 20s;
-      animation-delay: -10s;
-    }
-
-    @keyframes glow-drift {
-      0% { transform: translate(0, 0) scale(1); }
-      33% { transform: translate(60px, 40px) scale(1.1); }
-      66% { transform: translate(-40px, 20px) scale(0.95); }
-      100% { transform: translate(30px, -30px) scale(1.05); }
+    .bg-depth::after {
+      right: 0;
+      clip-path: polygon(38% 0, 100% 0, 100% 100%, 0 100%);
+      background: linear-gradient(238deg, rgba(68,255,136,0.08), rgba(255,255,255,0.018) 36%, transparent 72%);
     }
 
     /* Grid overlay */
@@ -96,11 +110,12 @@
       pointer-events: none;
       z-index: 0;
       background-image:
-        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+        linear-gradient(rgba(255,255,255,0.026) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.026) 1px, transparent 1px);
       background-size: 60px 60px;
-      mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, black 20%, transparent 70%);
-      -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, black 20%, transparent 70%);
+      mask-image: linear-gradient(180deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.42) 58%, transparent 100%);
+      -webkit-mask-image: linear-gradient(180deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.42) 58%, transparent 100%);
+      opacity: 0.72;
     }
 
     header, .container, footer {
@@ -121,7 +136,7 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      max-width: 980px;
+      max-width: 1120px;
     }
 
     .logo {
@@ -136,15 +151,16 @@
       width: 38px;
       height: 38px;
       border-radius: 9px;
+      object-fit: cover;
       box-shadow:
         0 12px 26px rgba(0,0,0,0.35),
-        0 0 0 1px rgba(255,255,255,0.08);
+        0 0 0 1px rgba(255,255,255,0.16);
     }
 
     .logo-name {
       font-size: 1.2rem;
       font-weight: 700;
-      letter-spacing: 0.12em;
+      letter-spacing: 0;
       text-transform: uppercase;
     }
 
@@ -152,7 +168,7 @@
       font-size: 0.82rem;
       color: var(--text-muted);
       font-weight: 600;
-      letter-spacing: 0.04em;
+      letter-spacing: 0;
       text-transform: lowercase;
     }
 
@@ -192,7 +208,7 @@
     /* Hero */
     .hero {
       min-height: calc(100vh - 86px);
-      padding: clamp(4.5rem, 8vh, 7.25rem) 0 0;
+      padding: clamp(5.25rem, 9vh, 7.8rem) 0 0;
       text-align: center;
       display: flex;
       flex-direction: column;
@@ -202,7 +218,7 @@
     .hero h1 {
       font-size: 3.4rem;
       font-weight: 700;
-      letter-spacing: -0.03em;
+      letter-spacing: 0;
       line-height: 1.2;
       margin-bottom: 1.2rem;
     }
@@ -241,33 +257,52 @@
       color: var(--text-dim);
       margin-top: 1rem;
       font-weight: 500;
-      letter-spacing: 0.02em;
+      letter-spacing: 0;
     }
 
     /* Screenshot */
     .hero-screenshot {
-      width: min(1220px, calc(100vw - 2.5rem));
-      margin: clamp(3.25rem, 8vh, 6rem) auto 0;
+      position: relative;
+      left: 50%;
+      width: min(1280px, calc(100vw - 2rem));
+      margin: clamp(3.6rem, 7vh, 5.4rem) 0 0;
       border-radius: 14px;
-      overflow: hidden;
+      overflow: visible;
       border: 1px solid var(--border);
+      background: #0f1010;
+      isolation: isolate;
       box-shadow:
         0 44px 130px rgba(0,0,0,0.72),
         0 22px 52px rgba(0,0,0,0.52),
         0 0 0 1px rgba(255,255,255,0.06),
-        0 -18px 60px rgba(255,255,255,0.055);
-      transform: translateZ(0);
+        0 -18px 60px rgba(199,201,199,0.08);
+      transform: translateX(-50%) translateY(0);
       animation: screenshot-float 7s ease-in-out infinite;
+    }
+
+    .hero-screenshot::before {
+      content: '';
+      position: absolute;
+      inset: -28px -34px;
+      z-index: -1;
+      border-radius: 22px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.12), transparent 58%),
+        linear-gradient(90deg, transparent, rgba(68,255,136,0.08), transparent);
+      opacity: 0.7;
     }
 
     .hero-screenshot img {
       width: 100%;
+      height: auto;
       display: block;
+      object-fit: contain;
+      border-radius: 13px;
     }
 
     @keyframes screenshot-float {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-10px); }
+      0%, 100% { transform: translateX(-50%) translateY(0); }
+      50% { transform: translateX(-50%) translateY(-10px); }
     }
 
     /* Features */
@@ -279,10 +314,13 @@
     }
 
     .feature {
-      background: var(--surface);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.035), transparent 42%),
+        var(--surface);
       border: 1px solid var(--border);
       border-radius: 6px;
       padding: 1.4rem;
+      box-shadow: 0 18px 42px rgba(0,0,0,0.22);
     }
 
     .feature-icon {
@@ -312,7 +350,7 @@
       font-size: 1.1rem;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0;
       color: var(--text-muted);
       margin-bottom: 1.5rem;
       text-align: center;
@@ -368,7 +406,7 @@
       font-size: 1.1rem;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0;
       color: var(--text-muted);
       margin-bottom: 1.2rem;
     }
@@ -384,7 +422,9 @@
       display: flex;
       align-items: center;
       gap: 0.4rem;
-      background: var(--surface);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.04), transparent 44%),
+        var(--surface);
       border: 1px solid var(--border);
       border-radius: 4px;
       padding: 0.5rem 0.9rem;
@@ -411,12 +451,15 @@
     }
 
     .privacy-box {
-      background: var(--surface);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.045), transparent 46%),
+        var(--surface);
       border: 1px solid var(--border);
       border-radius: 6px;
       padding: 1.5rem 2rem;
       max-width: 580px;
       margin: 0 auto;
+      box-shadow: 0 20px 58px rgba(0,0,0,0.24);
     }
 
     .privacy-box h3 {
@@ -476,20 +519,18 @@
     }
 
     @media (prefers-reduced-motion: reduce) {
-      .hero-screenshot,
-      .bg-glow::before,
-      .bg-glow::after {
+      .hero-screenshot {
         animation: none;
       }
     }
   </style>
 </head>
 <body>
-  <div class="bg-glow"></div>
+  <div class="bg-depth"></div>
   <div class="bg-grid"></div>
   <header>
     <a href="/" class="logo">
-      <img class="logo-icon" src="/icon.png" alt="" aria-hidden="true">
+      <img class="logo-icon" src="/icon.png?v=metal-20260628" alt="" aria-hidden="true">
       <span class="logo-name">Cockpit</span>
       <span class="logo-tagline">pilot your company</span>
     </a>

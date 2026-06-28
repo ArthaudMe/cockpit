@@ -77,7 +77,7 @@ export default async function handler(
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   // Authenticate the request
-  const proxySecret = process.env.PROXY_SECRET;
+  const proxySecret = process.env.PROXY_SECRET?.trim();
   if (!proxySecret) {
     return res.status(500).json({ error: "Proxy not configured" });
   }
@@ -99,15 +99,15 @@ export default async function handler(
   }
 
   const svc = SERVICES[service];
-  const clientId = process.env[svc.clientIdVar];
-  const clientSecret = process.env[svc.clientSecretVar];
+  const clientId = process.env[svc.clientIdVar]?.trim();
+  const clientSecret = process.env[svc.clientSecretVar]?.trim();
 
   if (!clientId || !clientSecret) {
     return res.status(500).json({ error: `${service} credentials not configured on proxy` });
   }
 
   if (grant_type === "preflight") {
-    return res.status(200).json({ ok: true, service });
+    return res.status(200).json({ ok: true, service, client_id: clientId });
   }
 
   try {

@@ -108,6 +108,8 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
   const [analyticsOn, setAnalyticsOn] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [settingsLoadError, setSettingsLoadError] = useState(false);
+  const [showPostHogForm, setShowPostHogForm] = useState(false);
+  const [savingDefaultEngine, setSavingDefaultEngine] = useState<string | null>(null);
 
   useEffect(() => {
     setAnalyticsOn(isAnalyticsEnabled());
@@ -184,6 +186,12 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
   }, [profile]);
 
   const handleConnect = useCallback(async (serviceId: string) => {
+    if (serviceId === "posthog") {
+      setShowPostHogForm(true);
+      setConnectError(null);
+      return;
+    }
+
     try {
       setConnectError(null);
       setConnecting(serviceId);
@@ -218,6 +226,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
         body: JSON.stringify({ service: serviceId }),
       });
       if (!res.ok) throw new Error();
+      if (serviceId === "posthog") setShowPostHogForm(false);
       fetchDatasources();
     } catch {
       alert("Couldn't disconnect. Please try again.");
@@ -375,10 +384,46 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
     []
   );
 
+  const handleSetDefaultEngine = useCallback(
+    async (backend: string, model?: string) => {
+      const def = backendDefs.find((b) => b.id === backend);
+      const selectedModel = model || def?.defaultModel || def?.models[0]?.id;
+      if (!selectedModel) {
+        alert("No model is available for this engine.");
+        return;
+      }
+
+      setSavingDefaultEngine(backend);
+      try {
+        const agent = agents[0];
+        const res = agent
+          ? await fetch(`/api/agents/${agent.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ backend, model: selectedModel }),
+            })
+          : await fetch("/api/agents", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: "Pilot", role: "general", backend, model: selectedModel }),
+            });
+        const updated: AgentInfo = await res.json();
+        if (!res.ok) throw new Error();
+        setAgents((prev) => (prev.length > 0 ? prev.map((a, i) => (i === 0 ? updated : a)) : [updated]));
+        localStorage.setItem("cockpit-active-agent", JSON.stringify(updated.id));
+      } catch {
+        alert("Couldn't save the default AI engine. Please try again.");
+      } finally {
+        setSavingDefaultEngine(null);
+      }
+    },
+    [agents, backendDefs],
+  );
+
   const sectionTitle: React.CSSProperties = {
     fontSize: "0.65rem",
     fontWeight: 700,
-    letterSpacing: "0.08em",
+    letterSpacing: 0,
     textTransform: "uppercase",
     color: "var(--text-muted)",
     marginBottom: "0.6rem",
@@ -554,9 +599,23 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
             {connectError.message}
           </div>
         )}
+        {showPostHogForm && (
+          <PostHogConnectForm
+            card={card}
+            onSaved={() => {
+              setShowPostHogForm(false);
+              fetchDatasources();
+            }}
+            onCancel={() => setShowPostHogForm(false)}
+          />
+        )}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.4rem" }}>
           {datasources.map((ds) => {
             const isConnecting = connecting === ds.id;
+            const connectedLabel =
+              ds.id === "granola" ? "Detected locally" : ds.id === "posthog" ? "Configured" : "Connected";
+            const connectLabel =
+              ds.id === "granola" ? "Check again" : ds.id === "posthog" ? "Configure" : "Connect";
             const actionBtn: React.CSSProperties = {
               background: "none",
               border: "1px solid var(--border)",
@@ -669,7 +728,7 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                         cursor: isConnecting ? "wait" : "pointer",
                       }}
                     >
-                      {isConnecting ? "Waiting..." : "Connect"}
+                      {isConnecting ? "Waiting..." : connectLabel}
                     </button>
                   ) : (
                     <button
@@ -680,12 +739,12 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
                         color: "var(--accent)",
                       }}
                     >
-                      Reconnect
+                      {connectLabel}
                     </button>
                   )}
                   {ds.connected && !ds.needsScopeUpgrade && (
                     <span style={{ fontSize: "0.65rem", color: "var(--green)", marginTop: "0.35rem" }}>
-                      Connected
+                      {connectedLabel}
                     </span>
                   )}
                 </div>
@@ -696,38 +755,94 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
 
         {/* ── AI Engines ── */}
         <div style={{ ...sectionTitle, marginTop: "1.25rem" }}>AI Engines</div>
-        <div style={{ display: "flex", gap: "0.4rem", marginBottom: "0.75rem" }}>
-          {backends.map((b) => (
-            <div
-              key={b.id}
-              style={{
-                ...card,
-                flex: 1,
-                marginBottom: 0,
-                opacity: b.installed ? 1 : 0.5,
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginBottom: "0.25rem" }}>
-                <span style={{ fontSize: "0.8rem" }}>{BACKEND_ICONS[b.id] || "?"}</span>
-                <span style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)" }}>
-                  {b.label}
-                </span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
-                <span
-                  className="dot"
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "0.4rem", marginBottom: "0.75rem" }}>
+          {backends.map((b) => {
+            const def = backendDefs.find((backend) => backend.id === b.id);
+            const isDefault = agents[0]?.backend === b.id;
+            const selectedModel = isDefault ? agents[0]?.model : def?.defaultModel || def?.models[0]?.id || "";
+            const isSaving = savingDefaultEngine === b.id;
+
+            return (
+              <div
+                key={b.id}
+                style={{
+                  ...card,
+                  marginBottom: 0,
+                  opacity: b.installed ? 1 : 0.5,
+                  borderColor: isDefault ? "var(--green)" : "var(--border)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.35rem", marginBottom: "0.25rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                    <span style={{ fontSize: "0.8rem" }}>{BACKEND_ICONS[b.id] || "?"}</span>
+                    <span style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--text)" }}>
+                      {b.label}
+                    </span>
+                  </div>
+                  {isDefault && (
+                    <span style={{ fontSize: "0.62rem", color: "var(--green)", fontWeight: 700 }}>
+                      Default
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
+                  <span
+                    className="dot"
+                    style={{
+                      background: b.installed ? "var(--green)" : "var(--red)",
+                      width: 5,
+                      height: 5,
+                    }}
+                  />
+                  <span style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>
+                    {b.installed ? b.version || "Ready" : "Not installed"}
+                  </span>
+                </div>
+                {def && def.models.length > 0 && (
+                  <select
+                    value={selectedModel}
+                    disabled={!b.installed || isSaving}
+                    onChange={(event) => handleSetDefaultEngine(b.id, event.target.value)}
+                    style={{
+                      width: "100%",
+                      marginTop: "0.4rem",
+                      background: "var(--bg)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 3,
+                      color: "var(--text)",
+                      fontFamily: "inherit",
+                      fontSize: "0.65rem",
+                      padding: "0.2rem 0.3rem",
+                    }}
+                  >
+                    {def.models.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <button
+                  disabled={!b.installed || isSaving || isDefault}
+                  onClick={() => handleSetDefaultEngine(b.id, selectedModel)}
                   style={{
-                    background: b.installed ? "var(--green)" : "var(--red)",
-                    width: 5,
-                    height: 5,
+                    marginTop: "0.4rem",
+                    background: isDefault ? "color-mix(in srgb, var(--green) 10%, transparent)" : "none",
+                    border: `1px solid ${isDefault ? "var(--green)" : "var(--border)"}`,
+                    borderRadius: 4,
+                    color: isDefault ? "var(--green)" : "var(--text)",
+                    cursor: !b.installed || isSaving || isDefault ? "default" : "pointer",
+                    fontFamily: "inherit",
+                    fontSize: "0.65rem",
+                    padding: "0.2rem 0.45rem",
+                    width: "100%",
                   }}
-                />
-                <span style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>
-                  {b.installed ? b.version || "Ready" : "Not installed"}
-                </span>
+                >
+                  {isSaving ? "Saving..." : isDefault ? "Using default" : "Use as default"}
+                </button>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* ── Analytics ── */}
@@ -1189,6 +1304,130 @@ export function SettingsView({ onBack }: { onBack: () => void }) {
 
         {/* Bottom spacer */}
         <div style={{ height: "2rem" }} />
+      </div>
+    </div>
+  );
+}
+
+function PostHogConnectForm({
+  card,
+  onSaved,
+  onCancel,
+}: {
+  card: React.CSSProperties;
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const [apiHost, setApiHost] = useState("https://us.posthog.com");
+  const [projectId, setProjectId] = useState("");
+  const [personalApiKey, setPersonalApiKey] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/datasources/posthog")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.apiHost) setApiHost(data.apiHost);
+        if (data.projectId) setProjectId(data.projectId);
+      })
+      .catch(() => {});
+  }, []);
+
+  const inputStyle: React.CSSProperties = {
+    background: "var(--bg)",
+    border: "1px solid var(--border)",
+    borderRadius: 4,
+    padding: "0.25rem 0.4rem",
+    fontSize: "0.65rem",
+    color: "var(--text)",
+    fontFamily: "inherit",
+    outline: "none",
+    width: "100%",
+  };
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/datasources/posthog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiHost, projectId, personalApiKey }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "PostHog connection failed");
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "PostHog connection failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ ...card, borderColor: "var(--accent)" }}>
+      <div style={{ fontSize: "0.65rem", fontWeight: 700, color: "var(--text)", marginBottom: "0.45rem" }}>
+        Configure PostHog
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.4rem" }}>
+        <label style={{ display: "grid", gap: "0.2rem", fontSize: "0.65rem", color: "var(--text-muted)" }}>
+          API host
+          <input value={apiHost} onChange={(e) => setApiHost(e.target.value)} style={inputStyle} />
+        </label>
+        <label style={{ display: "grid", gap: "0.2rem", fontSize: "0.65rem", color: "var(--text-muted)" }}>
+          Project ID
+          <input value={projectId} onChange={(e) => setProjectId(e.target.value)} style={inputStyle} />
+        </label>
+        <label style={{ display: "grid", gap: "0.2rem", fontSize: "0.65rem", color: "var(--text-muted)" }}>
+          Personal API key
+          <input
+            value={personalApiKey}
+            onChange={(e) => setPersonalApiKey(e.target.value)}
+            type="password"
+            placeholder="phx_..."
+            style={inputStyle}
+          />
+        </label>
+      </div>
+      {error && (
+        <div style={{ color: "var(--red)", fontSize: "0.65rem", lineHeight: 1.4, marginTop: "0.45rem" }}>
+          {error}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: "0.35rem", marginTop: "0.55rem" }}>
+        <button
+          onClick={save}
+          disabled={saving}
+          style={{
+            background: "var(--text)",
+            color: "var(--bg)",
+            border: "none",
+            borderRadius: 4,
+            cursor: saving ? "wait" : "pointer",
+            fontFamily: "inherit",
+            fontSize: "0.65rem",
+            fontWeight: 700,
+            padding: "0.25rem 0.6rem",
+          }}
+        >
+          {saving ? "Connecting..." : "Save"}
+        </button>
+        <button
+          onClick={onCancel}
+          style={{
+            background: "none",
+            border: "1px solid var(--border)",
+            borderRadius: 4,
+            color: "var(--text-muted)",
+            cursor: "pointer",
+            fontFamily: "inherit",
+            fontSize: "0.65rem",
+            padding: "0.25rem 0.6rem",
+          }}
+        >
+          Cancel
+        </button>
       </div>
     </div>
   );

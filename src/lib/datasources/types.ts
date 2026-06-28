@@ -4,7 +4,8 @@ export type ServiceId =
   | "github"
   | "notion"
   | "slack"
-  | "granola";
+  | "granola"
+  | "posthog";
 
 export interface TokenSet {
   access_token: string;
@@ -110,6 +111,13 @@ export interface McpResourceItem {
   fetchedAt: number;
 }
 
+export type MetricValue = {
+  value: number;
+  change: string;
+  period: string;
+  unit?: string;
+};
+
 export interface DatasourceData {
   calendar?: CalendarEvent[];
   emails?: EmailThread[];
@@ -119,6 +127,7 @@ export interface DatasourceData {
   notionPages?: NotionPage[];
   slackMessages?: SlackMessage[];
   granolaMeetings?: GranolaMeeting[];
+  posthogMetrics?: Record<string, MetricValue>;
   mcpResources?: McpResourceItem[];
   _connected?: Record<string, boolean>;
   _offline?: boolean;

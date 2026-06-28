@@ -104,7 +104,6 @@ export function ContextColumn({
   onPrefill,
   onCalendarClick,
   onMetricClick,
-  onSlackClick,
   onCompetitorClick,
   onTodoClick,
   onSettingsClick,
@@ -114,7 +113,6 @@ export function ContextColumn({
   onPrefill: (text: string) => void;
   onCalendarClick?: (index: number) => void;
   onMetricClick?: (key: string) => void;
-  onSlackClick?: (index: number) => void;
   onCompetitorClick?: (index: number) => void;
   onTodoClick?: (index: number) => void;
   onSettingsClick?: () => void;
@@ -254,33 +252,6 @@ export function ContextColumn({
         )}
       </Panel>
       )}
-
-      {/* Slack */}
-      <Panel title="Slack" count={context.slack_highlights.length}>
-        {context.slack_highlights.length === 0 ? (
-          context.connected.slack ? (
-            <div className="empty-state">No recent highlights — messages will appear here as they come in</div>
-          ) : (
-            <ConnectPrompt
-              service="Slack"
-              label="Connect Slack to see your team's messages"
-              onConnect={() => onConnectService ? onConnectService("slack") : onSettingsClick?.()}
-            />
-          )
-        ) : context.slack_highlights.map((h, i) => (
-          <div
-            key={i}
-            className="feed-item"
-            onClick={() => onSlackClick ? onSlackClick(i) : onPrefill(`Tell me more about: ${h.message.split("—")[0]?.trim() || h.message.slice(0, 40)}`)}
-          >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span className="feed-source">{h.channel}</span>
-              <span className="feed-time">{h.time}</span>
-            </div>
-            <div className="feed-title">{h.message}</div>
-          </div>
-        ))}
-      </Panel>
 
       {/* Competitors — only shown when data exists */}
       {context.competitor_updates.length > 0 && (

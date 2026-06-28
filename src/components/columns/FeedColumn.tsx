@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import type { ContextFocus } from "../views/ContextualChatView";
+import { compactDisplayText } from "@/lib/compact-text";
 
 type FeedItem = {
   type: string;
@@ -41,8 +42,9 @@ function Panel({
 }
 
 function feedItemToFocus(item: FeedItem): ContextFocus {
+  const displayEvent = compactDisplayText(item.event);
   return {
-    title: item.event.length > 50 ? item.event.slice(0, 50) + "..." : item.event,
+    title: displayEvent.length > 50 ? displayEvent.slice(0, 50) + "..." : displayEvent,
     subtitle: `${item.actor} · ${item.time}${item.project ? ` · ${item.project}` : ""}`,
     source: item.type === "agent" ? "Agent" : item.type === "code" ? "GitHub" : item.type === "sales" ? "Sales" : item.type === "meeting" ? "Calendar" : item.type === "milestone" ? "Linear" : "Feed",
     icon: item.icon,
@@ -58,7 +60,7 @@ function feedItemToFocus(item: FeedItem): ContextFocus {
       : item.type === "meeting"
       ? ["Prep me for this", "What context do I need?", "Draft an agenda", "What are the open items?"]
       : ["Tell me more about this", "What's the context?", "What should I do about this?", "How does this affect our plans?"],
-    systemContext: `The user is looking at a company feed event: ${item.actor} — "${item.event}" (type: ${item.type}, ${item.time}${item.project ? `, project: ${item.project}` : ""}).${item.detail ? `\n\nFull details:\n${item.detail}` : ""}\n\nHelp them understand and take action. Use the details above to give a specific, informed answer.`,
+    systemContext: `The user is looking at a company feed event: ${item.actor} — "${displayEvent}" (type: ${item.type}, ${item.time}${item.project ? `, project: ${item.project}` : ""}).${item.detail ? `\n\nFull details:\n${item.detail}` : ""}\n\nHelp them understand and take action. Use the details above to give a specific, informed answer.`,
   };
 }
 
@@ -184,7 +186,7 @@ export function FeedColumn({
                 </span>
                 <span className="feed-time">{item.time}</span>
               </div>
-              <div className="feed-title">{item.event}</div>
+              <div className="feed-title">{compactDisplayText(item.event)}</div>
               {item.project && (
                 <span className="tag tag-dim" style={{ marginTop: "0.15rem" }}>
                   {item.project}

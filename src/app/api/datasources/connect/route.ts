@@ -4,7 +4,10 @@ import { getAuthUrl } from "@/lib/datasources/manager";
 import { createComposioOAuthState, createOAuthState, enableService } from "@/lib/datasources/token-store";
 import type { ServiceId } from "@/lib/datasources/types";
 import { isComposioEnabled, createConnectLink, isAllowedComposioRedirectUrl } from "@/lib/datasources/composio";
-import { isProxyEnabled, proxyPreflight } from "@/lib/datasources/oauth-proxy";
+import { assertProxyClientId, isProxyEnabled, proxyPreflight } from "@/lib/datasources/oauth-proxy";
+import { isGranolaAvailable } from "@/lib/datasources/connectors/granola";
+import CREDENTIALS from "@/lib/datasources/credentials";
+import { clearDatasourceDataCache } from "@/lib/datasources/manager";
 
 const OAUTH_SERVICES: ServiceId[] = [
   "google",
@@ -34,6 +37,14 @@ const DIRECT_SECRET_ENV: Partial<Record<ServiceId, string>> = {
   slack: "SLACK_CLIENT_SECRET",
 };
 
+const PUBLIC_CLIENT_IDS: Partial<Record<ServiceId, string>> = {
+  google: CREDENTIALS.GOOGLE_CLIENT_ID,
+  linear: CREDENTIALS.LINEAR_CLIENT_ID,
+  github: CREDENTIALS.GITHUB_CLIENT_ID,
+  notion: CREDENTIALS.NOTION_CLIENT_ID,
+  slack: CREDENTIALS.SLACK_CLIENT_ID,
+};
+
 function generatePKCE(): { codeVerifier: string; codeChallenge: string } {
   const codeVerifier = crypto.randomBytes(32).toString("base64url");
   const codeChallenge = crypto
@@ -44,7 +55,17 @@ function generatePKCE(): { codeVerifier: string; codeChallenge: string } {
 }
 
 async function assertOAuthReady(service: ServiceId): Promise<void> {
+  if (service === "google") {
+    throw new Error(
+      "Google Calendar/Gmail must connect through Composio. This build is missing COMPOSIO_API_KEY, COMPOSIO_GCAL_AUTH_CONFIG, or COMPOSIO_GMAIL_AUTH_CONFIG."
+    );
+  }
+
   if (isProxyEnabled()) {
+    const clientId = PUBLIC_CLIENT_IDS[service];
+    if (clientId) {
+      await assertProxyClientId(service, clientId);
+    }
     await proxyPreflight(service);
     return;
   }
@@ -69,15 +90,37 @@ export async function GET(req: NextRequest) {
 
   // Auto-detected services: just re-enable, no OAuth needed
   if (AUTO_DETECTED.includes(service)) {
+    if (service === "granola" && !isGranolaAvailable()) {
+      return NextResponse.json(
+        {
+          error:
+            "Granola is detected from local meeting notes. Open Granola, make sure you are signed in, then record or sync at least one meeting before checking again.",
+        },
+        { status: 503 },
+      );
+    }
     enableService(service);
+    clearDatasourceDataCache();
     return NextResponse.json({ reconnected: true });
   }
 
   const origin = req.nextUrl.origin;
   const redirectUri = getRedirectUri(origin);
 
-  // Google via Composio — managed OAuth, no CASA verification needed
-  if (service === "google" && isComposioEnabled()) {
+  // Google via Composio — managed OAuth, no Google verification screen.
+  // Fail closed when Composio is absent so packaged builds cannot fall back to
+  // the direct Google OAuth client.
+  if (service === "google") {
+    if (!isComposioEnabled()) {
+      return NextResponse.json(
+        {
+          error:
+            "Google Calendar/Gmail must connect through Composio. This build is missing COMPOSIO_API_KEY, COMPOSIO_GCAL_AUTH_CONFIG, or COMPOSIO_GMAIL_AUTH_CONFIG.",
+        },
+        { status: 503 },
+      );
+    }
+
     try {
       // Chain: connect Calendar first, then Gmail.
       // The callback handler will chain the Gmail connect automatically.

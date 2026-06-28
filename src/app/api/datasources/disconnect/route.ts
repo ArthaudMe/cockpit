@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { removeTokens, disableService, removeComposioConnections } from "@/lib/datasources/token-store";
+import { removePostHogConfig } from "@/lib/datasources/connectors/posthog";
+import { clearDatasourceDataCache } from "@/lib/datasources/manager";
 import type { ServiceId } from "@/lib/datasources/types";
 
 const VALID_SERVICES: ServiceId[] = [
@@ -9,6 +11,7 @@ const VALID_SERVICES: ServiceId[] = [
   "notion",
   "slack",
   "granola",
+  "posthog",
 ];
 
 // Auto-detected services use disable instead of token removal
@@ -25,7 +28,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (AUTO_DETECTED.includes(service)) {
+  if (service === "posthog") {
+    removePostHogConfig();
+  } else if (AUTO_DETECTED.includes(service)) {
     disableService(service);
   } else {
     removeTokens(service);
@@ -34,5 +39,6 @@ export async function POST(req: NextRequest) {
       removeComposioConnections();
     }
   }
+  clearDatasourceDataCache();
   return NextResponse.json({ success: true });
 }

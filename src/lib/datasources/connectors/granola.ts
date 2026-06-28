@@ -12,14 +12,14 @@ const GRANOLA_CACHE_PATH = path.join(
 );
 
 export function isGranolaAvailable(): boolean {
-  return fs.existsSync(GRANOLA_CACHE_PATH);
+  return fetchGranolaMeetings({ includeOlder: true }).length > 0;
 }
 
 // Granola's cache file can be tens of MB; parsing it blocks the event loop
 // for the whole JSON.parse. Only re-parse when the file actually changed.
 let _cached: { mtimeMs: number; size: number; meetings: GranolaMeeting[] } | null = null;
 
-export function fetchGranolaMeetings(): GranolaMeeting[] {
+export function fetchGranolaMeetings(options: { includeOlder?: boolean } = {}): GranolaMeeting[] {
   let stat;
   try {
     stat = fs.statSync(GRANOLA_CACHE_PATH);
@@ -46,7 +46,7 @@ export function fetchGranolaMeetings(): GranolaMeeting[] {
       if (doc.type !== "meeting") continue;
 
       const createdAt = new Date(doc.created_at).getTime();
-      if (createdAt < sevenDaysAgo) continue;
+      if (!options.includeOlder && createdAt < sevenDaysAgo) continue;
 
       const attendees: string[] = [];
       if (doc.people?.attendees) {

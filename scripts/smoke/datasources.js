@@ -103,6 +103,17 @@ async function checkConnect(port, service) {
   if (!data.url || !/^https?:\/\//.test(data.url)) {
     fail(`${service} connect did not return a provider URL`);
   }
+  if (service === "google") {
+    const host = new URL(data.url).hostname.toLowerCase();
+    const composioHost =
+      host === "composio.dev" ||
+      host.endsWith(".composio.dev") ||
+      host === "composio.com" ||
+      host.endsWith(".composio.com");
+    if (!composioHost) {
+      fail(`google connect returned ${host}; expected Composio hosted OAuth`);
+    }
+  }
   log(`connect ${service}: provider URL ok`);
 }
 

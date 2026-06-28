@@ -8,6 +8,7 @@ import {
   saveComposioConnection,
 } from "@/lib/datasources/token-store";
 import { exchangeCode } from "@/lib/datasources/manager";
+import { clearDatasourceDataCache } from "@/lib/datasources/manager";
 import type { ServiceId } from "@/lib/datasources/types";
 import { createConnectLink, isAllowedComposioRedirectUrl, isComposioEnabled } from "@/lib/datasources/composio";
 
@@ -88,6 +89,7 @@ export async function GET(req: NextRequest) {
     const redirectUri = getRedirectUri(origin, service);
     const tokens = await exchangeCode(service, code, redirectUri, codeVerifier);
     saveTokens(service, tokens);
+    clearDatasourceDataCache();
 
     const serviceName = service.charAt(0).toUpperCase() + service.slice(1);
     return new NextResponse(
@@ -141,6 +143,7 @@ async function handleComposioCallback(
     // Save Calendar connection
     if (connectionId) {
       saveComposioConnection("googlecalendar", connectionId);
+      clearDatasourceDataCache();
     }
 
     // Chain: now connect Gmail
@@ -172,6 +175,7 @@ async function handleComposioCallback(
     // Save Gmail connection
     if (connectionId) {
       saveComposioConnection("gmail", connectionId);
+      clearDatasourceDataCache();
     }
 
     return new NextResponse(

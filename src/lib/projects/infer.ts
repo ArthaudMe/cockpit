@@ -5,6 +5,7 @@ import { join } from "path";
 import { homedir } from "os";
 import { readJsonCached, invalidateFileCache } from "@/lib/fs-cache";
 import { getSpawnTarget } from "@/lib/provider-runtime";
+import { compactDisplayText, compactProjectName, isGenericProjectName } from "@/lib/compact-text";
 import type {
   DatasourceData,
   LinearIssue,
@@ -201,10 +202,58 @@ Rules:
 - Merge items that clearly belong to the same project (e.g. repo "mio-xyz/platform" and Linear project "Mio Platform")
 - A Slack channel like "#platform-dev" likely maps to a platform project
 - Only create projects for items that have real signals — don't invent projects
+- Project names must be short labels, maximum 5 words
+- Never use a raw Slack message, meeting note, email body, bullet list, or sentence as a project name
+- Generic channels such as "general", "random", "announcements", and "updates" are not projects unless another tool gives a matching project or repo name
 - Unassigned Linear issues: try to map them to a project by title similarity, otherwise skip them
 
 Respond with ONLY a valid JSON array. No markdown, no explanation.
 Example: [{"name":"Platform","category":"Product","status":"Active","linear_projects":["Platform"],"github_repos":["org/platform"],"slack_channels":["#platform-dev"],"meeting_keywords":["platform","standup"]}]`;
+}
+
+function hasRealProjectSignal(mapping: ProjectMapping): boolean {
+  return (
+    mapping.linear_projects.length > 0 ||
+    mapping.github_repos.length > 0 ||
+    mapping.meeting_keywords.some((keyword) => keyword.trim().length > 2)
+  );
+}
+
+function sanitizeMapping(mapping: ProjectMapping): ProjectMapping | null {
+  if (!mapping || typeof mapping.name !== "string") return null;
+  const name = compactProjectName(mapping.name);
+  if (!name || isGenericProjectName(name)) return null;
+
+  const sanitized: ProjectMapping = {
+    name,
+    category: ["Product", "Engineering", "Sales", "Operations", "Marketing", "Other"].includes(mapping.category)
+      ? mapping.category
+      : "Other",
+    status: ["Active", "Planning", "Paused"].includes(mapping.status)
+      ? mapping.status
+      : "Active",
+    linear_projects: Array.isArray(mapping.linear_projects) ? mapping.linear_projects.filter(Boolean) : [],
+    github_repos: Array.isArray(mapping.github_repos) ? mapping.github_repos.filter(Boolean) : [],
+    slack_channels: Array.isArray(mapping.slack_channels) ? mapping.slack_channels.filter(Boolean) : [],
+    meeting_keywords: Array.isArray(mapping.meeting_keywords) ? mapping.meeting_keywords.filter(Boolean) : [],
+  };
+
+  if (!hasRealProjectSignal(sanitized)) return null;
+  return sanitized;
+}
+
+function sanitizeMappings(mappings: ProjectMapping[]): ProjectMapping[] {
+  const seen = new Set<string>();
+  const sanitized: ProjectMapping[] = [];
+  for (const mapping of mappings) {
+    const clean = sanitizeMapping(mapping);
+    if (!clean) continue;
+    const key = clean.name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    sanitized.push(clean);
+  }
+  return sanitized;
 }
 
 function askClaude(prompt: string): Promise<string> {
@@ -286,7 +335,7 @@ function assembleProject(
     recent_activity.push({ date: pr.time, event: `PR: ${pr.title} (${pr.status})`, source: "GitHub" });
   }
   for (const msg of slackMessages.slice(0, 2)) {
-    recent_activity.push({ date: msg.time, event: `${msg.author}: ${msg.message}`, source: "Slack" });
+    recent_activity.push({ date: msg.time, event: `${msg.author}: ${compactDisplayText(msg.message)}`, source: "Slack" });
   }
 
   // Build linear sub-object
@@ -381,7 +430,7 @@ function assembleProject(
   }));
 
   return {
-    name: mapping.name,
+    name: compactProjectName(mapping.name),
     category: mapping.category,
     status: mapping.status,
     recent_activity,
@@ -412,7 +461,8 @@ function heuristicProjects(signals: SignalSummary): InferredProject[] {
       slack_channels: [],
       meeting_keywords: [name.toLowerCase().split(/\s+/)[0]],
     };
-    projects.push(assembleProject(mapping, signals));
+    const clean = sanitizeMapping(mapping);
+    if (clean) projects.push(assembleProject(clean, signals));
   }
 
   // One project per GitHub repo not already covered
@@ -429,7 +479,8 @@ function heuristicProjects(signals: SignalSummary): InferredProject[] {
       slack_channels: [],
       meeting_keywords: [shortName.toLowerCase()],
     };
-    projects.push(assembleProject(mapping, signals));
+    const clean = sanitizeMapping(mapping);
+    if (clean) projects.push(assembleProject(clean, signals));
   }
 
   return projects;
@@ -465,16 +516,18 @@ export async function inferProjects(data: DatasourceData): Promise<InferredProje
   const key = signalsKey(signals);
   const persisted = loadPersistedMappings(key);
   if (persisted && persisted.length > 0) {
-    projects = persisted.map((m) => assembleProject(m, signals));
+    const mappings = sanitizeMappings(persisted);
+    projects = mappings.length > 0 ? mappings.map((m) => assembleProject(m, signals)) : projects;
   } else {
     // Try LLM refinement
     try {
       const prompt = buildClusteringPrompt(signals);
       const result = await askClaude(prompt);
       const jsonStr = result.replace(/```json?\n?/g, "").replace(/```\n?/g, "").trim();
-      const mappings: ProjectMapping[] = JSON.parse(jsonStr);
+      const parsed: ProjectMapping[] = JSON.parse(jsonStr);
+      const mappings = sanitizeMappings(parsed);
 
-      if (Array.isArray(mappings) && mappings.length > 0) {
+      if (mappings.length > 0) {
         projects = mappings.map((m) => assembleProject(m, signals));
         savePersistedMappings(key, mappings);
       }
