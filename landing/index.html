@@ -279,7 +279,7 @@
     /* Screenshot */
     .hero-screenshot {
       position: relative;
-      left: 50%;
+      align-self: center;
       width: min(1280px, calc(100vw - 2rem));
       margin: clamp(3.6rem, 7vh, 5.4rem) 0 0;
       border-radius: 14px;
@@ -292,7 +292,7 @@
         0 22px 52px rgba(0,0,0,0.52),
         0 0 0 1px rgba(255,255,255,0.06),
         0 -18px 60px rgba(199,201,199,0.08);
-      transform: translateX(-50%) translateY(0);
+      transform: translateY(0);
       animation: screenshot-float 7s ease-in-out infinite;
     }
 
@@ -317,8 +317,8 @@
     }
 
     @keyframes screenshot-float {
-      0%, 100% { transform: translateX(-50%) translateY(0); }
-      50% { transform: translateX(-50%) translateY(-10px); }
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
     }
 
     /* Features */
