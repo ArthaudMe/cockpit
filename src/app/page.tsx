@@ -20,6 +20,7 @@ import {
   focusCompetitor,
   focusTodo,
 } from "@/lib/focus";
+import { inferSuggestedTodos } from "@/lib/todos/infer";
 import type { NotificationItem } from "@/components/layout/NotificationBell";
 
 type CenterView =
@@ -319,9 +320,9 @@ export default function Home() {
     handleOpenFocus(focusCompetitor(contextData.competitor_updates[index]));
   }, [handleOpenFocus, contextData.competitor_updates]);
 
-  const handleTodoClick = useCallback((index: number) => {
-    handleOpenFocus(focusTodo(contextData.todos[index]));
-  }, [handleOpenFocus, contextData.todos]);
+  const handleTodoFocus = useCallback((todo: { text: string; done: boolean }) => {
+    handleOpenFocus(focusTodo(todo));
+  }, [handleOpenFocus]);
 
   // ─── Global keyboard shortcuts ─────────────────────────────────────
   useEffect(() => {
@@ -413,6 +414,11 @@ export default function Home() {
       handleOpenFocus(focusForResult(result));
     },
     [handleOpenFocus],
+  );
+
+  const suggestedTodos = useMemo(
+    () => inferSuggestedTodos(rawDatasourceData),
+    [rawDatasourceData],
   );
 
   const hasAnyDatasource = useMemo(
@@ -527,8 +533,9 @@ export default function Home() {
               onCalendarClick={handleCalendarClick}
               onMetricClick={handleMetricClick}
               onCompetitorClick={handleCompetitorClick}
-              onTodoClick={handleTodoClick}
+              onTodoFocus={handleTodoFocus}
               onSettingsClick={handleSettingsClick}
+              suggestedTodos={suggestedTodos}
             />
           </div>
         )}

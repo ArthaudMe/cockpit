@@ -173,9 +173,19 @@ interface SignalSummary {
   meetings: (CalendarEvent | GranolaMeeting)[];
 }
 
+const RECENCY_WINDOW_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+
+function isRecent(ts: number, cutoff: number): boolean {
+  // Include items we can't parse (ts === 0) to be safe
+  return ts === 0 || ts >= cutoff;
+}
+
 function buildSignals(data: DatasourceData): SignalSummary {
+  const cutoff = Date.now() - RECENCY_WINDOW_MS;
+
   const linearProjects = new Map<string, LinearIssue[]>();
   for (const issue of data.linearIssues || []) {
+    if (!isRecent(parseActivityTimestamp(issue.updatedAt), cutoff)) continue;
     const key = issue.project || "__unassigned__";
     const arr = linearProjects.get(key) || [];
     arr.push(issue);
@@ -184,6 +194,7 @@ function buildSignals(data: DatasourceData): SignalSummary {
 
   const githubRepos = new Map<string, GitHubPR[]>();
   for (const pr of data.githubPRs || []) {
+    if (!isRecent(parseActivityTimestamp(pr.time), cutoff)) continue;
     const arr = githubRepos.get(pr.repo) || [];
     arr.push(pr);
     githubRepos.set(pr.repo, arr);
@@ -191,15 +202,20 @@ function buildSignals(data: DatasourceData): SignalSummary {
 
   const slackChannels = new Map<string, SlackMessage[]>();
   for (const msg of data.slackMessages || []) {
+    if (!isRecent(parseActivityTimestamp(msg.time), cutoff)) continue;
     const arr = slackChannels.get(msg.channel) || [];
     arr.push(msg);
     slackChannels.set(msg.channel, arr);
   }
 
-  const meetings: (CalendarEvent | GranolaMeeting)[] = [
+  const allMeetings: (CalendarEvent | GranolaMeeting)[] = [
     ...(data.calendar || []),
     ...(data.granolaMeetings || []),
   ];
+  const meetings = allMeetings.filter((m) => {
+    const dateKey = "date" in m ? m.date : undefined;
+    return isRecent(parseActivityTimestamp(m.time, dateKey), cutoff);
+  });
 
   return { linearProjects, githubRepos, slackChannels, meetings };
 }
@@ -243,7 +259,7 @@ function buildClusteringPrompt(signals: SignalSummary): string {
 ${lines.join("\n")}
 
 For each project you identify, return:
-- name: concise project name
+- name: simple, plain-language label (2-4 words), like "Landing page improvements", "API refactor", or "Sales pipeline". Never use repo slugs, ticket IDs, or technical prefixes
 - category: one of "Product", "Engineering", "Sales", "Operations", "Marketing", "Other"
 - status: one of "Active", "Planning", "Paused"
 - linear_projects: array of matching Linear project names (exact strings from above)
@@ -255,7 +271,7 @@ Rules:
 - Merge items that clearly belong to the same project (e.g. repo "mio-xyz/platform" and Linear project "Mio Platform")
 - A Slack channel like "#platform-dev" likely maps to a platform project
 - Only create projects for items that have real signals — don't invent projects
-- Project names must be short labels, maximum 5 words
+- Project names must be simple, plain-language labels — 2 to 4 words max
 - Never use a raw Slack message, meeting note, email body, bullet list, or sentence as a project name
 - Generic channels such as "general", "random", "announcements", and "updates" are not projects unless another tool gives a matching project or repo name
 - Unassigned Linear issues: try to map them to a project by title similarity, otherwise skip them

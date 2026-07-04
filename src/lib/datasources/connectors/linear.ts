@@ -119,6 +119,7 @@ export async function searchLinearIssues(searchQuery: string): Promise<LinearIss
           nodes {
             identifier
             title
+            url
             state { name }
             priority
             assignee { name }
@@ -157,6 +158,7 @@ export async function searchLinearIssues(searchQuery: string): Promise<LinearIss
         assignee: issue.assignee?.name || "Unassigned",
         project: issue.project?.name,
         updatedAt: new Date(issue.updatedAt).toISOString(),
+        url: issue.url || undefined,
       })
     );
   } catch {
@@ -176,6 +178,7 @@ export async function fetchLinearIssues(): Promise<LinearIssue[]> {
             nodes {
               identifier
               title
+              url
               state { name }
               priority
               assignee { name }
@@ -215,6 +218,7 @@ export async function fetchLinearIssues(): Promise<LinearIssue[]> {
         assignee: issue.assignee?.name || "Unassigned",
         project: issue.project?.name,
         updatedAt: new Date(issue.updatedAt).toLocaleString(),
+        url: issue.url || undefined,
       })
     );
   } catch {
