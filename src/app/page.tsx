@@ -11,9 +11,11 @@ import { ChatColumn } from "@/components/columns/ChatColumn";
 import { ContextualChatView, type ContextFocus } from "@/components/views/ContextualChatView";
 import { OnboardingView } from "@/components/views/OnboardingView";
 import { SettingsView } from "@/components/views/SettingsView";
+import { DashboardView } from "@/components/views/DashboardView";
 import { initAnalytics, track } from "@/lib/analytics";
 import { CommandPalette } from "@/components/ui/CommandPalette";
 import type { SearchResult } from "@/lib/search/types";
+import type { AppMode } from "@/components/layout/Header";
 import {
   focusCalendarEvent,
   focusMetric,
@@ -83,6 +85,7 @@ function projectSignalKey(data: DatasourceData): string | null {
 
 export default function Home() {
   const [chatInput, setChatInput] = useState("");
+  const [appMode, setAppMode] = useState<AppMode>("work");
   const [centerView, setCenterView] = useState<CenterView>({ type: "chat" });
   const [claudeStatus, setClaudeStatus] = useState<{
     connected: boolean;
@@ -253,6 +256,7 @@ export default function Home() {
 
   const handlePrefill = useCallback((text: string) => {
     setChatInput(text);
+    setAppMode("work");
     setCenterView({ type: "chat" });
   }, []);
 
@@ -279,10 +283,12 @@ export default function Home() {
   }, [handleRetryConnection]);
 
   const handleBackToChat = useCallback(() => {
+    setAppMode("work");
     setCenterView({ type: "chat" });
   }, []);
 
   const handleSettingsClick = useCallback(() => {
+    setAppMode("work");
     setCenterView({ type: "settings" });
   }, []);
 
@@ -302,6 +308,7 @@ export default function Home() {
   }, []);
 
   const handleOpenFocus = useCallback((focus: ContextFocus) => {
+    setAppMode("work");
     setCenterView({ type: "focus", focus });
   }, []);
 
@@ -349,6 +356,7 @@ export default function Home() {
       // Cmd+, → Open settings
       if (e.key === ",") {
         e.preventDefault();
+        setAppMode("work");
         setCenterView({ type: "settings" });
         return;
       }
@@ -484,62 +492,75 @@ export default function Home() {
     <div className="flex h-screen flex-col" style={{ background: "var(--bg)" }}>
       <Header
         onSettingsClick={handleSettingsClick}
+        activeMode={appMode}
+        onModeChange={setAppMode}
         notifications={notifications}
         unreadCount={unreadCount}
         onMarkAllRead={handleMarkAllRead}
         offlineInfo={offlineInfo}
       />
-      <div className="flex flex-1 overflow-hidden" style={{ padding: "0.5rem", gap: "0.5rem" }}>
-        <div style={{ width: 280, minWidth: 240, flexShrink: 0 }} className="overflow-y-auto">
-          <ProjectsColumn
-            onPrefill={handlePrefill}
-            inferredProjects={inferredProjects}
-            inferLoading={projectsLoading}
-            onRefresh={() => fetchProjects(true)}
-            hasAnyDatasource={hasAnyDatasource}
-            onSettingsClick={handleSettingsClick}
-          />
-          <FeedColumn
-            feed={contextData.company_feed}
-            onOpenFocus={handleOpenFocus}
-            hasAnyDatasource={hasAnyDatasource}
-            onSettingsClick={handleSettingsClick}
+      {appMode === "dashboard" ? (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <DashboardView
+            data={rawDatasourceData}
+            claudeConnected={claudeStatus.connected}
+            onConnectService={handleConnectService}
+            onOpenSettings={handleSettingsClick}
           />
         </div>
-        <div className="flex-1 min-w-0">
-          {centerView.type === "settings" ? (
-            <SettingsView onBack={handleBackToChat} />
-          ) : centerView.type === "focus" ? (
-            <ContextualChatView
-              focus={centerView.focus}
-              onBack={handleBackToChat}
-              claudeConnected={claudeStatus.connected}
-            />
-          ) : (
-            <ChatColumn
-              inputValue={chatInput}
-              onInputChange={setChatInput}
-              claudeConnected={claudeStatus.connected}
-              onOpenFocus={handleOpenFocus}
-            />
-          )}
-        </div>
-        {showRightColumn && (
-          <div style={{ width: 300, minWidth: 260, flexShrink: 0 }} className="overflow-y-auto">
-            <ContextColumn
-              context={contextData}
+      ) : (
+        <div className="flex flex-1 overflow-hidden" style={{ padding: "0.5rem", gap: "0.5rem" }}>
+          <div style={{ width: 280, minWidth: 240, flexShrink: 0 }} className="overflow-y-auto">
+            <ProjectsColumn
               onPrefill={handlePrefill}
-              onConnectService={handleConnectService}
-              onCalendarClick={handleCalendarClick}
-              onMetricClick={handleMetricClick}
-              onCompetitorClick={handleCompetitorClick}
-              onTodoFocus={handleTodoFocus}
+              inferredProjects={inferredProjects}
+              inferLoading={projectsLoading}
+              onRefresh={() => fetchProjects(true)}
+              hasAnyDatasource={hasAnyDatasource}
               onSettingsClick={handleSettingsClick}
-              suggestedTodos={suggestedTodos}
+            />
+            <FeedColumn
+              feed={contextData.company_feed}
+              onOpenFocus={handleOpenFocus}
+              hasAnyDatasource={hasAnyDatasource}
+              onSettingsClick={handleSettingsClick}
             />
           </div>
-        )}
-      </div>
+          <div className="flex-1 min-w-0">
+            {centerView.type === "settings" ? (
+              <SettingsView onBack={handleBackToChat} />
+            ) : centerView.type === "focus" ? (
+              <ContextualChatView
+                focus={centerView.focus}
+                onBack={handleBackToChat}
+                claudeConnected={claudeStatus.connected}
+              />
+            ) : (
+              <ChatColumn
+                inputValue={chatInput}
+                onInputChange={setChatInput}
+                claudeConnected={claudeStatus.connected}
+                onOpenFocus={handleOpenFocus}
+              />
+            )}
+          </div>
+          {showRightColumn && (
+            <div style={{ width: 300, minWidth: 260, flexShrink: 0 }} className="overflow-y-auto">
+              <ContextColumn
+                context={contextData}
+                onPrefill={handlePrefill}
+                onConnectService={handleConnectService}
+                onCalendarClick={handleCalendarClick}
+                onMetricClick={handleMetricClick}
+                onCompetitorClick={handleCompetitorClick}
+                onTodoFocus={handleTodoFocus}
+                onSettingsClick={handleSettingsClick}
+                suggestedTodos={suggestedTodos}
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Command Palette modal (Cmd+K) */}
       {showCommandPalette && (

@@ -40,9 +40,28 @@ export interface AgentInfo {
   busy: boolean;
 }
 
+export interface AgentProcessMetadata {
+  agentId?: string;
+  backend: string;
+  providerLabel: string;
+  model: string;
+  command: string;
+  args: string[];
+  cwd?: string;
+  usedWarmProcess: boolean;
+  promptChars?: number;
+  promptBytes?: number;
+  focusContextChars?: number;
+  imageCount?: number;
+}
+
+export type AgentChildProcess = ChildProcess & {
+  cockpit?: AgentProcessMetadata;
+};
+
 interface AgentState {
   info: AgentInfo;
-  warmProc: ChildProcess | null;
+  warmProc: AgentChildProcess | null;
 }
 
 // ─── Persistence ────────────────────────────────────────────────────
@@ -138,7 +157,7 @@ function spawnForBackend(
   systemPrompt: string,
   extraEnv?: Record<string, string>,
   cwd?: string
-): ChildProcess {
+): AgentChildProcess {
   const def = getProviderOrThrow(backend);
   const args = def.buildArgs(model, systemPrompt);
   const target = getSpawnTarget(def.binary, extraEnv);
@@ -147,7 +166,17 @@ function spawnForBackend(
     stdio: ["pipe", "pipe", "pipe"],
     env: target.env,
     cwd,
-  });
+  }) as AgentChildProcess;
+
+  proc.cockpit = {
+    backend,
+    providerLabel: def.label,
+    model,
+    command: target.command,
+    args,
+    cwd,
+    usedWarmProcess: false,
+  };
 
   proc.stderr?.on("data", (chunk: Buffer) => {
     console.error(`[agent:${backend}:stderr]`, chunk.toString());
@@ -335,7 +364,7 @@ export function sendToAgent(
   message: string,
   focusContext?: string,
   images?: string[]
-): ChildProcess {
+): AgentChildProcess {
   const state = agents.get(id);
   if (!state) throw new Error(`Agent ${id} not found`);
 
@@ -344,7 +373,7 @@ export function sendToAgent(
   const hasImages = images && images.length > 0;
   const tempImagePaths: string[] = [];
 
-  let proc: ChildProcess;
+  let proc: AgentChildProcess;
 
   const extraEnv: Record<string, string> = {};
   const eventInfo = getEventServerInfo();
@@ -379,7 +408,18 @@ export function sendToAgent(
       stdio: ["pipe", "pipe", "pipe"],
       env: target.env,
       cwd,
-    });
+    }) as AgentChildProcess;
+    proc.cockpit = {
+      agentId: id,
+      backend,
+      providerLabel: def.label,
+      model,
+      command: target.command,
+      args,
+      cwd,
+      usedWarmProcess: false,
+      imageCount: tempImagePaths.length,
+    };
     proc.stderr?.on("data", (chunk: Buffer) => {
       console.error(`[agent:${backend}:stderr]`, chunk.toString());
     });
@@ -387,6 +427,9 @@ export function sendToAgent(
     console.log("[agent-manager] spawned with %d images for %s", tempImagePaths.length, id);
   } else if (state.warmProc && state.warmProc.stdin?.writable) {
     proc = state.warmProc;
+    if (proc.cockpit) {
+      proc.cockpit.usedWarmProcess = true;
+    }
     state.warmProc = null;
     console.log("[agent-manager] using warm process for %s (pid %d)", id, proc.pid);
   } else {
@@ -415,10 +458,29 @@ export function sendToAgent(
     prompt = `[${images!.length} image(s) attached]\n\n${prompt}`;
   }
 
+  proc.cockpit = {
+    ...(proc.cockpit ?? {
+      backend,
+      providerLabel: def.label,
+      model,
+      command: def.binary,
+      args: def.buildArgs(model, systemPrompt),
+      usedWarmProcess: false,
+    }),
+    agentId: id,
+    backend,
+    providerLabel: def.label,
+    model,
+    promptChars: prompt.length,
+    promptBytes: Buffer.byteLength(prompt, "utf8"),
+    focusContextChars: focusContext?.length ?? 0,
+    imageCount: images?.length ?? 0,
+  };
+
   proc.stdin!.write(prompt);
   proc.stdin!.end();
 
-  proc.on("close", () => {
+  proc.on("close", (code) => {
     state.activeRequests = Math.max(0, (state.activeRequests || 1) - 1);
     state.info.busy = state.activeRequests > 0;
 
@@ -426,7 +488,7 @@ export function sendToAgent(
       try { unlinkSync(p); } catch { /* ignore */ }
     }
 
-    if (agents.has(id) && providerSupportsPrewarm(def) && !state.warmProc) {
+    if (code === 0 && agents.has(id) && providerSupportsPrewarm(def) && !state.warmProc) {
       warmAgent(state);
     }
   });
