@@ -2,6 +2,8 @@
 
 import { NotificationBell, type NotificationItem } from "./NotificationBell";
 
+export type AppMode = "work" | "dashboard";
+
 function formatCachedTime(cachedAt?: number): string {
   if (!cachedAt) return "";
   const diff = Math.round((Date.now() - cachedAt) / 1000);
@@ -12,12 +14,16 @@ function formatCachedTime(cachedAt?: number): string {
 
 export function Header({
   onSettingsClick,
+  activeMode,
+  onModeChange,
   notifications = [],
   unreadCount = 0,
   onMarkAllRead,
   offlineInfo,
 }: {
   onSettingsClick?: () => void;
+  activeMode?: AppMode;
+  onModeChange?: (mode: AppMode) => void;
   notifications?: NotificationItem[];
   unreadCount?: number;
   onMarkAllRead?: () => void;
@@ -30,6 +36,7 @@ export function Header({
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
+        position: "relative",
         padding: "0.4rem 0.75rem 0.4rem 5.5rem",
         borderBottom: "1px solid var(--border)",
         background: "var(--surface)",
@@ -76,6 +83,49 @@ export function Header({
           </span>
         )}
       </div>
+
+      {activeMode && onModeChange && (
+        <div
+          className="cockpit-header-actions"
+          style={{
+            position: "absolute",
+            left: "50%",
+            top: "50%",
+            transform: "translate(-50%, -50%)",
+            display: "flex",
+            alignItems: "center",
+            border: "1px solid var(--border)",
+            borderRadius: 4,
+            overflow: "hidden",
+          }}
+        >
+          {(["work", "dashboard"] as AppMode[]).map((mode) => {
+            const active = activeMode === mode;
+            return (
+              <button
+                key={mode}
+                onClick={() => onModeChange(mode)}
+                style={{
+                  background: active ? "var(--text)" : "transparent",
+                  border: "none",
+                  borderRight: mode === "work" ? "1px solid var(--border)" : "none",
+                  color: active ? "var(--bg)" : "var(--text-dim)",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  fontSize: "0.68rem",
+                  fontWeight: 700,
+                  padding: "0.18rem 0.5rem",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.04em",
+                }}
+                aria-pressed={active}
+              >
+                {mode === "work" ? "Work" : "Dashboard"}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <div className="cockpit-header-actions" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
         <NotificationBell
