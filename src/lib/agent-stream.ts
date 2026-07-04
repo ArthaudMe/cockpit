@@ -4,7 +4,18 @@ import { extractAndProcessMemories } from "./memory";
 import { extractAndProcessSkills } from "./skills-extract";
 import { persistMessage } from "./knowledge/conversations";
 import { getProvider } from "./provider-registry";
-import { isProviderAuthError, providerLoginNeededMessage } from "./provider-auth";
+import { isProviderAuthError } from "./provider-auth";
+import { classifyAgentFailure, formatAgentFailureForUser } from "./agent-failure";
+import {
+  appendAgentRunLog,
+  createAgentRunId,
+  getBuildInfo,
+  tailText,
+  type AgentRunFailureCategory,
+  type AgentRunPhase,
+} from "./agent-run-log";
+
+const DEFAULT_AGENT_TURN_TIMEOUT_MS = 285_000;
 
 /**
  * Send a message to an agent and stream the CLI process output as a
@@ -21,15 +32,32 @@ export function streamAgentResponse(
   const encoder = new TextEncoder();
   const outputParser = new AgentOutputParser(provider?.capabilities.output.kind ?? "plain-text");
   const proc = sendToAgent(agentId, message, focusContext, images);
+  const runId = createAgentRunId();
+  const startedAtMs = Date.now();
+  const startedAt = new Date(startedAtMs).toISOString();
+  const metadata = proc.cockpit;
 
   let responseText = "";
+  let stdoutText = "";
   let stderrText = "";
   let eventErrorText = "";
+  let timedOut = false;
+  let finalized = false;
+
+  appendRunLog("started", startedAt);
 
   const stream = new ReadableStream({
     start(controller) {
+      const turnTimeout = setTimeout(() => {
+        timedOut = true;
+        console.error("[agent:%s] turn timed out after %dms", agentId, resolveAgentTurnTimeoutMs());
+        proc.kill("SIGTERM");
+      }, resolveAgentTurnTimeoutMs());
+
       proc.stdout!.on("data", (chunk: Buffer) => {
-        for (const parsed of outputParser.push(chunk.toString())) {
+        const raw = chunk.toString();
+        stdoutText = tailText(stdoutText + raw);
+        for (const parsed of outputParser.push(raw)) {
           if (parsed.kind === "assistant_delta") {
             responseText += parsed.text;
             controller.enqueue(encoder.encode(parsed.text));
@@ -43,11 +71,14 @@ export function streamAgentResponse(
 
       proc.stderr!.on("data", (chunk: Buffer) => {
         const text = chunk.toString();
-        stderrText += text;
+        stderrText = tailText(stderrText + text);
         console.error(`[agent:${agentId}:stderr]`, text);
       });
 
-      proc.on("close", (code) => {
+      proc.on("close", (code, signal) => {
+        if (finalized) return;
+        finalized = true;
+        clearTimeout(turnTimeout);
         for (const parsed of outputParser.flush()) {
           if (parsed.kind === "assistant_delta") {
             responseText += parsed.text;
@@ -59,27 +90,45 @@ export function streamAgentResponse(
           }
         }
 
+        let failureCategory: AgentRunFailureCategory | undefined;
+        let userFailureMessage: string | undefined;
+
         if (code !== 0) {
-          const combined = (responseText + stderrText + eventErrorText).toLowerCase();
+          const combined = [responseText, stdoutText, stderrText, eventErrorText].filter(Boolean).join("\n");
+          const failure = classifyAgentFailure({
+            provider,
+            output: combined,
+            exitCode: code,
+            signal,
+            timedOut,
+          });
+          failureCategory = failure.category;
+
           if (provider && isProviderAuthError(provider, combined)) {
             if (provider.auth?.loginRoute) {
               fetch(`http://localhost:${process.env.PORT || "3939"}${provider.auth.loginRoute}`, {
                 method: "POST",
               }).catch(() => {});
             }
-            const loginMessage = `\n\n${providerLoginNeededMessage(provider)}`;
-            responseText += loginMessage;
-            controller.enqueue(encoder.encode(loginMessage));
-          } else if (eventErrorText.trim()) {
-            const eventMessage = `\n\n${eventErrorText.trim()}`;
-            responseText += eventMessage;
-            controller.enqueue(encoder.encode(eventMessage));
-          } else {
-            const failureMessage = "\n\nSomething went wrong. Please try sending your message again.";
-            responseText += failureMessage;
-            controller.enqueue(encoder.encode(failureMessage));
           }
+
+          userFailureMessage = formatAgentFailureForUser(failure, runId);
+          responseText += userFailureMessage;
+          controller.enqueue(encoder.encode(userFailureMessage));
         }
+
+        appendRunLog(code === 0 ? "completed" : "failed", new Date().toISOString(), {
+          exitCode: code,
+          signal,
+          durationMs: Date.now() - startedAtMs,
+          stdoutTail: stdoutText,
+          stderrTail: stderrText,
+          eventErrorTail: eventErrorText,
+          responseTail: responseText,
+          errorCategory: failureCategory,
+          userMessage: userFailureMessage,
+        });
+
         controller.close();
 
         // Fire-and-forget: extract and process memory + skill commands
@@ -118,11 +167,27 @@ export function streamAgentResponse(
       });
 
       proc.on("error", (err) => {
+        if (finalized) return;
+        finalized = true;
+        clearTimeout(turnTimeout);
         console.error(`[agent:${agentId}:error]`, err);
-        const backendLabel = provider?.label ?? "AI backend";
-        controller.enqueue(
-          encoder.encode(`Couldn't connect to ${backendLabel}. Please check that it is installed and try again.`),
-        );
+        const failure = classifyAgentFailure({
+          provider,
+          output: [stdoutText, stderrText, eventErrorText].filter(Boolean).join("\n"),
+          spawnError: err,
+        });
+        const failureMessage = formatAgentFailureForUser(failure, runId);
+        responseText += failureMessage;
+        appendRunLog("spawn_error", new Date().toISOString(), {
+          durationMs: Date.now() - startedAtMs,
+          stdoutTail: stdoutText,
+          stderrTail: stderrText,
+          eventErrorTail: eventErrorText,
+          responseTail: responseText,
+          errorCategory: failure.category,
+          userMessage: failureMessage,
+        });
+        controller.enqueue(encoder.encode(failureMessage));
         controller.close();
       });
     },
@@ -135,4 +200,47 @@ export function streamAgentResponse(
       "Cache-Control": "no-cache",
     },
   });
+
+  function appendRunLog(
+    phase: AgentRunPhase,
+    timestamp: string,
+    extra?: {
+      exitCode?: number | null;
+      signal?: NodeJS.Signals | null;
+      durationMs?: number;
+      stdoutTail?: string;
+      stderrTail?: string;
+      eventErrorTail?: string;
+      responseTail?: string;
+      errorCategory?: AgentRunFailureCategory;
+      userMessage?: string;
+    },
+  ) {
+    appendAgentRunLog({
+      runId,
+      phase,
+      timestamp,
+      agentId,
+      backend: metadata?.backend ?? agent?.backend,
+      providerLabel: metadata?.providerLabel ?? provider?.label,
+      model: metadata?.model ?? agent?.model,
+      command: metadata?.command,
+      args: metadata?.args,
+      cwd: metadata?.cwd,
+      pid: proc.pid,
+      usedWarmProcess: metadata?.usedWarmProcess,
+      promptChars: metadata?.promptChars,
+      promptBytes: metadata?.promptBytes,
+      focusContextChars: metadata?.focusContextChars,
+      imageCount: metadata?.imageCount,
+      build: getBuildInfo(),
+      ...extra,
+    });
+  }
+}
+
+function resolveAgentTurnTimeoutMs(): number {
+  const configured = Number(process.env.COCKPIT_AGENT_TURN_TIMEOUT_MS);
+  if (Number.isFinite(configured) && configured > 0) return configured;
+  return DEFAULT_AGENT_TURN_TIMEOUT_MS;
 }
