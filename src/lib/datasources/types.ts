@@ -61,6 +61,7 @@ export interface LinearIssue {
   assignee: string;
   project?: string;
   updatedAt: string;
+  url?: string;
 }
 
 export interface GitHubPR {

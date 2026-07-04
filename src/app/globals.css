@@ -604,6 +604,10 @@ body {
 }
 .checkbox:not(.checked) { color: transparent; }
 
+/* Todo row delete button */
+.todo-row:hover .todo-delete { opacity: 0.5 !important; }
+.todo-row:hover .todo-delete:hover { opacity: 1 !important; }
+
 /* Clickable rows in project view */
 .clickable-row {
   cursor: pointer;

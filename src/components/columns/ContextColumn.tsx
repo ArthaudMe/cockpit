@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import type { Context } from "@/lib/context-client";
+import type { SuggestedTodo } from "@/lib/todos/infer";
 import { usePersistedState } from "@/lib/use-persisted-state";
 import { track } from "@/lib/analytics";
 
@@ -25,11 +26,13 @@ function Panel({
   title,
   count,
   defaultOpen = true,
+  onAdd,
   children,
 }: {
   title: string;
   count?: number | string;
   defaultOpen?: boolean;
+  onAdd?: () => void;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -41,7 +44,27 @@ function Panel({
           <span className="panel-title">{title}</span>
           {count !== undefined && <span className="panel-count">{count}</span>}
         </div>
-        <span className={`panel-toggle ${open ? "open" : ""}`}>▶</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
+          {onAdd && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onAdd(); }}
+              style={{
+                background: "none",
+                border: "none",
+                color: "var(--text-muted)",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                fontSize: "0.75rem",
+                padding: "0 0.2rem",
+                lineHeight: 1,
+              }}
+              title="Add item"
+            >
+              +
+            </button>
+          )}
+          <span className={`panel-toggle ${open ? "open" : ""}`}>▶</span>
+        </div>
       </div>
       {open && <div className="panel-content">{children}</div>}
     </div>
@@ -338,21 +361,48 @@ export function ContextColumn({
   onCalendarClick,
   onMetricClick,
   onCompetitorClick,
-  onTodoClick,
+  onTodoFocus,
   onSettingsClick,
   onConnectService,
+  suggestedTodos,
 }: {
   context: Context;
   onPrefill: (text: string) => void;
   onCalendarClick?: (index: number) => void;
   onMetricClick?: (key: string) => void;
   onCompetitorClick?: (index: number) => void;
-  onTodoClick?: (index: number) => void;
+  onTodoFocus?: (todo: { text: string; done: boolean }) => void;
   onSettingsClick?: () => void;
   onConnectService?: (serviceId: string) => void;
+  suggestedTodos?: SuggestedTodo[];
 }) {
   const [todos, setTodos] = usePersistedState("cockpit-todos", context.todos);
+  const [dismissedSuggestions, setDismissedSuggestions] = usePersistedState<string[]>("cockpit-dismissed-suggestions", []);
   const [futureCalendarOpen, setFutureCalendarOpen] = useState(false);
+  const [showCreateTodo, setShowCreateTodo] = useState(false);
+  const [createTodoText, setCreateTodoText] = useState("");
+  const createTodoRef = useRef<HTMLInputElement>(null);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (showCreateTodo) setTimeout(() => createTodoRef.current?.focus(), 0);
+  }, [showCreateTodo]);
+
+  const handleCreateTodo = useCallback(() => {
+    const text = createTodoText.trim();
+    if (text) {
+      setTodos((prev) => [...prev, { text, done: false }]);
+      track("todo_created", { source: "manual" });
+    }
+    setCreateTodoText("");
+    setShowCreateTodo(false);
+  }, [createTodoText, setTodos]);
+
+  const handleDeleteTodo = useCallback((e: React.MouseEvent, index: number) => {
+    e.stopPropagation();
+    setTodos((prev) => prev.filter((_, i) => i !== index));
+  }, [setTodos]);
 
   const toggleTodo = (e: React.MouseEvent, index: number) => {
     e.stopPropagation();
@@ -360,6 +410,54 @@ export function ContextColumn({
       prev.map((t, i) => (i === index ? { ...t, done: !t.done } : t))
     );
   };
+
+  // Suggested todos — filter out dismissed and already-accepted ones
+  const visibleSuggestions = (suggestedTodos || []).filter(
+    (s) => !dismissedSuggestions.includes(s.id) && !todos.some((t) => t.text === s.text)
+  );
+
+  const acceptSuggestion = useCallback((suggestion: SuggestedTodo) => {
+    setTodos((prev) => [...prev, { text: suggestion.text, done: false }]);
+    track("todo_created", { source: "suggested", suggestionSource: suggestion.source });
+    if (suggestion.url) {
+      window.open(suggestion.url, "_blank");
+    }
+  }, [setTodos]);
+
+  const dismissSuggestion = useCallback((id: string) => {
+    setDismissedSuggestions((prev) => [...prev, id]);
+  }, [setDismissedSuggestions]);
+
+  // Drag-and-drop reordering
+  const handleDragStart = useCallback((index: number) => {
+    setDragIndex(index);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    setDragOverIndex(index);
+  }, []);
+
+  const handleDrop = useCallback((targetIndex: number) => {
+    if (dragIndex === null || dragIndex === targetIndex) {
+      setDragIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+    setTodos((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(dragIndex, 1);
+      next.splice(targetIndex, 0, moved);
+      return next;
+    });
+    setDragIndex(null);
+    setDragOverIndex(null);
+  }, [dragIndex, setTodos]);
+
+  const handleDragEnd = useCallback(() => {
+    setDragIndex(null);
+    setDragOverIndex(null);
+  }, []);
 
   return (
     <div>
@@ -452,21 +550,52 @@ export function ContextColumn({
       <SkillsPanel onPrefill={onPrefill} />
 
       {/* Todo */}
-      <Panel title="Todo" count={todos.length > 0 ? todos.filter((t) => !t.done).length + "/" + todos.length : 0}>
-        {todos.length === 0 ? (
-          <div className="empty-state">No todos yet — ask your AI to create some</div>
-        ) : todos.map((t, i) => (
+      <Panel
+        title="Todo"
+        count={todos.length > 0 ? todos.filter((t) => !t.done).length + "/" + todos.length : 0}
+        onAdd={() => setShowCreateTodo(true)}
+      >
+        {/* Existing todos with drag-and-drop */}
+        {todos.length === 0 && visibleSuggestions.length === 0 && !showCreateTodo && (
+          <div className="empty-state">No todos yet — click + to add one</div>
+        )}
+        {todos.map((t, i) => (
           <div
             key={i}
+            className="todo-row"
+            draggable
+            onDragStart={() => handleDragStart(i)}
+            onDragOver={(e) => handleDragOver(e, i)}
+            onDrop={() => handleDrop(i)}
+            onDragEnd={handleDragEnd}
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "0.4rem",
+              gap: "0.35rem",
               padding: "0.25rem 0",
               cursor: "pointer",
+              opacity: dragIndex === i ? 0.4 : 1,
+              borderTop: dragOverIndex === i && dragIndex !== null && dragIndex !== i
+                ? "2px solid var(--accent)"
+                : "2px solid transparent",
+              transition: "opacity 0.15s",
             }}
-            onClick={() => onTodoClick ? onTodoClick(i) : onPrefill(`Help me with: ${t.text}`)}
+            onClick={() => onTodoFocus ? onTodoFocus(t) : onPrefill(`Help me with: ${t.text}`)}
           >
+            <span
+              style={{
+                cursor: "grab",
+                color: "var(--text-muted)",
+                fontSize: "0.6rem",
+                flexShrink: 0,
+                userSelect: "none",
+                opacity: 0.5,
+                lineHeight: 1,
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              ⠿
+            </span>
             <div
               className={`checkbox ${t.done ? "checked" : ""}`}
               onClick={(e) => toggleTodo(e, i)}
@@ -479,12 +608,137 @@ export function ContextColumn({
                 color: t.done ? "var(--text-muted)" : "var(--text)",
                 textDecoration: t.done ? "line-through" : "none",
                 lineHeight: 1.3,
+                flex: 1,
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
               }}
             >
               {t.text}
             </span>
+            <button
+              onClick={(e) => handleDeleteTodo(e, i)}
+              style={{
+                background: "none",
+                border: "none",
+                color: "var(--text-muted)",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                fontSize: "0.75rem",
+                padding: "0 0.15rem",
+                opacity: 0,
+                transition: "opacity 0.1s",
+                flexShrink: 0,
+              }}
+              className="todo-delete"
+              title="Remove todo"
+            >
+              &times;
+            </button>
           </div>
         ))}
+
+        {/* Inline create todo */}
+        {showCreateTodo && (
+          <div style={{ padding: "0.25rem 0" }}>
+            <input
+              ref={createTodoRef}
+              value={createTodoText}
+              onChange={(e) => setCreateTodoText(e.target.value)}
+              onBlur={handleCreateTodo}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleCreateTodo();
+                if (e.key === "Escape") { setCreateTodoText(""); setShowCreateTodo(false); }
+              }}
+              placeholder="What needs to be done?"
+              style={{
+                width: "100%",
+                background: "var(--bg)",
+                border: "1px solid var(--border-light)",
+                borderRadius: 3,
+                padding: "0.3rem 0.4rem",
+                fontSize: "0.75rem",
+                color: "var(--text)",
+                fontFamily: "inherit",
+                outline: "none",
+              }}
+            />
+          </div>
+        )}
+
+        {/* Suggested todos from datasources */}
+        {visibleSuggestions.length > 0 && (
+          <div style={{ marginTop: todos.length > 0 ? "0.4rem" : 0 }}>
+            <div style={{
+              fontSize: "0.65rem",
+              color: "var(--text-muted)",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              padding: "0.2rem 0",
+              borderTop: todos.length > 0 ? "1px solid var(--border)" : "none",
+            }}>
+              Suggested
+            </div>
+            {visibleSuggestions.map((s) => (
+              <div
+                key={s.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  padding: "0.2rem 0",
+                  fontSize: "0.75rem",
+                }}
+              >
+                <span style={{
+                  flex: 1,
+                  minWidth: 0,
+                  color: "var(--text-dim)",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  lineHeight: 1.3,
+                }}>
+                  {s.text}
+                </span>
+                <span className="tag tag-dim" style={{ flexShrink: 0 }}>{s.source}</span>
+                <button
+                  onClick={() => acceptSuggestion(s)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "var(--green)",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    fontSize: "0.7rem",
+                    padding: "0 0.15rem",
+                    flexShrink: 0,
+                  }}
+                  title="Accept"
+                >
+                  ✓
+                </button>
+                <button
+                  onClick={() => dismissSuggestion(s.id)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    fontSize: "0.7rem",
+                    padding: "0 0.15rem",
+                    flexShrink: 0,
+                  }}
+                  title="Dismiss"
+                >
+                  &times;
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </Panel>
 
     </div>
