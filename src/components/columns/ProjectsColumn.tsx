@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { usePersistedState } from "@/lib/use-persisted-state";
 
 type ManualProject = {
   id: string;
@@ -87,6 +88,7 @@ export function ProjectsColumn({
   onSettingsClick?: () => void;
 }) {
   const [manualProjects, setManualProjects] = useState<ManualProject[]>([]);
+  const [hiddenProjects, setHiddenProjects] = usePersistedState<string[]>("cockpit-hidden-projects", []);
   const [showCreate, setShowCreate] = useState(false);
   const [createName, setCreateName] = useState("");
   const createRef = useRef<HTMLInputElement>(null);
@@ -138,7 +140,7 @@ export function ProjectsColumn({
     }
   }, [showCreate]);
 
-  const inferred = inferredProjects || [];
+  const inferred = (inferredProjects || []).filter((p) => !hiddenProjects.includes(p.name));
   const totalCount = manualProjects.length + inferred.length;
 
   const refreshBtn = onRefresh ? (
@@ -270,11 +272,34 @@ export function ProjectsColumn({
               >
                 {p.name}
               </span>
-              <span
-                className={`tag ${p.status === "Active" ? "tag-green" : "tag-yellow"}`}
-              >
-                {p.status}
-              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                <span
+                  className={`tag ${p.status === "Active" ? "tag-green" : "tag-yellow"}`}
+                >
+                  {p.status}
+                </span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setHiddenProjects((prev) => [...prev, p.name]);
+                  }}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    fontSize: "0.75rem",
+                    padding: "0 0.15rem",
+                    opacity: 0,
+                    transition: "opacity 0.1s",
+                  }}
+                  className="project-delete"
+                  title="Hide project"
+                >
+                  &times;
+                </button>
+              </div>
             </div>
             <div
               style={{
