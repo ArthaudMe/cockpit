@@ -27,6 +27,7 @@ type DashboardViewProps = {
   claudeConnected: boolean;
   onConnectService: (serviceId: string) => void;
   onOpenSettings: () => void;
+  agentId?: string | null;
 };
 
 const STARTERS = [
@@ -75,6 +76,7 @@ export function DashboardView({
   claudeConnected,
   onConnectService,
   onOpenSettings,
+  agentId,
 }: DashboardViewProps) {
   const [dashboard, setDashboard] = useState<DashboardSpec | null>(null);
   const [loading, setLoading] = useState(true);
@@ -227,6 +229,7 @@ export function DashboardView({
           dashboard={dashboard}
           runContext={buildDashboardFocusContext(dashboard, run)}
           claudeConnected={claudeConnected}
+          agentId={agentId}
         />
       </aside>
     </div>
@@ -419,10 +422,12 @@ function DashboardChat({
   dashboard,
   runContext,
   claudeConnected,
+  agentId,
 }: {
   dashboard: DashboardSpec;
   runContext: string;
   claudeConnected: boolean;
+  agentId?: string | null;
 }) {
   const [messages, setMessages] = usePersistedState<Message[]>(
     `cockpit-dashboard-chat-${dashboard.id}`,
@@ -448,7 +453,8 @@ function DashboardChat({
     setStreaming(true);
 
     try {
-      const res = await fetch("/api/chat", {
+      const chatUrl = agentId ? `/api/agents/${agentId}/chat` : "/api/chat";
+      const res = await fetch(chatUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -495,7 +501,7 @@ function DashboardChat({
     } finally {
       setStreaming(false);
     }
-  }, [claudeConnected, inputValue, runContext, setMessages, streaming]);
+  }, [agentId, claudeConnected, inputValue, runContext, setMessages, streaming]);
 
   const starters = [
     "What changed this week?",

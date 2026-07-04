@@ -66,10 +66,12 @@ export function ContextualChatView({
   focus,
   onBack,
   claudeConnected,
+  agentId,
 }: {
   focus: ContextFocus;
   onBack: () => void;
   claudeConnected: boolean;
+  agentId?: string | null;
 }) {
   const focusKey = `cockpit-focus-${focus.source}-${focus.title}`.slice(0, 100);
   const [messages, setMessages] = usePersistedState<Message[]>(focusKey, []);
@@ -111,7 +113,8 @@ export function ContextualChatView({
       setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
       try {
-        const res = await fetch("/api/chat", {
+        const chatUrl = agentId ? `/api/agents/${agentId}/chat` : "/api/chat";
+        const res = await fetch(chatUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -163,7 +166,7 @@ export function ContextualChatView({
 
       setStreaming(false);
     },
-    [inputValue, streaming, focus.systemContext]
+    [inputValue, streaming, focus.systemContext, agentId]
   );
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

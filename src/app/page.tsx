@@ -23,6 +23,7 @@ import {
   focusTodo,
 } from "@/lib/focus";
 import { inferSuggestedTodos } from "@/lib/todos/infer";
+import { usePersistedState } from "@/lib/use-persisted-state";
 import type { NotificationItem } from "@/components/layout/NotificationBell";
 
 type CenterView =
@@ -104,6 +105,7 @@ export default function Home() {
   const [showRightColumn, setShowRightColumn] = useState(true);
   const [onboardingComplete, setOnboardingComplete] = useState(false);
   const [onboardingPreferenceLoaded, setOnboardingPreferenceLoaded] = useState(false);
+  const [activeAgentId] = usePersistedState<string | null>("cockpit-active-agent", null);
   const lastProjectSignalKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -506,6 +508,7 @@ export default function Home() {
             claudeConnected={claudeStatus.connected}
             onConnectService={handleConnectService}
             onOpenSettings={handleSettingsClick}
+            agentId={activeAgentId}
           />
         </div>
       ) : (
@@ -534,6 +537,7 @@ export default function Home() {
                 focus={centerView.focus}
                 onBack={handleBackToChat}
                 claudeConnected={claudeStatus.connected}
+                agentId={activeAgentId}
               />
             ) : (
               <ChatColumn
