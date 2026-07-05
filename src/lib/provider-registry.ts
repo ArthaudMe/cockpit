@@ -215,7 +215,6 @@ export const PROVIDERS: Record<string, ProviderDef> = {
       "--json",
       "--model", model,
       "--skip-git-repo-check",
-      "--ephemeral",
       "-c", `developer_instructions=${JSON.stringify(systemPrompt)}`,
       "-",
     ],

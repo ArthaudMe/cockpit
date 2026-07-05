@@ -295,6 +295,11 @@ export default function Home() {
   }, []);
 
   const handleConnectService = useCallback(async (serviceId: string) => {
+    // Services that need manual configuration — open settings instead of OAuth
+    if (serviceId === "posthog" || serviceId === "stripe") {
+      setCenterView({ type: "settings" });
+      return;
+    }
     try {
       const res = await fetch(`/api/datasources/connect?service=${serviceId}`);
       const data = await res.json().catch(() => ({}));
