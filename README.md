@@ -8,7 +8,7 @@ Command center for your company. Desktop AI co-pilot that connects to your live 
 - **Claude-first, multi-backend** — Claude is the primary engine; Codex and Ollama available as alternates in the model switcher
 - **Backend auto-detection** — scans installed binaries and versions at startup
 - **Multi-agent system** — instant agent creation ("+" tab), double-click to rename, per-agent backend/model switching
-- **One chat engine** — main chat and focus-view chat share the same agents, memory, and history
+- **One chat engine** — main chat, focus-view chat, and dashboard chat all route through the user's active agent (with provider detection and automatic fallback)
 - **Warm process pre-spawning** — per-agent warm CLI processes for instant first tokens; system prompts rebuilt on every respawn with fresh datasource context
 - **Conversation memory** — recent turns and relevant workspace history travel with each message (one-shot CLI calls, stateful conversations)
 - **Streaming response parsing** — handles incomplete JSON blocks mid-stream without breaking
@@ -31,11 +31,11 @@ Command center for your company. Desktop AI co-pilot that connects to your live 
 - **Memory** — two bounded markdown files (MEMORY.md + USER.md); LLM-driven add/replace/remove via `cockpit_memory` blocks, injection-pattern scanning, live entries in every prompt
 - **Render blocks** — tables, bar charts, card grids, layouts, and mermaid blocks embedded inline in responses via `cockpit_render` JSON
 - **Context Focus** — click any calendar event, feed item, metric, or search result to open an entity-focused chat with structured data and suggested questions
-- **Project inference** — projects auto-clustered from Linear/GitHub/Slack signals via LLM, with heuristic fallback; clustering cached on disk and re-run only when sources change
+- **Project inference** — projects auto-clustered from Linear/GitHub/Slack signals via LLM, with heuristic fallback; 3-day recency filter, simple 2-4 word names; clustering cached on disk and re-run only when sources change; inferred projects dismissible via × button
 
 ### Dashboard & UI
 - **Live activity feed** — color-coded by type, built from all connected sources
-- **Context sidebar panels** — calendar (grouped by day), Slack highlights, skills, todos
+- **Context sidebar panels** — calendar (grouped by day), Slack highlights, skills, todos (manual creation via +, drag-and-drop reordering, auto-suggestions from Linear/GitHub with accept/dismiss)
 - **Chat interface** — terminal-style input, markdown rendering, image attachments (paste/drop), slash-command autocomplete
 - **Live refresh** — Electron main process polls every 60s and pushes to the renderer over IPC (browser dev mode falls back to polling)
 
