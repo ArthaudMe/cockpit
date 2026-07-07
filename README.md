@@ -91,6 +91,7 @@ Command center for your company. Desktop AI co-pilot that connects to your live 
 - **Electron shell** — Mac (DMG), Windows (NSIS), Linux (AppImage) targets
 - **Standalone server bundle** — the app ships Next.js standalone output (self-contained `server.js`), not `node_modules`; runs on a dynamically allocated localhost port
 - **Auto-update** — `electron-updater` with GitHub Releases, 4-hour check interval (requires a signed app on macOS)
+- **Secure DMG auto-eject** — automatically unmounts installer volumes on launch (shell-safe, no interpolation)
 - **Tray icon, window state persistence, splash screen, graceful shutdown**
 - **Background intelligence** — periodic rule checks over live data with native notifications
 
