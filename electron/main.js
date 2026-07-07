@@ -906,13 +906,16 @@ app.isQuitting = false;
 function ejectInstallerDmg() {
   if (isDev || !app.getPath("exe").startsWith("/Applications/")) return;
   try {
-    const { execSync } = require("child_process");
+    const { execFileSync } = require("child_process");
+    const { readdirSync } = require("fs");
     // Find mounted Cockpit DMG volumes
-    const mounts = execSync("ls /Volumes", { encoding: "utf-8" })
-      .split("\n")
-      .filter((v) => v.toLowerCase().includes("cockpit"));
+    const mounts = readdirSync("/Volumes").filter((v) =>
+      v.toLowerCase().includes("cockpit")
+    );
     for (const vol of mounts) {
-      execSync(`hdiutil detach "/Volumes/${vol}" -quiet`, { stdio: "ignore" });
+      execFileSync("hdiutil", ["detach", `/Volumes/${vol}`, "-quiet"], {
+        stdio: "ignore",
+      });
     }
   } catch {
     // Not critical — ignore if eject fails
