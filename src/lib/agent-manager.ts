@@ -132,9 +132,70 @@ interface AgentStateExt extends AgentState {
   customPrompt?: string | null;
   activeRequests?: number;
   hookDir?: string;
+  // When the current warmProc was (re)warmed, for idle-TTL cleanup.
+  warmedAt?: number;
 }
 
 const agents = new Map<string, AgentStateExt>();
+
+// ─── Warm process lifecycle ─────────────────────────────────────────
+//
+// Each used agent keeps an idle warm CLI process (~150-300MB) whose baked-in
+// system prompt also goes stale over time. Kill warm procs that have been idle
+// past this TTL; they are re-warmed on next use / after the next completed turn.
+const WARM_PROC_IDLE_TTL_MS = 10 * 60_000;
+const WARM_SWEEP_INTERVAL_MS = 60_000;
+let warmSweepInterval: NodeJS.Timeout | null = null;
+
+function ensureWarmSweep() {
+  if (warmSweepInterval) return;
+  warmSweepInterval = setInterval(() => {
+    const now = Date.now();
+    for (const state of agents.values()) {
+      if (state.warmProc && state.warmedAt && now - state.warmedAt > WARM_PROC_IDLE_TTL_MS) {
+        try {
+          state.warmProc.kill();
+        } catch {
+          /* already gone */
+        }
+        state.warmProc = null;
+        state.warmedAt = undefined;
+        console.log("[agent-manager] killed idle warm process for %s", state.info.id);
+      }
+    }
+  }, WARM_SWEEP_INTERVAL_MS);
+  // Do not let the sweep timer keep the process alive on its own.
+  warmSweepInterval.unref?.();
+}
+
+// Kill all warm CLI processes so they are not orphaned when the server exits.
+let shutdownHooksRegistered = false;
+
+function killAllWarmProcs() {
+  for (const state of agents.values()) {
+    if (state.warmProc) {
+      try {
+        state.warmProc.kill();
+      } catch {
+        /* already gone */
+      }
+      state.warmProc = null;
+      state.warmedAt = undefined;
+    }
+  }
+}
+
+function registerShutdownHooks() {
+  if (shutdownHooksRegistered) return;
+  shutdownHooksRegistered = true;
+  process.on("exit", killAllWarmProcs);
+  const onSignal = () => {
+    killAllWarmProcs();
+    process.exit(0);
+  };
+  process.on("SIGTERM", onSignal);
+  process.on("SIGINT", onSignal);
+}
 
 function genId(): string {
   return randomBytes(4).toString("hex");
@@ -220,12 +281,20 @@ function warmAgent(state: AgentStateExt) {
 
     const proc = spawnForBackend(backend, model, systemPrompt, extraEnv, cwd);
     proc.on("error", () => {
-      if (state.warmProc === proc) state.warmProc = null;
+      if (state.warmProc === proc) {
+        state.warmProc = null;
+        state.warmedAt = undefined;
+      }
     });
     proc.on("exit", () => {
-      if (state.warmProc === proc) state.warmProc = null;
+      if (state.warmProc === proc) {
+        state.warmProc = null;
+        state.warmedAt = undefined;
+      }
     });
     state.warmProc = proc;
+    state.warmedAt = Date.now();
+    ensureWarmSweep();
     return proc;
   }
 
@@ -431,6 +500,7 @@ export function sendToAgent(
       proc.cockpit.usedWarmProcess = true;
     }
     state.warmProc = null;
+    state.warmedAt = undefined;
     console.log("[agent-manager] using warm process for %s (pid %d)", id, proc.pid);
   } else {
     console.log("[agent-manager] cold start for %s (backend=%s)", id, backend);
@@ -477,16 +547,44 @@ export function sendToAgent(
     imageCount: images?.length ?? 0,
   };
 
-  proc.stdin!.write(prompt);
-  proc.stdin!.end();
-
-  proc.on("close", (code) => {
+  // Decrement activeRequests / clear busy and clean up temp files exactly once,
+  // whether the process closes normally or fails to spawn ("error"). Without
+  // this, a failed spawn (binary uninstalled/moved) would leave the agent busy
+  // forever because "close" never fires.
+  let settled = false;
+  const settle = () => {
+    if (settled) return;
+    settled = true;
     state.activeRequests = Math.max(0, (state.activeRequests || 1) - 1);
-    state.info.busy = state.activeRequests > 0;
+    state.info.busy = (state.activeRequests || 0) > 0;
 
     for (const p of tempImagePaths) {
       try { unlinkSync(p); } catch { /* ignore */ }
     }
+  };
+
+  // Guard against an unhandled "error" on the stdin stream (e.g. broken pipe on
+  // a failed spawn), which would otherwise throw and can crash the server.
+  proc.stdin?.on("error", (err) => {
+    console.error(`[agent:${backend}:stdin]`, err);
+  });
+
+  // Writing to a failed-spawn stdin can throw synchronously; never let it
+  // propagate as an uncaught exception.
+  try {
+    proc.stdin?.write(prompt);
+    proc.stdin?.end();
+  } catch (err) {
+    console.error(`[agent-manager] failed to write prompt for %s:`, id, err);
+  }
+
+  proc.on("error", (err) => {
+    console.error(`[agent-manager] spawn error for %s:`, id, err);
+    settle();
+  });
+
+  proc.on("close", (code) => {
+    settle();
 
     if (code === 0 && agents.has(id) && providerSupportsPrewarm(def) && !state.warmProc) {
       warmAgent(state);
@@ -533,6 +631,8 @@ let _runtimePromise: Promise<void> | null = null;
 
 export function ensureAgentRuntimeStarted(): Promise<void> {
   if (_runtimePromise) return _runtimePromise;
+  // Registers listeners only (no spawning) — safe to run at runtime start.
+  registerShutdownHooks();
   _runtimePromise = startEventServer()
     .then(restoreAgents)
     .catch((err) => {

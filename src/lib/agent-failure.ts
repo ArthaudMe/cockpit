@@ -13,6 +13,12 @@ export type AgentFailure = {
 type FailureInput = {
   provider?: ProviderDef;
   output: string;
+  /**
+   * Process stderr, when available separately from stdout. Preferred for
+   * matching so the model's own answer (which may merely discuss words like
+   * "timeout" or "429") does not get misclassified as an error.
+   */
+  stderr?: string;
   exitCode?: number | null;
   signal?: NodeJS.Signals | null;
   timedOut?: boolean;
@@ -21,19 +27,23 @@ type FailureInput = {
 
 export function classifyAgentFailure(input: FailureInput): AgentFailure {
   const providerLabel = input.provider?.label ?? "AI backend";
-  const normalized = `${input.output}\n${input.spawnError?.message ?? ""}`.toLowerCase();
+  // Prefer stderr for signal matching; fall back to full output when stderr
+  // was not captured separately.
+  const signalSource = input.stderr && input.stderr.trim() ? input.stderr : input.output;
+  const normalized = `${signalSource}\n${input.spawnError?.message ?? ""}`.toLowerCase();
   const details = cleanedDetails(input.output || input.spawnError?.message || "");
 
-  if (input.provider && isProviderAuthError(input.provider, normalized)) {
-    return {
-      category: "auth",
-      title: `${providerLabel} is not logged in`,
-      message: providerLoginNeededMessage(input.provider),
-      details,
-    };
-  }
+  // Only classify string-matched categories when a structured signal actually
+  // indicates a failed run — otherwise the model merely quoting an error phrase
+  // (e.g. "not logged in", "429") would trigger a false positive.
+  const hasFailureSignal =
+    input.timedOut === true ||
+    input.spawnError != null ||
+    input.signal != null ||
+    (typeof input.exitCode === "number" && input.exitCode !== 0);
 
-  if (input.timedOut || includesAny(normalized, ["timed out", "timeout", "signal sigterm"])) {
+  // Timeout is detected from the structured flag, not string matching.
+  if (input.timedOut) {
     return {
       category: "timeout",
       title: `${providerLabel} timed out`,
@@ -42,7 +52,16 @@ export function classifyAgentFailure(input: FailureInput): AgentFailure {
     };
   }
 
-  if (includesAny(normalized, ["enoent", "command not found", "not found on path", "no such file or directory"])) {
+  if (hasFailureSignal && input.provider && isProviderAuthError(input.provider, normalized)) {
+    return {
+      category: "auth",
+      title: `${providerLabel} is not logged in`,
+      message: providerLoginNeededMessage(input.provider),
+      details,
+    };
+  }
+
+  if (hasFailureSignal && includesAny(normalized, ["enoent", "command not found", "not found on path", "no such file or directory"])) {
     return {
       category: "missing_binary",
       title: `${providerLabel} is not available`,
@@ -51,7 +70,7 @@ export function classifyAgentFailure(input: FailureInput): AgentFailure {
     };
   }
 
-  if (includesAny(normalized, ["unknown model", "invalid model", "model is unavailable", "model not found", "does not exist"])) {
+  if (hasFailureSignal && includesAny(normalized, ["unknown model", "invalid model", "model is unavailable", "model not found", "does not exist"])) {
     return {
       category: "invalid_model",
       title: "Selected model is unavailable",
@@ -60,7 +79,7 @@ export function classifyAgentFailure(input: FailureInput): AgentFailure {
     };
   }
 
-  if (includesAny(normalized, ["rate limit", "too many requests", "429", "quota", "exceeded your current quota", "usage limit"])) {
+  if (hasFailureSignal && includesAny(normalized, ["rate limit", "too many requests", "429", "quota", "exceeded your current quota", "usage limit"])) {
     return {
       category: "rate_limit",
       title: `${providerLabel} quota or rate limit reached`,
@@ -69,7 +88,7 @@ export function classifyAgentFailure(input: FailureInput): AgentFailure {
     };
   }
 
-  if (includesAny(normalized, ["econnreset", "etimedout", "enotfound", "eai_again", "connection refused", "could not resolve", "network error"])) {
+  if (hasFailureSignal && includesAny(normalized, ["econnreset", "etimedout", "enotfound", "eai_again", "connection refused", "could not resolve", "network error"])) {
     return {
       category: "network",
       title: `${providerLabel} network failure`,
@@ -78,7 +97,7 @@ export function classifyAgentFailure(input: FailureInput): AgentFailure {
     };
   }
 
-  if (includesAny(normalized, ["permission denied", "operation not permitted", "eacces", "sandbox"])) {
+  if (hasFailureSignal && includesAny(normalized, ["permission denied", "operation not permitted", "eacces", "sandbox"])) {
     return {
       category: "permission",
       title: `${providerLabel} permission failure`,
@@ -87,7 +106,7 @@ export function classifyAgentFailure(input: FailureInput): AgentFailure {
     };
   }
 
-  if (includesAny(normalized, ["mcp", "modelcontextprotocol"])) {
+  if (hasFailureSignal && includesAny(normalized, ["mcp", "modelcontextprotocol"])) {
     return {
       category: "mcp",
       title: "MCP tool failure",
@@ -105,7 +124,7 @@ export function classifyAgentFailure(input: FailureInput): AgentFailure {
     };
   }
 
-  if (details) {
+  if (hasFailureSignal && details) {
     return {
       category: "provider_error",
       title: `${providerLabel} failed`,

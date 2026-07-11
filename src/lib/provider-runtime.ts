@@ -19,7 +19,13 @@ export type SpawnTarget = {
   env: NodeJS.ProcessEnv;
 };
 
-const binaryCache = new Map<string, string | null>();
+// Short TTLs so a CLI installed/removed after launch is picked up without a
+// full app restart, while still avoiding a filesystem walk on every message.
+const BINARY_CACHE_TTL_MS = 30_000;
+const DETECTION_CACHE_TTL_MS = 45_000;
+
+const binaryCache = new Map<string, { value: string | null; expires: number }>();
+const detectionCache = new Map<string, { detection: ProviderDetection; expires: number }>();
 
 function isExecutableFile(path: string): boolean {
   try {
@@ -33,18 +39,19 @@ export function resolveBinary(binary: string, env = buildAgentEnv()): string | n
   if (isAbsolute(binary)) return isExecutableFile(binary) ? binary : null;
 
   const cacheKey = `${binary}:${env.PATH || ""}`;
-  if (binaryCache.has(cacheKey)) return binaryCache.get(cacheKey) || null;
+  const cached = binaryCache.get(cacheKey);
+  if (cached && cached.expires > Date.now()) return cached.value;
 
   for (const dir of (env.PATH || "").split(delimiter)) {
     if (!dir) continue;
     const candidate = join(dir, binary);
     if (isExecutableFile(candidate)) {
-      binaryCache.set(cacheKey, candidate);
+      binaryCache.set(cacheKey, { value: candidate, expires: Date.now() + BINARY_CACHE_TTL_MS });
       return candidate;
     }
   }
 
-  binaryCache.set(cacheKey, null);
+  binaryCache.set(cacheKey, { value: null, expires: Date.now() + BINARY_CACHE_TTL_MS });
   return null;
 }
 
@@ -57,6 +64,17 @@ export function getSpawnTarget(binary: string, extraEnv?: Record<string, string>
 }
 
 export async function detectProvider(provider: ProviderDef): Promise<ProviderDetection> {
+  // Detection execFile's the binary (full Node startup, up to ~1.5s). Cache the
+  // result for a short window so it does not run on every chat message.
+  const cached = detectionCache.get(provider.binary);
+  if (cached && cached.expires > Date.now()) return cached.detection;
+
+  const detection = await runDetection(provider);
+  detectionCache.set(provider.binary, { detection, expires: Date.now() + DETECTION_CACHE_TTL_MS });
+  return detection;
+}
+
+async function runDetection(provider: ProviderDef): Promise<ProviderDetection> {
   const env = buildAgentEnv();
   const binaryPath = resolveBinary(provider.binary, env);
   if (!binaryPath) {

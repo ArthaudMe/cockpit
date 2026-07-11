@@ -21,6 +21,7 @@ type CodexExecEvent = {
 
 export type AgentOutputChunk =
   | { kind: "assistant_delta"; text: string }
+  | { kind: "assistant_replace"; text: string }
   | { kind: "error"; text: string };
 
 export class AgentOutputParser {
@@ -60,6 +61,15 @@ export class AgentOutputParser {
     return this.parseCodexLine(line);
   }
 
+  // Concatenation of every agent_message item's current text, in the order the
+  // items first appeared. Used to rebuild the full message when a snapshot
+  // rewrites (rather than extends) earlier text.
+  private assembledText(): string {
+    let text = "";
+    for (const value of this.codexItemText.values()) text += value;
+    return text;
+  }
+
   private parseCodexLine(line: string): AgentOutputChunk[] {
     if (!line) return [];
 
@@ -67,7 +77,9 @@ export class AgentOutputParser {
     try {
       event = JSON.parse(line) as CodexExecEvent;
     } catch {
-      return [];
+      // Surface unparseable stdout lines on the error channel instead of
+      // silently dropping them.
+      return [{ kind: "error", text: `Unparseable output line: ${line}` }];
     }
 
     if (event.type === "error" || event.type === "turn.failed") {
@@ -87,10 +99,18 @@ export class AgentOutputParser {
     this.codexItemText.set(item.id, current);
 
     if (!current || current === previous) return [];
-    if (previous && current.startsWith(previous)) {
+    // First snapshot for this item, or a pure extension of the prior one:
+    // stream just the newly-added suffix.
+    if (!previous) {
+      return [{ kind: "assistant_delta", text: current }];
+    }
+    if (current.startsWith(previous)) {
       return [{ kind: "assistant_delta", text: current.slice(previous.length) }];
     }
 
-    return [{ kind: "assistant_delta", text: current }];
+    // The snapshot rewrote earlier text (not a prefix-extension). Re-appending
+    // the full text would duplicate content, so emit a replace of the whole
+    // assembled message instead.
+    return [{ kind: "assistant_replace", text: this.assembledText() }];
   }
 }
