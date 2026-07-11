@@ -3,8 +3,57 @@ import { createCalendarEventAuto, createGmailDraftAuto, sendEmailViaComposio } f
 import { isComposioEnabled } from "@/lib/datasources/composio";
 import { isGoogleConnectedViaComposio } from "@/lib/datasources/token-store";
 import { appendToNotionPage } from "@/lib/datasources/connectors/notion";
+import { fetchJson, fetchOk, HttpError } from "@/lib/datasources/http";
 import type { ActionBlock, ActionResult } from "./types";
 import { isValidActionType as isKnownActionType, validateActionParams } from "./schema";
+
+// A Notion page/block id is a UUID (32 hex chars, optionally hyphenated). Reject
+// anything else before interpolating it into the API path (mirrors the GitHub
+// owner/repo validation below).
+const NOTION_ID_RE = /^[0-9a-fA-F-]{32,36}$/;
+
+// Remove anything that looks like a bearer token or secret so a passed-through
+// provider error can't leak credentials into the chat/log.
+function stripSecrets(text: string): string {
+  return text
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
+    .replace(/\b(api[_-]?key|token|secret|password)\b(\s*[=:]\s*)\S+/gi, "$1$2[redacted]");
+}
+
+// Pull a short, human-readable message out of a thrown error. HttpError carries
+// the provider's response body (JSON like {message}/{detail}/{errors:[...]}),
+// which we prefer so the user/model can actually correct the request.
+function extractProviderMessage(err: unknown): string {
+  let detail = "";
+  if (err instanceof HttpError) {
+    if (err.body) {
+      try {
+        const parsed = JSON.parse(err.body);
+        detail =
+          parsed?.message ||
+          parsed?.detail ||
+          parsed?.error?.message ||
+          (typeof parsed?.error === "string" ? parsed.error : "") ||
+          "";
+        if (Array.isArray(parsed?.errors) && parsed.errors.length) {
+          detail =
+            parsed.errors.map((e: any) => e?.message || e).filter(Boolean).join("; ") || detail;
+        }
+      } catch {
+        detail = err.body;
+      }
+    }
+    detail = detail || `HTTP ${err.status}`;
+  } else if (err instanceof Error) {
+    detail = err.message;
+  }
+  return stripSecrets(String(detail)).trim().slice(0, 200);
+}
+
+function failureMessage(fallback: string, err: unknown): string {
+  const detail = extractProviderMessage(err);
+  return detail ? `${fallback} (${detail})` : fallback;
+}
 
 async function executeLinearCreateIssue(
   params: Record<string, unknown>
@@ -40,22 +89,30 @@ async function executeLinearCreateIssue(
   if (priority != null) input.priority = priority;
 
   try {
-    const res = await fetch("https://api.linear.app/graphql", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${tokens.access_token}`,
+    const data: any = await fetchJson(
+      "https://api.linear.app/graphql",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${tokens.access_token}`,
+        },
+        body: JSON.stringify({ query: mutation, variables: { input } }),
       },
-      body: JSON.stringify({ query: mutation, variables: { input } }),
-    });
+      { service: "linear" },
+    );
 
-    if (!res.ok) {
-      return { success: false, message: "Couldn't create the Linear issue. Please check your connection and try again." };
-    }
-
-    const data = await res.json();
+    // Linear returns HTTP 200 with a populated `errors` array on failure.
     if (data.errors?.length) {
-      return { success: false, message: "Linear returned an error. Please check the issue details and try again." };
+      const detail = stripSecrets(
+        data.errors.map((e: any) => e?.message).filter(Boolean).join("; "),
+      ).slice(0, 200);
+      return {
+        success: false,
+        message: detail
+          ? `Linear returned an error: ${detail}`
+          : "Linear returned an error. Please check the issue details and try again.",
+      };
     }
 
     const issue = data.data?.issueCreate?.issue;
@@ -70,7 +127,7 @@ async function executeLinearCreateIssue(
       data: { identifier: issue.identifier },
     };
   } catch (err) {
-    return { success: false, message: "Couldn't reach Linear. Please check your internet connection." };
+    return { success: false, message: failureMessage("Couldn't create the Linear issue.", err) };
   }
 }
 
@@ -96,7 +153,7 @@ async function executeGitHubCommentPR(
   }
 
   try {
-    const res = await fetch(
+    const res = await fetchOk(
       `https://api.github.com/repos/${encodeURIComponent(ownerStr)}/${encodeURIComponent(repoStr)}/issues/${prNum}/comments`,
       {
         method: "POST",
@@ -107,15 +164,9 @@ async function executeGitHubCommentPR(
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ body }),
-      }
+      },
+      { service: "github" },
     );
-
-    if (!res.ok) {
-      return {
-        success: false,
-        message: "Couldn't post the GitHub comment. Please check your permissions and try again.",
-      };
-    }
 
     const data = await res.json();
     return {
@@ -125,7 +176,7 @@ async function executeGitHubCommentPR(
       data: { comment_id: data.id },
     };
   } catch (err) {
-    return { success: false, message: "Couldn't reach GitHub. Please check your internet connection." };
+    return { success: false, message: failureMessage("Couldn't post the GitHub comment.", err) };
   }
 }
 
@@ -143,18 +194,28 @@ async function executeSlackSendMessage(
   }
 
   try {
-    const res = await fetch("https://slack.com/api/chat.postMessage", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${tokens.access_token}`,
-        "Content-Type": "application/json",
+    const data: any = await fetchJson(
+      "https://slack.com/api/chat.postMessage",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${tokens.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ channel, text }),
       },
-      body: JSON.stringify({ channel, text }),
-    });
+      { service: "slack" },
+    );
 
-    const data = await res.json();
+    // Slack returns HTTP 200 with { ok: false, error } on failure.
     if (!data.ok) {
-      return { success: false, message: "Slack couldn't send the message. Please check the channel name and try again." };
+      const detail = stripSecrets(String(data.error || "")).slice(0, 200);
+      return {
+        success: false,
+        message: detail
+          ? `Slack couldn't send the message: ${detail}`
+          : "Slack couldn't send the message. Please check the channel name and try again.",
+      };
     }
 
     return {
@@ -163,7 +224,7 @@ async function executeSlackSendMessage(
       data: { ts: data.ts, channel: data.channel },
     };
   } catch (err) {
-    return { success: false, message: "Couldn't reach Slack. Please check your internet connection." };
+    return { success: false, message: failureMessage("Couldn't reach Slack.", err) };
   }
 }
 
@@ -219,16 +280,27 @@ async function executeNotionUpdatePage(
     return { success: false, message: "Missing required params: pageId, content" };
   }
 
-  const result = await appendToNotionPage({
-    pageId: pageId as string,
-    content: content as string,
-  });
+  // Validate the pageId against a UUID-ish charset before it reaches the Notion
+  // API path (prevents path injection from LLM-supplied params).
+  const pageIdStr = String(pageId).trim();
+  if (!NOTION_ID_RE.test(pageIdStr)) {
+    return { success: false, message: "Invalid pageId format (expected a Notion UUID)." };
+  }
 
-  return {
-    success: result.success,
-    message: result.message,
-    url: result.url,
-  };
+  try {
+    const result = await appendToNotionPage({
+      pageId: pageIdStr,
+      content: content as string,
+    });
+
+    return {
+      success: result.success,
+      message: result.message,
+      url: result.url,
+    };
+  } catch (err) {
+    return { success: false, message: failureMessage("Couldn't update the Notion page.", err) };
+  }
 }
 
 async function executeGmailSend(
