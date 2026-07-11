@@ -11,6 +11,7 @@ import { writeFile } from "fs/promises";
 import { join } from "path";
 import { homedir } from "os";
 import { createHash } from "crypto";
+import { readJsonCached } from "../fs-cache";
 
 const HISTORY_DIR = join(homedir(), ".cockpit", "history");
 
@@ -76,17 +77,17 @@ function loadDay(date: string) {
   return dayCache;
 }
 
-function scheduleWrite(date: string) {
+function scheduleWrite(date: string, messages: StoredMessage[]) {
+  // Capture the target date + messages array in the closure. Re-checking the
+  // mutable dayCache here would drop a 23:59 message whose write runs after
+  // the day rolled over (dayCache.date no longer matches).
   writeQueue = writeQueue
     .then(() => {
-      if (!dayCache || dayCache.date !== date) return;
       const dateDir = join(HISTORY_DIR, date);
       mkdirSync(dateDir, { recursive: true, mode: 0o700 });
-      return writeFile(
-        dayFilePath(date),
-        JSON.stringify(dayCache.messages, null, 2),
-        { mode: 0o600 }
-      );
+      return writeFile(dayFilePath(date), JSON.stringify(messages, null, 2), {
+        mode: 0o600,
+      });
     })
     .catch((err) => {
       console.error("[knowledge/conversations] failed to persist:", err);
@@ -113,7 +114,7 @@ export function persistMessage(message: ConversationMessage): void {
       for (const m of dropped) cache.hashes.delete(m._hash);
     }
 
-    scheduleWrite(date);
+    scheduleWrite(date, cache.messages);
   } catch (err) {
     console.error("[knowledge/conversations] failed to persist message:", err);
   }
@@ -133,10 +134,19 @@ export function getRecentMessages(
     .split("T")[0];
 
   const todayMessages = loadDay(todayStr).messages;
+  // Yesterday's file is immutable once the day rolls over, so serve it from
+  // the mtime-keyed cache rather than re-reading/parsing it per message.
+  const yesterdayCached = readJsonCached<StoredMessage[]>(
+    dayFilePath(yesterday),
+    []
+  );
+  const yesterdayMessages = Array.isArray(yesterdayCached)
+    ? yesterdayCached
+    : [];
   const all =
     todayMessages.length >= limit
       ? todayMessages
-      : [...readDayFile(yesterday), ...todayMessages];
+      : [...yesterdayMessages, ...todayMessages];
 
   const forAgent = all.filter((m) => m.agentId === agentId);
   return forAgent.slice(-limit).map(({ _hash, ...msg }) => msg);

@@ -4,9 +4,10 @@
  * Scores items by keyword match (title/body) and recency.
  */
 
-import { readFileSync, readdirSync, existsSync } from "fs";
+import { readdirSync, existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import { readJsonCached } from "../fs-cache";
 import type { HistoryQuery, HistoryResult } from "./types";
 
 const HISTORY_DIR = join(homedir(), ".cockpit", "history");
@@ -137,39 +138,54 @@ function extractSearchable(
 
 // ─── Scoring ───────────────────────────────────────────────────────
 
+/** Tokenize on non-word chars, lowercased, so punctuation doesn't kill
+ * exact-match. Query-side callers additionally drop short stopwords. */
+function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/\W+/)
+    .filter(Boolean);
+}
+
 function scoreItem(
   title: string,
   body: string,
   queryWords: string[]
 ): number {
-  let score = 0;
+  const titleTokens = new Set(tokenize(title));
+  const bodyTokens = new Set(tokenize(body));
   const titleLower = title.toLowerCase();
   const bodyLower = body.toLowerCase();
 
+  let exactScore = 0;
+  let substringScore = 0;
+  let exactHits = 0;
+
   for (const word of queryWords) {
-    const wordLower = word.toLowerCase();
+    const w = word.toLowerCase();
+    let hit = false;
 
-    // Exact word match in title: +10
-    // Use word boundary check via splitting
-    const titleWords = titleLower.split(/\s+/);
-    if (titleWords.includes(wordLower)) {
-      score += 10;
-    } else if (titleLower.includes(wordLower)) {
-      // Substring match in title: +1
-      score += 1;
+    if (titleTokens.has(w)) {
+      exactScore += 10;
+      hit = true;
+    } else if (titleLower.includes(w)) {
+      substringScore += 1;
     }
 
-    // Exact word match in body: +3
-    const bodyWords = bodyLower.split(/\s+/);
-    if (bodyWords.includes(wordLower)) {
-      score += 3;
-    } else if (bodyLower.includes(wordLower)) {
-      // Substring match in body: +1
-      score += 1;
+    if (bodyTokens.has(w)) {
+      exactScore += 3;
+      hit = true;
+    } else if (bodyLower.includes(w)) {
+      substringScore += 1;
     }
+
+    if (hit) exactHits++;
   }
 
-  return score;
+  // Require at least one exact-token hit before crediting substring bonuses,
+  // so short/common fragments no longer match everything.
+  if (exactHits === 0) return 0;
+  return exactScore + substringScore;
 }
 
 // ─── Main search ───────────────────────────────────────────────────
@@ -179,9 +195,9 @@ export function searchHistory(q: HistoryQuery): HistoryResult[] {
   const fromDate = q.dateRange?.from ?? daysAgo(14);
   const toDate = q.dateRange?.to ?? todayStr();
   const sourceFilter = q.sources?.length ? new Set(q.sources) : null;
-  const queryWords = q.query
-    .split(/\s+/)
-    .filter((w) => w.length > 0);
+  // Tokenize on non-word chars and drop stopword-length fragments (< 3 chars)
+  // so short/common words don't match everything.
+  const queryWords = tokenize(q.query).filter((w) => w.length >= 3);
 
   if (queryWords.length === 0) return [];
 
@@ -218,14 +234,10 @@ export function searchHistory(q: HistoryQuery): HistoryResult[] {
       if (sourceFilter && !sourceFilter.has(source)) continue;
 
       const filePath = join(dateDir, file);
-      let items: Record<string, unknown>[];
-      try {
-        const raw = readFileSync(filePath, "utf-8");
-        const parsed = JSON.parse(raw);
-        items = Array.isArray(parsed) ? parsed : [];
-      } catch {
-        continue;
-      }
+      // mtime-keyed cache: unchanged day-files aren't re-read/re-parsed on
+      // every chat message (this runs on the hot path).
+      const parsed = readJsonCached<Record<string, unknown>[]>(filePath, []);
+      const items = Array.isArray(parsed) ? parsed : [];
 
       for (const item of items) {
         const searchable = extractSearchable(source, item);

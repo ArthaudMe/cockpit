@@ -42,6 +42,7 @@ export interface CalendarEvent {
   duration: string;
   attendees: string[];
   description?: string;
+  timestamp?: string; // ISO, for dedup/search/recency
   source: string;
 }
 
@@ -50,6 +51,7 @@ export interface EmailThread {
   from: string;
   snippet: string;
   time: string;
+  timestamp?: string; // ISO, for dedup/search/recency
   unread: boolean;
 }
 

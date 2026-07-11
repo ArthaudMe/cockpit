@@ -2,6 +2,7 @@ export {
   MemoryStore,
   getMemoryStore,
   resetMemoryStore,
+  getLastMemoryError,
   type MemoryTarget,
   type MemoryAction,
   type MemoryCommand,
@@ -23,12 +24,14 @@ export function buildMemoryPromptSection(): string {
 export function extractAndProcessMemories(responseText: string): {
   cleanedText: string;
   processed: Array<{ command: MemoryCommand; result: { ok: boolean; error?: string } }>;
+  failures: Array<{ command: MemoryCommand; error: string }>;
 } {
   const store = getMemoryStore();
   const processed: Array<{
     command: MemoryCommand;
     result: { ok: boolean; error?: string };
   }> = [];
+  const failures: Array<{ command: MemoryCommand; error: string }> = [];
 
   // Match JSON code blocks with cockpit_memory
   const blockPattern = /```json\s*\n(\{[\s\S]*?"cockpit_memory"\s*:\s*true[\s\S]*?\})\s*\n```/g;
@@ -80,6 +83,12 @@ export function extractAndProcessMemories(responseText: string): {
       }
 
       processed.push({ command: memCmd, result });
+      if (!result.ok) {
+        failures.push({
+          command: memCmd,
+          error: result.error ?? "Unknown memory error",
+        });
+      }
 
       // Strip the memory block from the displayed text
       cleanedText = cleanedText.replace(m.full, "");
@@ -91,5 +100,5 @@ export function extractAndProcessMemories(responseText: string): {
   // Clean up extra blank lines left by stripped blocks
   cleanedText = cleanedText.replace(/\n{3,}/g, "\n\n").trim();
 
-  return { cleanedText, processed };
+  return { cleanedText, processed, failures };
 }

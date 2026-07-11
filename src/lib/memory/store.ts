@@ -73,6 +73,46 @@ export class MemoryStore {
     return entries.map((e) => `${DELIMITER} ${e}`).join("\n");
   }
 
+  /**
+   * Strip the reserved delimiter from stored content. The delimiter is how
+   * entries are separated on disk, so an entry containing it would fragment
+   * permanently on the next parseFile(). Replacing it with a space keeps the
+   * write→parseFile round-trip stable.
+   */
+  private sanitize(content: string): string {
+    return content.split(DELIMITER).join(" ").replace(/\s+/g, " ").trim();
+  }
+
+  /**
+   * Locate the entry targeted by `oldText`. Prefers an exact (trimmed,
+   * case-insensitive) full-entry match; otherwise falls back to a unique
+   * substring match. Returns an ambiguous error when a substring matches
+   * more than one entry, rather than silently mutating the wrong one.
+   */
+  private findEntryIndex(
+    entries: string[],
+    oldText: string
+  ): { idx: number; error?: string } {
+    const needle = oldText.trim().toLowerCase();
+
+    const exact = entries.findIndex((e) => e.trim().toLowerCase() === needle);
+    if (exact !== -1) return { idx: exact };
+
+    const substringMatches: number[] = [];
+    entries.forEach((e, i) => {
+      if (e.toLowerCase().includes(needle)) substringMatches.push(i);
+    });
+
+    if (substringMatches.length === 1) return { idx: substringMatches[0] };
+    if (substringMatches.length > 1) {
+      return {
+        idx: -1,
+        error: `"${oldText}" is ambiguous — it matches ${substringMatches.length} entries. Use the exact entry text.`,
+      };
+    }
+    return { idx: -1, error: `No entry matching "${oldText}" found` };
+  }
+
   private loadFromDisk() {
     mkdirSync(MEMORIES_DIR, { recursive: true, mode: 0o700 });
 
@@ -105,32 +145,42 @@ export class MemoryStore {
     return DANGEROUS_PATTERNS.some((p) => p.test(text));
   }
 
+  /**
+   * Record a failure so it can be surfaced even when the calling console
+   * stream is already closed, then return the error result.
+   */
+  private fail(error: string): { ok: false; error: string } {
+    _lastMemoryError = error;
+    return { ok: false, error };
+  }
+
   // ── Actions ─────────────────────────────────────────────────────
 
   add(target: MemoryTarget, content: string): { ok: boolean; error?: string } {
-    if (!content?.trim()) return { ok: false, error: "Empty content" };
+    if (!content?.trim()) return this.fail("Empty content");
     if (this.scanContent(content))
-      return { ok: false, error: "Content flagged as potentially unsafe" };
+      return this.fail("Content flagged as potentially unsafe");
 
     const entries = this[target];
     const limit = LIMITS[target];
+    const clean = this.sanitize(content);
+    if (!clean) return this.fail("Empty content");
 
     // Dedup: skip if already exists
-    if (entries.some((e) => e === content.trim())) {
+    if (entries.some((e) => e === clean)) {
       return { ok: true }; // Silently succeed
     }
 
     // Check capacity
     const current = this.serializeEntries(entries).length;
-    const newLen = current + DELIMITER.length + 1 + content.trim().length + 1;
+    const newLen = current + DELIMITER.length + 1 + clean.length + 1;
     if (newLen > limit) {
-      return {
-        ok: false,
-        error: `Would exceed ${target} limit (${limit} chars). Current: ${current}. Try replacing or removing an old entry first.`,
-      };
+      return this.fail(
+        `Would exceed ${target} limit (${limit} chars). Current: ${current}. Try replacing or removing an old entry first.`
+      );
     }
 
-    entries.push(content.trim());
+    entries.push(clean);
     this.writeToDisk(target);
     return { ok: true };
   }
@@ -140,20 +190,19 @@ export class MemoryStore {
     oldText: string,
     content: string
   ): { ok: boolean; error?: string } {
-    if (!oldText?.trim()) return { ok: false, error: "Missing old_text" };
-    if (!content?.trim()) return { ok: false, error: "Empty content" };
+    if (!oldText?.trim()) return this.fail("Missing old_text");
+    if (!content?.trim()) return this.fail("Empty content");
     if (this.scanContent(content))
-      return { ok: false, error: "Content flagged as potentially unsafe" };
+      return this.fail("Content flagged as potentially unsafe");
+
+    const clean = this.sanitize(content);
+    if (!clean) return this.fail("Empty content");
 
     const entries = this[target];
-    const idx = entries.findIndex((e) =>
-      e.toLowerCase().includes(oldText.trim().toLowerCase())
-    );
-    if (idx === -1) {
-      return { ok: false, error: `No entry matching "${oldText}" found` };
-    }
+    const { idx, error } = this.findEntryIndex(entries, oldText);
+    if (idx === -1) return this.fail(error!);
 
-    entries[idx] = content.trim();
+    entries[idx] = clean;
     this.writeToDisk(target);
     return { ok: true };
   }
@@ -162,15 +211,11 @@ export class MemoryStore {
     target: MemoryTarget,
     oldText: string
   ): { ok: boolean; error?: string } {
-    if (!oldText?.trim()) return { ok: false, error: "Missing old_text" };
+    if (!oldText?.trim()) return this.fail("Missing old_text");
 
     const entries = this[target];
-    const idx = entries.findIndex((e) =>
-      e.toLowerCase().includes(oldText.trim().toLowerCase())
-    );
-    if (idx === -1) {
-      return { ok: false, error: `No entry matching "${oldText}" found` };
-    }
+    const { idx, error } = this.findEntryIndex(entries, oldText);
+    if (idx === -1) return this.fail(error!);
 
     entries.splice(idx, 1);
     this.writeToDisk(target);
@@ -232,6 +277,19 @@ Guidelines:
 - Notes should contain working context (project state, decisions, blockers)
 - Memory commands are processed silently — don't mention them to the user`;
   }
+}
+
+// ─── Failure surfacing ──────────────────────────────────────────────
+
+let _lastMemoryError: string | null = null;
+
+/**
+ * The last memory operation failure recorded by the store, or null if the
+ * last op succeeded / none has failed. Lets callers surface failures that
+ * would otherwise vanish into a closed console stream.
+ */
+export function getLastMemoryError(): string | null {
+  return _lastMemoryError;
 }
 
 // ─── Singleton ──────────────────────────────────────────────────────
