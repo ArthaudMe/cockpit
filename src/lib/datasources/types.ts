@@ -61,6 +61,7 @@ export interface LinearIssue {
   assignee: string;
   project?: string;
   updatedAt: string;
+  timestamp?: string; // ISO, for dedup/search/recency
   url?: string;
 }
 
@@ -70,6 +71,7 @@ export interface GitHubPR {
   author: string;
   status: string;
   time: string;
+  timestamp?: string; // ISO, for dedup/search/recency
   url: string;
 }
 
@@ -78,12 +80,14 @@ export interface GitHubNotification {
   repo: string;
   type: string;
   time: string;
+  timestamp?: string; // ISO, for dedup/search/recency
   url: string;
 }
 
 export interface NotionPage {
   title: string;
   lastEdited: string;
+  timestamp?: string; // ISO, for dedup/search/recency
   url: string;
   parent?: string;
 }
@@ -94,6 +98,7 @@ export interface SlackMessage {
   message: string;
   author: string;
   time: string;
+  timestamp?: string; // ISO, for dedup/search/recency
 }
 
 export interface GranolaMeeting {
@@ -133,6 +138,7 @@ export interface DatasourceData {
   posthogMetrics?: Record<string, MetricValue>;
   mcpResources?: McpResourceItem[];
   _connected?: Record<string, boolean>;
+  _errors?: Partial<Record<ServiceId, string>>;
   _offline?: boolean;
   _cachedAt?: number;
 }
