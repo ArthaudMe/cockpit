@@ -38,8 +38,31 @@ const nextConfig: NextConfig = {
     root: path.resolve(__dirname),
   },
   eslint: {
-    // eslint-config-next not installed in this workspace; lint separately if needed
+    // Lint runs as a separate `pnpm lint` step; don't block production builds.
     ignoreDuringBuilds: true,
+  },
+  // Defense-in-depth CSP for the Electron renderer loading the local Next
+  // server. 'unsafe-inline' on scripts is required by Next's dev/inline
+  // runtime; the value here is locking down remote resource loads and
+  // exfiltration (connect-src 'self', object-src 'none', frame-ancestors).
+  async headers() {
+    const csp = [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob:",
+      "connect-src 'self'",
+      "font-src 'self' data:",
+      "object-src 'none'",
+      "base-uri 'none'",
+      "frame-ancestors 'none'",
+    ].join("; ");
+    return [
+      {
+        source: "/:path*",
+        headers: [{ key: "Content-Security-Policy", value: csp }],
+      },
+    ];
   },
 };
 
