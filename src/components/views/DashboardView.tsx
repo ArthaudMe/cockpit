@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChatMessage } from "@/components/ui/ChatMessage";
 import { usePersistedState } from "@/lib/use-persisted-state";
+import { streamChat } from "@/lib/chat-client";
 import type { DatasourceData } from "@/lib/datasources/types";
 import { buildDashboardDraft } from "@/lib/dashboard/planner";
 import {
@@ -52,15 +53,7 @@ const STATE_COLORS: Record<DashboardMetricState, string> = {
   no_data: "var(--orange)",
 };
 
-async function readErrorBody(res: Response): Promise<string> {
-  try {
-    return (await res.text()).trim();
-  } catch {
-    return "";
-  }
-}
-
-function chatFailureMessage(res: Response, body: string): string {
+function chatFailureMessage(res: { status: number }, body: string): string {
   if (res.status === 401 && body) return body;
   if (res.status === 503 && body) return body;
   if (res.status >= 500) return "Something went wrong. Please try again in a moment.";
@@ -437,12 +430,18 @@ function DashboardChat({
   const [streaming, setStreaming] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // Abort any in-flight stream when the component unmounts.
+  useEffect(() => {
+    return () => abortRef.current?.abort();
+  }, []);
 
   const sendMessage = useCallback(async (directText?: string) => {
     const msg = (directText || inputValue).trim();
@@ -452,42 +451,39 @@ function DashboardChat({
     setMessages((prev) => [...prev, { role: "user", content: msg }, { role: "assistant", content: "" }]);
     setStreaming(true);
 
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       const chatUrl = agentId ? `/api/agents/${agentId}/chat` : "/api/chat";
-      const res = await fetch(chatUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const result = await streamChat({
+        url: chatUrl,
+        body: {
           message: msg,
           focusContext: runContext,
-        }),
+        },
+        signal: controller.signal,
+        onChunk: (_full, delta) => {
+          setMessages((prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            next[next.length - 1] = { ...last, content: last.content + delta };
+            return next;
+          });
+        },
       });
 
-      if (!res.ok || !res.body) {
-        const body = await readErrorBody(res);
+      if (!result.ok) {
         setMessages((prev) => {
           const next = [...prev];
-          next[next.length - 1] = { role: "assistant", content: chatFailureMessage(res, body) };
+          next[next.length - 1] = { role: "assistant", content: chatFailureMessage(result, result.text) };
           return next;
         });
         return;
       }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        setMessages((prev) => {
-          const next = [...prev];
-          const last = next[next.length - 1];
-          next[next.length - 1] = { ...last, content: last.content + chunk };
-          return next;
-        });
-      }
     } catch (err) {
+      if (controller.signal.aborted) return;
       setMessages((prev) => {
         const next = [...prev];
         next[next.length - 1] = {
