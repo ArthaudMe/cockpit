@@ -106,11 +106,18 @@ function findMatchingBrace(text: string, start: number): number {
   return -1; // unclosed
 }
 
-export function parseResponse(text: string): ParsedSegment[] {
+export function parseResponse(
+  text: string,
+  opts?: { final?: boolean },
+): ParsedSegment[] {
   const segments: ParsedSegment[] = [];
+  // Track whether any fenced block was matched/stripped so that a response
+  // whose only content was a stripped block (e.g. cockpit_memory) does not
+  // fall back to rendering the raw JSON text.
+  let consumedBlock = false;
 
   // Pre-pass: detect [skill: /slash] tag on first line
-  const skillMatch = text.match(/^\[skill:\s*(\/\w+)\]\s*\n?/);
+  const skillMatch = text.match(/^\[skill:\s*(\/[\w-]+)\]\s*\n?/);
   if (skillMatch) {
     segments.push({ type: "skill_active", skillSlash: skillMatch[1] });
     text = text.slice(skillMatch[0].length);
@@ -126,25 +133,35 @@ export function parseResponse(text: string): ParsedSegment[] {
 
     // Find the closing fence — handle both \n``` and ```  at end of content
     let closeIdx = text.indexOf("\n```", contentStart);
+    let fenceLen = 4; // length of "\n```"
     if (closeIdx === -1) {
       // Try without leading newline (e.g. content ends with }```)
       const altIdx = text.indexOf("```", contentStart);
       if (altIdx !== -1 && altIdx > contentStart) {
-        closeIdx = altIdx - 1; // adjust so slice logic still works
+        // closeIdx points at the fence itself so the slice below keeps the
+        // final char of the JSON body (e.g. the closing "}").
+        closeIdx = altIdx;
+        fenceLen = 3; // length of "```"
       }
     }
 
     if (closeIdx === -1) {
-      // Incomplete block (still streaming) — emit text before it + loading
+      // Incomplete block — emit text before it, then either a loading segment
+      // (mid-stream) or the raw remaining content (finalized/truncated turn).
       const before = text.slice(lastIndex, match.index).trim();
       if (before) segments.push({ type: "text", content: before });
-      segments.push({ type: "loading" });
+      if (opts?.final) {
+        const remaining = text.slice(match.index).trim();
+        if (remaining) segments.push({ type: "text", content: remaining });
+      } else {
+        segments.push({ type: "loading" });
+      }
       lastIndex = text.length; // consume everything
       break;
     }
 
     const jsonBody = text.slice(contentStart, closeIdx).trim();
-    const fenceEnd = closeIdx + 4; // length of "\n```"
+    const fenceEnd = closeIdx + fenceLen;
 
     // Try to find a JSON object with cockpit_render
     const braceStart = jsonBody.indexOf("{");
@@ -158,6 +175,7 @@ export function parseResponse(text: string): ParsedSegment[] {
             const before = text.slice(lastIndex, match.index).trim();
             if (before) segments.push({ type: "text", content: before });
             segments.push({ type: "render", block: parsed as RenderBlock });
+            consumedBlock = true;
             lastIndex = fenceEnd;
             continue;
           }
@@ -165,6 +183,7 @@ export function parseResponse(text: string): ParsedSegment[] {
             // Memory commands are processed server-side — strip from display
             const before = text.slice(lastIndex, match.index).trim();
             if (before) segments.push({ type: "text", content: before });
+            consumedBlock = true;
             lastIndex = fenceEnd;
             continue;
           }
@@ -175,6 +194,7 @@ export function parseResponse(text: string): ParsedSegment[] {
               type: "subagent_suggestion",
               suggestion: { name: parsed.name, role: parsed.role || "general", task: parsed.task },
             });
+            consumedBlock = true;
             lastIndex = fenceEnd;
             continue;
           }
@@ -189,6 +209,7 @@ export function parseResponse(text: string): ParsedSegment[] {
                 confirm: parsed.confirm !== false, // default to true
               },
             });
+            consumedBlock = true;
             lastIndex = fenceEnd;
             continue;
           }
@@ -199,6 +220,7 @@ export function parseResponse(text: string): ParsedSegment[] {
               type: "skill_proposal",
               proposal: parsed as SkillProposal,
             });
+            consumedBlock = true;
             lastIndex = fenceEnd;
             continue;
           }
@@ -217,5 +239,9 @@ export function parseResponse(text: string): ParsedSegment[] {
     if (remaining) segments.push({ type: "text", content: remaining });
   }
 
-  return segments.length ? segments : [{ type: "text", content: text }];
+  if (segments.length) return segments;
+  // A block was consumed/stripped but produced no visible segment (e.g. a
+  // lone cockpit_memory block) — return nothing rather than the raw JSON.
+  if (consumedBlock) return [];
+  return [{ type: "text", content: text }];
 }
