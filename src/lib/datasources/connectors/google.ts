@@ -4,6 +4,24 @@ import { isProxyEnabled, proxyExchangeCode, proxyRefreshToken } from "../oauth-p
 import CREDENTIALS from "../credentials";
 import { executeAction, isComposioEnabled } from "../composio";
 import { isGoogleConnectedViaComposio } from "../token-store";
+import { fetchJson, fetchWithTimeout } from "../http";
+import { toISO, relativeTime } from "../../time-format";
+
+/**
+ * Raised by the token-refresh path. `invalidGrant` is set when Google reports
+ * `invalid_grant` — the refresh token is dead and the account is effectively
+ * disconnected (callers should treat as "not connected"). Any other failure is
+ * a transient network/timeout error and should propagate so the datasource
+ * manager keeps the last-good data instead of showing an empty state.
+ */
+class GoogleAuthError extends Error {
+  invalidGrant: boolean;
+  constructor(message: string, invalidGrant: boolean) {
+    super(message);
+    this.name = "GoogleAuthError";
+    this.invalidGrant = invalidGrant;
+  }
+}
 
 export const GOOGLE_OAUTH: OAuthConfig = {
   authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
@@ -71,23 +89,38 @@ async function refreshGoogleToken(refreshToken: string): Promise<TokenSet> {
   if (isProxyEnabled()) {
     data = await proxyRefreshToken("google", refreshToken);
   } else {
-    const res = await fetch(GOOGLE_OAUTH.tokenUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        refresh_token: refreshToken,
-        client_id: CREDENTIALS.GOOGLE_CLIENT_ID,
-        client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
-        grant_type: "refresh_token",
-      }),
-    });
-    data = await res.json();
-    if (data.error) throw new Error(data.error_description || data.error);
+    // fetchWithTimeout throws on a network/timeout failure (transient) — we let
+    // that propagate. A well-formed HTTP error response (e.g. invalid_grant) is
+    // handled below and mapped to a GoogleAuthError.
+    const res = await fetchWithTimeout(
+      GOOGLE_OAUTH.tokenUrl,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          refresh_token: refreshToken,
+          client_id: CREDENTIALS.GOOGLE_CLIENT_ID,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
+          grant_type: "refresh_token",
+        }),
+      },
+      { service: "google" },
+    );
+    data = await res.json().catch(() => ({}));
+    if (!res.ok || data.error) {
+      const code = data.error || `HTTP ${res.status}`;
+      throw new GoogleAuthError(
+        data.error_description || code,
+        data.error === "invalid_grant",
+      );
+    }
   }
 
   const tokens: TokenSet = {
     access_token: data.access_token,
-    refresh_token: refreshToken,
+    // Google may rotate the refresh token; persist the new one when present,
+    // otherwise keep the existing one.
+    refresh_token: data.refresh_token || refreshToken,
     expires_at: Date.now() + data.expires_in * 1000,
     scope: data.scope,
   };
@@ -112,63 +145,127 @@ async function getValidGoogleTokens(): Promise<TokenSet | null> {
         () => { _googleRefreshInFlight = null; },
       );
       return await _googleRefreshInFlight;
-    } catch {
-      return null;
+    } catch (err) {
+      // invalid_grant => the refresh token is dead; treat as disconnected.
+      if (err instanceof GoogleAuthError && err.invalidGrant) return null;
+      // Transient network/timeout during refresh: rethrow so the manager keeps
+      // last-good data instead of collapsing to an empty (disconnected) state.
+      throw err;
     }
   }
   return tokens;
+}
+
+// ─── Shared mappers ───────────────────────────────────────────────
+// One implementation each for the Google Calendar event → CalendarEvent and
+// Gmail message → EmailThread shapes, used by every direct + Composio path so
+// the timezone handling and the machine-readable `timestamp` live in one place.
+
+// The `& { timestamp?: string }` keeps this compiling while the optional
+// `timestamp` field is being added to CalendarEvent/EmailThread in types.ts; it
+// collapses to the plain interface once that field lands.
+/** Google Calendar event (v3 API or Composio) → CalendarEvent. */
+function mapGoogleEvent(event: any): CalendarEvent & { timestamp?: string } {
+  const startDateTime: string | undefined = event.start?.dateTime;
+  const startAllDay: string | undefined = event.start?.date;
+  const isAllDay = !startDateTime && !!startAllDay;
+
+  const startRaw = startDateTime || startAllDay || "";
+  const endRaw = event.end?.dateTime || event.end?.date || "";
+
+  let date: string;
+  let time: string;
+  let timestamp: string;
+
+  if (isAllDay) {
+    // All-day events carry a bare YYYY-MM-DD with no clock time — keep the date
+    // verbatim (do NOT round-trip through toISOString, which shifts by the UTC
+    // offset) and mark the time as all-day.
+    date = startAllDay!;
+    time = "All day";
+    timestamp = toISO(startAllDay!);
+  } else {
+    // Timed events: the RFC3339 dateTime already carries the correct local date
+    // + offset, so slice the local calendar date straight from the string
+    // rather than deriving it from a UTC ISO conversion.
+    date = startRaw.slice(0, 10);
+    time = new Date(startRaw).toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+    timestamp = toISO(startRaw);
+  }
+
+  const durationMin = Math.round(
+    (new Date(endRaw).getTime() - new Date(startRaw).getTime()) / 60_000,
+  );
+
+  return {
+    title: event.summary || "Untitled",
+    time,
+    date,
+    duration:
+      durationMin >= 60 ? `${Math.round(durationMin / 60)}h` : `${durationMin}m`,
+    attendees: (event.attendees || [])
+      .filter((a: any) => !a.self)
+      .map((a: any) => a.displayName || a.email?.split("@")[0] || "Unknown"),
+    description: event.description?.slice(0, 200),
+    source: "Google Calendar",
+    timestamp,
+  };
+}
+
+/** Gmail message (v1 metadata or Composio payload) → EmailThread. */
+function mapGmailMessage(msg: any): EmailThread & { timestamp?: string } {
+  const headers = msg.payload?.headers || [];
+  const subject =
+    headers.find((h: any) => h.name === "Subject")?.value ||
+    msg.subject ||
+    "No subject";
+  const from =
+    headers.find((h: any) => h.name === "From")?.value || msg.from || "Unknown";
+  const unread = msg.labelIds
+    ? (msg.labelIds as string[]).includes("UNREAD")
+    : msg.unread ?? false;
+
+  const timestamp = msg.internalDate
+    ? toISO(Number(msg.internalDate))
+    : toISO(msg.date);
+
+  return {
+    subject,
+    from: from.replace(/<[^>]+>/g, "").trim(),
+    snippet: msg.snippet || "",
+    time: timestamp ? relativeTime(timestamp) : "",
+    timestamp,
+    unread,
+  };
 }
 
 export async function fetchCalendarEvents(): Promise<CalendarEvent[]> {
   const tokens = await getValidGoogleTokens();
   if (!tokens) return [];
 
-  try {
-    const now = new Date();
-    const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const params = new URLSearchParams({
-      timeMin: now.toISOString(),
-      timeMax: weekFromNow.toISOString(),
-      singleEvents: "true",
-      orderBy: "startTime",
-      maxResults: "20",
-    });
+  const now = new Date();
+  const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const params = new URLSearchParams({
+    timeMin: now.toISOString(),
+    timeMax: weekFromNow.toISOString(),
+    singleEvents: "true",
+    orderBy: "startTime",
+    maxResults: "20",
+  });
 
-    const res = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`,
-      { headers: { Authorization: `Bearer ${tokens.access_token}` } }
-    );
-    if (!res.ok) return [];
-    const data = await res.json();
+  // Errors (non-2xx, network/timeout) propagate so the manager can record the
+  // failure and keep last-good data instead of showing an empty calendar.
+  const data = await fetchJson<any>(
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`,
+    { headers: { Authorization: `Bearer ${tokens.access_token}` } },
+    { service: "google" },
+  );
 
-    return (data.items || []).map((event: any) => {
-      const start = event.start?.dateTime || event.start?.date || "";
-      const end = event.end?.dateTime || event.end?.date || "";
-      const startDate = new Date(start);
-      const endDate = new Date(end);
-      const durationMin = Math.round(
-        (endDate.getTime() - startDate.getTime()) / 60_000
-      );
-
-      return {
-        title: event.summary || "Untitled",
-        time: startDate.toLocaleTimeString("en-US", {
-          hour: "numeric",
-          minute: "2-digit",
-          hour12: true,
-        }),
-        date: startDate.toISOString().split("T")[0],
-        duration: durationMin >= 60 ? `${Math.round(durationMin / 60)}h` : `${durationMin}m`,
-        attendees: (event.attendees || [])
-          .filter((a: any) => !a.self)
-          .map((a: any) => a.displayName || a.email?.split("@")[0] || "Unknown"),
-        description: event.description?.slice(0, 200),
-        source: "Google Calendar",
-      };
-    });
-  } catch {
-    return [];
-  }
+  return (data.items || []).map(mapGoogleEvent);
 }
 
 export async function searchCalendarEvents(query: string): Promise<CalendarEvent[]> {
@@ -179,54 +276,25 @@ export async function searchCalendarEvents(query: string): Promise<CalendarEvent
     return [];
   }
 
-  try {
-    const now = new Date();
-    const threeMonthsAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-    const threeMonthsAhead = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
-    const params = new URLSearchParams({
-      q: query,
-      timeMin: threeMonthsAgo.toISOString(),
-      timeMax: threeMonthsAhead.toISOString(),
-      singleEvents: "true",
-      orderBy: "startTime",
-      maxResults: "15",
-    });
+  const now = new Date();
+  const threeMonthsAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+  const threeMonthsAhead = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+  const params = new URLSearchParams({
+    q: query,
+    timeMin: threeMonthsAgo.toISOString(),
+    timeMax: threeMonthsAhead.toISOString(),
+    singleEvents: "true",
+    orderBy: "startTime",
+    maxResults: "15",
+  });
 
-    const res = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`,
-      { headers: { Authorization: `Bearer ${tokens.access_token}` } }
-    );
-    if (!res.ok) return [];
-    const data = await res.json();
+  const data = await fetchJson<any>(
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`,
+    { headers: { Authorization: `Bearer ${tokens.access_token}` } },
+    { service: "google" },
+  );
 
-    return (data.items || []).map((event: any) => {
-      const start = event.start?.dateTime || event.start?.date || "";
-      const end = event.end?.dateTime || event.end?.date || "";
-      const startDate = new Date(start);
-      const endDate = new Date(end);
-      const durationMin = Math.round(
-        (endDate.getTime() - startDate.getTime()) / 60_000
-      );
-
-      return {
-        title: event.summary || "Untitled",
-        time: startDate.toLocaleTimeString("en-US", {
-          hour: "numeric",
-          minute: "2-digit",
-          hour12: true,
-        }),
-        date: startDate.toISOString().split("T")[0],
-        duration: durationMin >= 60 ? `${Math.round(durationMin / 60)}h` : `${durationMin}m`,
-        attendees: (event.attendees || [])
-          .filter((a: any) => !a.self)
-          .map((a: any) => a.displayName || a.email?.split("@")[0] || "Unknown"),
-        description: event.description?.slice(0, 200),
-        source: "Google Calendar",
-      };
-    });
-  } catch {
-    return [];
-  }
+  return (data.items || []).map(mapGoogleEvent);
 }
 
 export async function searchEmails(query: string): Promise<EmailThread[]> {
@@ -236,100 +304,50 @@ export async function searchEmails(query: string): Promise<EmailThread[]> {
     return [];
   }
 
-  try {
-    const listRes = await fetch(
-      `https://www.googleapis.com/gmail/v1/users/me/messages?maxResults=10&q=${encodeURIComponent(query)}`,
-      { headers: { Authorization: `Bearer ${tokens.access_token}` } }
-    );
-    if (!listRes.ok) return [];
-    const listData = await listRes.json();
+  const listData = await fetchJson<any>(
+    `https://www.googleapis.com/gmail/v1/users/me/messages?maxResults=10&q=${encodeURIComponent(query)}`,
+    { headers: { Authorization: `Bearer ${tokens.access_token}` } },
+    { service: "google" },
+  );
 
-    const messages = listData.messages || [];
-    const threads: EmailThread[] = [];
+  const messages = (listData.messages || []).slice(0, 10);
 
-    for (const msg of messages.slice(0, 10)) {
-      try {
-        const msgRes = await fetch(
-          `https://www.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`,
-          { headers: { Authorization: `Bearer ${tokens.access_token}` } }
-        );
-        if (!msgRes.ok) continue;
-        const msgData = await msgRes.json();
-
-        const headers = msgData.payload?.headers || [];
-        const subject =
-          headers.find((h: any) => h.name === "Subject")?.value || "No subject";
-        const from =
-          headers.find((h: any) => h.name === "From")?.value || "Unknown";
-        const unread = (msgData.labelIds || []).includes("UNREAD");
-
-        threads.push({
-          subject,
-          from: from.replace(/<[^>]+>/g, "").trim(),
-          snippet: msgData.snippet || "",
-          time: new Date(Number(msgData.internalDate)).toISOString(),
-          unread,
-        });
-      } catch {
-        continue;
-      }
-    }
-
-    return threads;
-  } catch {
-    return [];
-  }
+  // Fetch message metadata in parallel — one hung/failed fetch surfaces as a
+  // thrown error rather than silently dropping results.
+  return Promise.all(
+    messages.map((msg: any) =>
+      fetchJson<any>(
+        `https://www.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`,
+        { headers: { Authorization: `Bearer ${tokens.access_token}` } },
+        { service: "google" },
+      ).then(mapGmailMessage),
+    ),
+  );
 }
 
 export async function fetchRecentEmails(): Promise<EmailThread[]> {
   const tokens = await getValidGoogleTokens();
   if (!tokens) return [];
 
-  try {
-    // Get recent messages
-    const listRes = await fetch(
-      `https://www.googleapis.com/gmail/v1/users/me/messages?maxResults=15&q=newer_than:2d`,
-      { headers: { Authorization: `Bearer ${tokens.access_token}` } }
-    );
-    if (!listRes.ok) return [];
-    const listData = await listRes.json();
+  // Get recent messages
+  const listData = await fetchJson<any>(
+    `https://www.googleapis.com/gmail/v1/users/me/messages?maxResults=15&q=newer_than:2d`,
+    { headers: { Authorization: `Bearer ${tokens.access_token}` } },
+    { service: "google" },
+  );
 
-    const messages = listData.messages || [];
-    const threads: EmailThread[] = [];
+  const messages = (listData.messages || []).slice(0, 10);
 
-    // Fetch each message's metadata (batch of first 10)
-    for (const msg of messages.slice(0, 10)) {
-      try {
-        const msgRes = await fetch(
-          `https://www.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`,
-          { headers: { Authorization: `Bearer ${tokens.access_token}` } }
-        );
-        if (!msgRes.ok) continue;
-        const msgData = await msgRes.json();
-
-        const headers = msgData.payload?.headers || [];
-        const subject =
-          headers.find((h: any) => h.name === "Subject")?.value || "No subject";
-        const from =
-          headers.find((h: any) => h.name === "From")?.value || "Unknown";
-        const unread = (msgData.labelIds || []).includes("UNREAD");
-
-        threads.push({
-          subject,
-          from: from.replace(/<[^>]+>/g, "").trim(),
-          snippet: msgData.snippet || "",
-          time: new Date(Number(msgData.internalDate)).toLocaleString(),
-          unread,
-        });
-      } catch {
-        continue;
-      }
-    }
-
-    return threads;
-  } catch {
-    return [];
-  }
+  // Fetch each message's metadata in parallel (was 10 serial round-trips).
+  return Promise.all(
+    messages.map((msg: any) =>
+      fetchJson<any>(
+        `https://www.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`,
+        { headers: { Authorization: `Bearer ${tokens.access_token}` } },
+        { service: "google" },
+      ).then(mapGmailMessage),
+    ),
+  );
 }
 
 // ─── Write Actions ────────────────────────────────────────────────
@@ -344,43 +362,48 @@ export async function createCalendarEvent(params: {
   const tokens = await getValidGoogleTokens();
   if (!tokens) return { success: false, message: "Google not connected. Please reconnect Google in Settings." };
 
+  // Google 400s on a naive datetime (no offset/Z) unless a timeZone accompanies
+  // it. Provide the system IANA zone as a fallback; when the datetime already
+  // carries an explicit offset that offset governs the instant.
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const body: Record<string, unknown> = {
     summary: params.summary,
-    start: { dateTime: params.start },
-    end: { dateTime: params.end },
+    start: { dateTime: params.start, timeZone },
+    end: { dateTime: params.end, timeZone },
   };
   if (params.description) body.description = params.description;
   if (params.attendees?.length) {
     body.attendees = params.attendees.map((email) => ({ email }));
   }
 
-  try {
-    const res = await fetch(
-      "https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=all",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${tokens.access_token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-      }
-    );
+  const res = await fetchWithTimeout(
+    "https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=all",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tokens.access_token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    },
+    { service: "google" },
+  );
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      return { success: false, message: "Couldn't create the calendar event. Please check your Google connection and try again." };
-    }
-
-    const data = await res.json();
-    return {
-      success: true,
-      message: `Created event: ${data.summary}`,
-      url: data.htmlLink,
-    };
-  } catch (err) {
-    return { success: false, message: "Couldn't reach Google Calendar. Please check your internet connection." };
+  if (!res.ok) {
+    // Surface Google's own error message (e.g. "Invalid start time") to the user
+    // instead of swallowing it behind a generic string.
+    const err = await res.json().catch(() => ({} as any));
+    const reason =
+      err?.error?.message || err?.error_description || err?.error || `HTTP ${res.status}`;
+    throw new Error(`Couldn't create the calendar event: ${reason}`);
   }
+
+  const data = await res.json();
+  return {
+    success: true,
+    message: `Created event: ${data.summary}`,
+    url: data.htmlLink,
+  };
 }
 
 // ─── Composio-backed Google data ─────────────────────────────────
@@ -405,37 +428,7 @@ export async function fetchCalendarEventsViaComposio(): Promise<CalendarEvent[]>
     });
 
     const items = (result.items ?? result.events ?? []) as any[];
-    return items.map((event: any) => {
-      const start = event.start?.dateTime || event.start?.date || "";
-      const end = event.end?.dateTime || event.end?.date || "";
-      const startDate = new Date(start);
-      const endDate = new Date(end);
-      const durationMin = Math.round(
-        (endDate.getTime() - startDate.getTime()) / 60_000,
-      );
-
-      return {
-        title: event.summary || "Untitled",
-        time: startDate.toLocaleTimeString("en-US", {
-          hour: "numeric",
-          minute: "2-digit",
-          hour12: true,
-        }),
-        date: startDate.toISOString().split("T")[0],
-        duration:
-          durationMin >= 60
-            ? `${Math.round(durationMin / 60)}h`
-            : `${durationMin}m`,
-        attendees: (event.attendees || [])
-          .filter((a: any) => !a.self)
-          .map(
-            (a: any) =>
-              a.displayName || a.email?.split("@")[0] || "Unknown",
-          ),
-        description: event.description?.slice(0, 200),
-        source: "Google Calendar",
-      };
-    });
+    return items.map(mapGoogleEvent);
   } catch (err) {
     console.error("[Google/Composio] calendar fetch error:", err);
     return [];
@@ -451,30 +444,7 @@ export async function fetchRecentEmailsViaComposio(): Promise<EmailThread[]> {
     });
 
     const messages = (result.messages ?? result.data ?? []) as any[];
-    return messages.slice(0, 10).map((msg: any) => {
-      const headers = msg.payload?.headers || [];
-      const subject =
-        headers.find((h: any) => h.name === "Subject")?.value ||
-        msg.subject ||
-        "No subject";
-      const from =
-        headers.find((h: any) => h.name === "From")?.value ||
-        msg.from ||
-        "Unknown";
-      const unread = msg.labelIds
-        ? (msg.labelIds as string[]).includes("UNREAD")
-        : msg.unread ?? false;
-
-      return {
-        subject,
-        from: from.replace(/<[^>]+>/g, "").trim(),
-        snippet: msg.snippet || "",
-        time: msg.internalDate
-          ? new Date(Number(msg.internalDate)).toLocaleString()
-          : msg.date || "",
-        unread,
-      };
-    });
+    return messages.slice(0, 10).map(mapGmailMessage);
   } catch (err) {
     console.error("[Google/Composio] email fetch error:", err);
     return [];
@@ -495,37 +465,7 @@ async function searchCalendarEventsViaComposio(query: string): Promise<CalendarE
     });
 
     const items = (result.items ?? result.events ?? []) as any[];
-    return items.slice(0, 15).map((event: any) => {
-      const start = event.start?.dateTime || event.start?.date || "";
-      const end = event.end?.dateTime || event.end?.date || "";
-      const startDate = new Date(start);
-      const endDate = new Date(end);
-      const durationMin = Math.round(
-        (endDate.getTime() - startDate.getTime()) / 60_000,
-      );
-
-      return {
-        title: event.summary || "Untitled",
-        time: startDate.toLocaleTimeString("en-US", {
-          hour: "numeric",
-          minute: "2-digit",
-          hour12: true,
-        }),
-        date: startDate.toISOString().split("T")[0],
-        duration:
-          durationMin >= 60
-            ? `${Math.round(durationMin / 60)}h`
-            : `${durationMin}m`,
-        attendees: (event.attendees || [])
-          .filter((a: any) => !a.self)
-          .map(
-            (a: any) =>
-              a.displayName || a.email?.split("@")[0] || "Unknown",
-          ),
-        description: event.description?.slice(0, 200),
-        source: "Google Calendar",
-      };
-    });
+    return items.slice(0, 15).map(mapGoogleEvent);
   } catch (err) {
     console.error("[Google/Composio] calendar search error:", err);
     return [];
@@ -541,30 +481,7 @@ async function searchEmailsViaComposio(query: string): Promise<EmailThread[]> {
     });
 
     const messages = (result.messages ?? result.data ?? []) as any[];
-    return messages.slice(0, 10).map((msg: any) => {
-      const headers = msg.payload?.headers || [];
-      const subject =
-        headers.find((h: any) => h.name === "Subject")?.value ||
-        msg.subject ||
-        "No subject";
-      const from =
-        headers.find((h: any) => h.name === "From")?.value ||
-        msg.from ||
-        "Unknown";
-      const unread = msg.labelIds
-        ? (msg.labelIds as string[]).includes("UNREAD")
-        : msg.unread ?? false;
-
-      return {
-        subject,
-        from: from.replace(/<[^>]+>/g, "").trim(),
-        snippet: msg.snippet || "",
-        time: msg.internalDate
-          ? new Date(Number(msg.internalDate)).toLocaleString()
-          : msg.date || "",
-        unread,
-      };
-    });
+    return messages.slice(0, 10).map(mapGmailMessage);
   } catch (err) {
     console.error("[Google/Composio] email search error:", err);
     return [];
@@ -690,6 +607,42 @@ export async function createGmailDraftAuto(params: {
 
 // ─── Direct OAuth write actions (original) ───────────────────────
 
+// Very small address shape check — enough to reject header-injection payloads
+// and obviously malformed input without pulling in a validation library.
+const EMAIL_RE = /^[^\s@,<>]+@[^\s@,<>]+\.[^\s@,<>]+$/;
+
+/** Reject any header value containing a CR or LF (header/SMTP injection). */
+function assertNoHeaderInjection(value: string, field: string): void {
+  if (/[\r\n]/.test(value)) {
+    throw new Error(`Invalid ${field}: header values must not contain line breaks.`);
+  }
+}
+
+/**
+ * Validate a To/Cc header: a comma-separated list of addresses, each either a
+ * bare `user@host` or a `Name <user@host>` form. Throws on anything that does
+ * not parse as an email address.
+ */
+function assertEmailHeader(value: string, field: string): void {
+  assertNoHeaderInjection(value, field);
+  const parts = value.split(",").map((p) => p.trim()).filter(Boolean);
+  if (parts.length === 0) throw new Error(`Invalid ${field}: no address provided.`);
+  for (const part of parts) {
+    const angle = part.match(/<([^>]+)>/);
+    const addr = (angle ? angle[1] : part).trim();
+    if (!EMAIL_RE.test(addr)) {
+      throw new Error(`Invalid ${field}: "${part}" is not a valid email address.`);
+    }
+  }
+}
+
+/** RFC 2047 encode a header value when it contains non-ASCII characters. */
+function encodeHeaderWord(value: string): string {
+  // eslint-disable-next-line no-control-regex
+  if (/^[\x00-\x7F]*$/.test(value)) return value;
+  return `=?UTF-8?B?${Buffer.from(value, "utf-8").toString("base64")}?=`;
+}
+
 export async function createGmailDraft(params: {
   to: string;
   subject: string;
@@ -698,10 +651,16 @@ export async function createGmailDraft(params: {
   const tokens = await getValidGoogleTokens();
   if (!tokens) return { success: false, message: "Google not connected. Please reconnect Google in Settings." };
 
+  // Sanitize header-bound params (they originate from LLM tool calls that are
+  // only validated as non-empty). Throws a clear Error on injection/bad input.
+  assertEmailHeader(params.to, "to");
+  assertNoHeaderInjection(params.subject, "subject");
+  const encodedSubject = encodeHeaderWord(params.subject);
+
   // Build RFC 2822 message
   const rawMessage = [
     `To: ${params.to}`,
-    `Subject: ${params.subject}`,
+    `Subject: ${encodedSubject}`,
     "Content-Type: text/plain; charset=utf-8",
     "",
     params.body,

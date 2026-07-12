@@ -1,7 +1,15 @@
 import type { OAuthConfig, TokenSet, NotionPage } from "../types";
 import { getTokens } from "../token-store";
 import { isProxyEnabled, proxyExchangeCode } from "../oauth-proxy";
+import { fetchJson, fetchOk } from "../http";
+import { toISO } from "../../time-format";
 import CREDENTIALS from "../credentials";
+
+const NOTION_VERSION = "2022-06-28";
+
+// A Notion page/block id is a UUID (32 hex chars, optionally hyphenated). Reject
+// anything else so an LLM-supplied id can't be smuggled into the URL path.
+const NOTION_ID_RE = /^[0-9a-fA-F-]{32,36}$/;
 
 export const NOTION_OAUTH: OAuthConfig = {
   authUrl: "https://api.notion.com/v1/oauth/authorize",
@@ -78,13 +86,14 @@ export async function searchNotionPages(query: string): Promise<NotionPage[]> {
   const tokens = getNotionTokens();
   if (!tokens) return [];
 
-  try {
-    const res = await fetch("https://api.notion.com/v1/search", {
+  const data: any = await fetchJson(
+    "https://api.notion.com/v1/search",
+    {
       method: "POST",
       headers: {
         Authorization: `Bearer ${tokens.access_token}`,
         "Content-Type": "application/json",
-        "Notion-Version": "2022-06-28",
+        "Notion-Version": NOTION_VERSION,
       },
       body: JSON.stringify({
         query,
@@ -94,40 +103,39 @@ export async function searchNotionPages(query: string): Promise<NotionPage[]> {
         },
         page_size: 15,
       }),
+    },
+    { service: "notion" },
+  );
+
+  return (data.results || [])
+    .filter((item: any) => item.object === "page")
+    .map((page: any) => {
+      const titleProp = page.properties?.title?.title?.[0]?.plain_text
+        || page.properties?.Name?.title?.[0]?.plain_text
+        || "Untitled";
+
+      return {
+        title: titleProp,
+        lastEdited: new Date(page.last_edited_time).toISOString(),
+        timestamp: toISO(page.last_edited_time),
+        url: page.url || "",
+        parent: page.parent?.database_id ? "database" : page.parent?.page_id ? "page" : "workspace",
+      };
     });
-    if (!res.ok) return [];
-    const data = await res.json();
-
-    return (data.results || [])
-      .filter((item: any) => item.object === "page")
-      .map((page: any) => {
-        const titleProp = page.properties?.title?.title?.[0]?.plain_text
-          || page.properties?.Name?.title?.[0]?.plain_text
-          || "Untitled";
-
-        return {
-          title: titleProp,
-          lastEdited: new Date(page.last_edited_time).toISOString(),
-          url: page.url || "",
-          parent: page.parent?.database_id ? "database" : page.parent?.page_id ? "page" : "workspace",
-        };
-      });
-  } catch {
-    return [];
-  }
 }
 
 export async function fetchNotionPages(): Promise<NotionPage[]> {
   const tokens = getNotionTokens();
   if (!tokens) return [];
 
-  try {
-    const res = await fetch("https://api.notion.com/v1/search", {
+  const data: any = await fetchJson(
+    "https://api.notion.com/v1/search",
+    {
       method: "POST",
       headers: {
         Authorization: `Bearer ${tokens.access_token}`,
         "Content-Type": "application/json",
-        "Notion-Version": "2022-06-28",
+        "Notion-Version": NOTION_VERSION,
       },
       body: JSON.stringify({
         sort: {
@@ -136,33 +144,31 @@ export async function fetchNotionPages(): Promise<NotionPage[]> {
         },
         page_size: 20,
       }),
+    },
+    { service: "notion" },
+  );
+
+  return (data.results || [])
+    .filter((item: any) => item.object === "page")
+    .map((page: any) => {
+      const titleProp = page.properties?.title?.title?.[0]?.plain_text
+        || page.properties?.Name?.title?.[0]?.plain_text
+        || "Untitled";
+
+      const now = Date.now();
+      const edited = new Date(page.last_edited_time).getTime();
+      const diffH = Math.round((now - edited) / 3_600_000);
+      const lastEdited =
+        diffH < 1 ? "just now" : diffH < 24 ? `${diffH}h ago` : `${Math.round(diffH / 24)}d ago`;
+
+      return {
+        title: titleProp,
+        lastEdited,
+        timestamp: toISO(page.last_edited_time),
+        url: page.url || "",
+        parent: page.parent?.database_id ? "database" : page.parent?.page_id ? "page" : "workspace",
+      };
     });
-    if (!res.ok) return [];
-    const data = await res.json();
-
-    return (data.results || [])
-      .filter((item: any) => item.object === "page")
-      .map((page: any) => {
-        const titleProp = page.properties?.title?.title?.[0]?.plain_text
-          || page.properties?.Name?.title?.[0]?.plain_text
-          || "Untitled";
-
-        const now = Date.now();
-        const edited = new Date(page.last_edited_time).getTime();
-        const diffH = Math.round((now - edited) / 3_600_000);
-        const lastEdited =
-          diffH < 1 ? "just now" : diffH < 24 ? `${diffH}h ago` : `${Math.round(diffH / 24)}d ago`;
-
-        return {
-          title: titleProp,
-          lastEdited,
-          url: page.url || "",
-          parent: page.parent?.database_id ? "database" : page.parent?.page_id ? "page" : "workspace",
-        };
-      });
-  } catch {
-    return [];
-  }
 }
 
 // ─── Write Actions ────────────────────────────────────────────────
@@ -174,6 +180,13 @@ export async function appendToNotionPage(params: {
   const tokens = getNotionTokens();
   if (!tokens) return { success: false, message: "Notion not connected. Please connect Notion in Settings." };
 
+  // Validate + encode the page id before it goes into the URL path so a
+  // malformed/injected id can't reach a different endpoint.
+  const pageId = String(params.pageId).trim();
+  if (!NOTION_ID_RE.test(pageId)) {
+    return { success: false, message: "Invalid Notion page id." };
+  }
+
   // Split content into paragraphs and create block children
   const blocks = params.content.split("\n").filter(Boolean).map((text) => ({
     object: "block" as const,
@@ -183,31 +196,25 @@ export async function appendToNotionPage(params: {
     },
   }));
 
-  try {
-    const res = await fetch(
-      `https://api.notion.com/v1/blocks/${params.pageId}/children`,
-      {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${tokens.access_token}`,
-          "Content-Type": "application/json",
-          "Notion-Version": "2022-06-28",
-        },
-        body: JSON.stringify({ children: blocks }),
-      }
-    );
+  // fetchOk throws HttpError (with .status/.body) on non-2xx and on network
+  // failure; the executor surfaces a sanitized version to the user/model.
+  await fetchOk(
+    `https://api.notion.com/v1/blocks/${encodeURIComponent(pageId)}/children`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${tokens.access_token}`,
+        "Content-Type": "application/json",
+        "Notion-Version": NOTION_VERSION,
+      },
+      body: JSON.stringify({ children: blocks }),
+    },
+    { service: "notion" },
+  );
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      return { success: false, message: "Couldn't update the Notion page. Please check your Notion connection and try again." };
-    }
-
-    return {
-      success: true,
-      message: `Content appended to Notion page`,
-      url: `https://notion.so/${params.pageId.replace(/-/g, "")}`,
-    };
-  } catch (err) {
-    return { success: false, message: "Couldn't reach Notion. Please check your internet connection." };
-  }
+  return {
+    success: true,
+    message: `Content appended to Notion page`,
+    url: `https://notion.so/${pageId.replace(/-/g, "")}`,
+  };
 }

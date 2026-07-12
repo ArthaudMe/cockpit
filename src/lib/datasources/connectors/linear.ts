@@ -1,6 +1,8 @@
 import type { OAuthConfig, TokenSet, LinearIssue } from "../types";
 import { getTokens, saveTokens } from "../token-store";
 import { isProxyEnabled, proxyExchangeCode, proxyRefreshToken } from "../oauth-proxy";
+import { fetchJson } from "../http";
+import { toISO } from "../../time-format";
 import CREDENTIALS from "../credentials";
 
 export const LINEAR_OAUTH: OAuthConfig = {
@@ -108,14 +110,97 @@ async function getValidLinearTokens(): Promise<TokenSet | null> {
   return tokens;
 }
 
+// Shared node → LinearIssue mapping (deduped from the two fetchers). Callers
+// pass the human `updatedAt` display string they want; the machine-readable ISO
+// `timestamp` is always derived from the raw node.updatedAt for
+// dedup/search/recency.
+const LINEAR_PRIORITY_MAP: Record<number, string> = {
+  0: "None",
+  1: "Urgent",
+  2: "High",
+  3: "Normal",
+  4: "Low",
+};
+
+function mapLinearNode(node: any, updatedAt: string): LinearIssue {
+  return {
+    id: node.identifier,
+    title: node.title,
+    state: node.state?.name || "Unknown",
+    priority: LINEAR_PRIORITY_MAP[node.priority] || "Normal",
+    assignee: node.assignee?.name || "Unassigned",
+    project: node.project?.name,
+    updatedAt,
+    timestamp: toISO(node.updatedAt),
+    url: node.url || undefined,
+  };
+}
+
+// POST a GraphQL request through the shared HTTP helpers (timeout + non-2xx →
+// HttpError). Linear returns HTTP 200 with a populated `errors` array on query
+// failure, so treat that as a hard error too rather than returning [].
+async function linearGraphQL(accessToken: string, body: object): Promise<any> {
+  const data: any = await fetchJson(
+    "https://api.linear.app/graphql",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(body),
+    },
+    { service: "linear" },
+  );
+  if (Array.isArray(data?.errors) && data.errors.length) {
+    const message = data.errors
+      .map((e: any) => e?.message)
+      .filter(Boolean)
+      .join("; ");
+    throw new Error(message || "Linear GraphQL error");
+  }
+  return data;
+}
+
 export async function searchLinearIssues(searchQuery: string): Promise<LinearIssue[]> {
   const tokens = await getValidLinearTokens();
   if (!tokens) return [];
 
-  try {
-    const query = `
-      query($term: String!) {
-        issueSearch(query: $term, first: 15) {
+  const query = `
+    query($term: String!) {
+      issueSearch(query: $term, first: 15) {
+        nodes {
+          identifier
+          title
+          url
+          state { name }
+          priority
+          assignee { name }
+          project { name }
+          updatedAt
+        }
+      }
+    }
+  `;
+
+  const data = await linearGraphQL(tokens.access_token, {
+    query,
+    variables: { term: searchQuery },
+  });
+
+  return (data.data?.issueSearch?.nodes || []).map((node: any) =>
+    mapLinearNode(node, toISO(node.updatedAt)),
+  );
+}
+
+export async function fetchLinearIssues(): Promise<LinearIssue[]> {
+  const tokens = await getValidLinearTokens();
+  if (!tokens) return [];
+
+  const query = `
+    query {
+      viewer {
+        assignedIssues(first: 25, orderBy: updatedAt, filter: { state: { type: { nin: ["canceled", "completed"] } } }) {
           nodes {
             identifier
             title
@@ -128,100 +213,12 @@ export async function searchLinearIssues(searchQuery: string): Promise<LinearIss
           }
         }
       }
-    `;
+    }
+  `;
 
-    const res = await fetch("https://api.linear.app/graphql", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${tokens.access_token}`,
-      },
-      body: JSON.stringify({ query, variables: { term: searchQuery } }),
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
+  const data = await linearGraphQL(tokens.access_token, { query });
 
-    const priorityMap: Record<number, string> = {
-      0: "None",
-      1: "Urgent",
-      2: "High",
-      3: "Normal",
-      4: "Low",
-    };
-
-    return (data.data?.issueSearch?.nodes || []).map(
-      (issue: any) => ({
-        id: issue.identifier,
-        title: issue.title,
-        state: issue.state?.name || "Unknown",
-        priority: priorityMap[issue.priority] || "Normal",
-        assignee: issue.assignee?.name || "Unassigned",
-        project: issue.project?.name,
-        updatedAt: new Date(issue.updatedAt).toISOString(),
-        url: issue.url || undefined,
-      })
-    );
-  } catch {
-    return [];
-  }
-}
-
-export async function fetchLinearIssues(): Promise<LinearIssue[]> {
-  const tokens = await getValidLinearTokens();
-  if (!tokens) return [];
-
-  try {
-    const query = `
-      query {
-        viewer {
-          assignedIssues(first: 25, orderBy: updatedAt, filter: { state: { type: { nin: ["canceled", "completed"] } } }) {
-            nodes {
-              identifier
-              title
-              url
-              state { name }
-              priority
-              assignee { name }
-              project { name }
-              updatedAt
-            }
-          }
-        }
-      }
-    `;
-
-    const res = await fetch("https://api.linear.app/graphql", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${tokens.access_token}`,
-      },
-      body: JSON.stringify({ query }),
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-
-    const priorityMap: Record<number, string> = {
-      0: "None",
-      1: "Urgent",
-      2: "High",
-      3: "Normal",
-      4: "Low",
-    };
-
-    return (data.data?.viewer?.assignedIssues?.nodes || []).map(
-      (issue: any) => ({
-        id: issue.identifier,
-        title: issue.title,
-        state: issue.state?.name || "Unknown",
-        priority: priorityMap[issue.priority] || "Normal",
-        assignee: issue.assignee?.name || "Unassigned",
-        project: issue.project?.name,
-        updatedAt: new Date(issue.updatedAt).toLocaleString(),
-        url: issue.url || undefined,
-      })
-    );
-  } catch {
-    return [];
-  }
+  return (data.data?.viewer?.assignedIssues?.nodes || []).map((node: any) =>
+    mapLinearNode(node, new Date(node.updatedAt).toLocaleString()),
+  );
 }

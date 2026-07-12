@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { ChatMessage } from "../ui/ChatMessage";
 import { usePersistedState } from "@/lib/use-persisted-state";
+import { streamChat } from "@/lib/chat-client";
 
 type Message = {
   role: "user" | "assistant";
@@ -79,12 +80,18 @@ export function ContextualChatView({
   const [inputValue, setInputValue] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // Abort any in-flight stream when the component unmounts.
+  useEffect(() => {
+    return () => abortRef.current?.abort();
+  }, []);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -112,23 +119,35 @@ export function ContextualChatView({
       setStreaming(true);
       setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       try {
         const chatUrl = agentId ? `/api/agents/${agentId}/chat` : "/api/chat";
-        const res = await fetch(chatUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+        const result = await streamChat({
+          url: chatUrl,
+          body: {
             message: msg,
             focusContext: focus.systemContext,
-          }),
+          },
+          signal: controller.signal,
+          onChunk: (_full, delta) => {
+            setMessages((prev) => {
+              const next = [...prev];
+              const last = next[next.length - 1];
+              next[next.length - 1] = { ...last, content: last.content + delta };
+              return next;
+            });
+          },
         });
 
-        if (!res.ok || !res.body) {
+        if (!result.ok) {
           setMessages((prev) => {
             const next = [...prev];
             next[next.length - 1] = {
               role: "assistant",
-              content: res.status >= 500 ? "Something went wrong. Please try again in a moment."
+              content: result.status >= 500 ? "Something went wrong. Please try again in a moment."
                       : "Sorry, I couldn't process that request. Please try again.",
             };
             return next;
@@ -136,22 +155,8 @@ export function ContextualChatView({
           setStreaming(false);
           return;
         }
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          setMessages((prev) => {
-            const next = [...prev];
-            const last = next[next.length - 1];
-            next[next.length - 1] = { ...last, content: last.content + chunk };
-            return next;
-          });
-        }
       } catch (err) {
+        if (controller.signal.aborted) return;
         setMessages((prev) => {
           const next = [...prev];
           next[next.length - 1] = {

@@ -337,4 +337,81 @@ describe("parseResponse", () => {
       }
     });
   });
+
+  // ── Regression: fence close without preceding newline (bug 1) ───────
+  describe("fence close without preceding newline", () => {
+    it("parses a render block whose fence has no leading newline", () => {
+      const input =
+        '```json\n{"cockpit_render":"table","columns":["A"],"rows":[["1"]]}```';
+      const result = parseResponse(input);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].type).toBe("render");
+      if (result[0].type === "render") {
+        expect(result[0].block.cockpit_render).toBe("table");
+        if (result[0].block.cockpit_render === "table") {
+          expect(result[0].block.columns).toEqual(["A"]);
+          expect(result[0].block.rows).toEqual([["1"]]);
+        }
+      }
+    });
+  });
+
+  // ── Regression: lone cockpit_memory block (bug 2) ───────────────────
+  describe("lone cockpit_memory block", () => {
+    it("does not render the raw JSON of a stripped memory block", () => {
+      const input = [
+        "```json",
+        JSON.stringify({ cockpit_memory: "remember this" }),
+        "```",
+      ].join("\n");
+
+      const result = parseResponse(input);
+      expect(result).toHaveLength(0);
+      expect(result.some((s) => s.type === "text")).toBe(false);
+    });
+
+    it("still returns a text segment for genuinely plain text", () => {
+      const result = parseResponse("Just some plain text.");
+      expect(result).toHaveLength(1);
+      expect(result[0].type).toBe("text");
+      if (result[0].type === "text") {
+        expect(result[0].content).toBe("Just some plain text.");
+      }
+    });
+  });
+
+  // ── Regression: unclosed fence on finalized message (bug 3) ─────────
+  describe("unclosed fence with final option", () => {
+    it("shows loading by default (mid-stream)", () => {
+      const input = ["Working...", "", "```json", '{"cockpit_render":"tab'].join("\n");
+      const result = parseResponse(input);
+      expect(result.some((s) => s.type === "loading")).toBe(true);
+    });
+
+    it("degrades to text when final is true", () => {
+      const input = ["Working...", "", "```json", '{"cockpit_render":"tab'].join("\n");
+      const result = parseResponse(input, { final: true });
+      expect(result.some((s) => s.type === "loading")).toBe(false);
+      expect(result.some((s) => s.type === "text" && s.content === "Working...")).toBe(true);
+      expect(result.some((s) => s.type === "text" && s.content.includes("cockpit_render"))).toBe(true);
+    });
+  });
+
+  // ── Regression: skill tag with hyphen (bug 4) ───────────────────────
+  describe("skill tag with hyphen", () => {
+    it("recognizes and strips a hyphenated skill slug", () => {
+      const result = parseResponse("[skill: /weekly-report]\nHello");
+
+      expect(result).toHaveLength(2);
+      expect(result[0].type).toBe("skill_active");
+      if (result[0].type === "skill_active") {
+        expect(result[0].skillSlash).toBe("/weekly-report");
+      }
+      expect(result[1].type).toBe("text");
+      if (result[1].type === "text") {
+        expect(result[1].content).toBe("Hello");
+      }
+    });
+  });
 });

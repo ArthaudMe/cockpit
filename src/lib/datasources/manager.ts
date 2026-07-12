@@ -211,12 +211,48 @@ export async function fetchAllData(): Promise<DatasourceData> {
   return _inFlight;
 }
 
+const _errors: Partial<Record<ServiceId, string>> = {};
+
+/**
+ * Run one connector fetch, settling failures instead of rejecting the whole
+ * poll. On error we record the reason and fall back to the last-good value for
+ * that field so a transient rate-limit/timeout doesn't blank the UI (or, worse,
+ * overwrite the offline cache with an empty snapshot). `service` labels the
+ * error channel; `previous` is the last-good value for this field.
+ */
+async function settle<T>(
+  service: ServiceId,
+  enabled: boolean,
+  fetcher: () => Promise<T>,
+  previous: T | undefined,
+  empty: T,
+): Promise<T> {
+  if (!enabled) {
+    delete _errors[service];
+    return empty;
+  }
+  try {
+    const value = await fetcher();
+    delete _errors[service];
+    return value;
+  } catch (e) {
+    _errors[service] = e instanceof Error ? e.message : String(e);
+    // Keep last-good data rather than reporting "nothing" on a transient error.
+    return previous ?? empty;
+  }
+}
+
 async function doFetchAllData(): Promise<DatasourceData> {
   const connected = getConnectedServices();
   const googleAvailable =
     connected.includes("google") || isGoogleConnectedViaComposio();
+  const prev = _cachedData;
 
-  // Fetch all connected services in parallel
+  const mcpServers = getMcpServers().filter((s) => s.enabled);
+
+  // Fetch everything concurrently; each connector settles independently so one
+  // failure (rate-limit, expired token, hung socket) can't stall or blank the
+  // rest. Google's calendar+email share one availability flag.
   const [
     calendar,
     emails,
@@ -225,24 +261,21 @@ async function doFetchAllData(): Promise<DatasourceData> {
     githubNotifications,
     notionPages,
     slackMessages,
+    posthogMetrics,
+    mcpSettled,
   ] = await Promise.all([
-    googleAvailable ? fetchCalendarEventsAuto() : [],
-    googleAvailable ? fetchRecentEmailsAuto() : [],
-    connected.includes("linear") ? fetchLinearIssues() : [],
-    connected.includes("github") ? fetchGitHubPRs() : [],
-    connected.includes("github") ? fetchGitHubNotifications() : [],
-    isNotionConnected() ? fetchNotionPages() : [],
-    connected.includes("slack") ? fetchSlackMessages() : [],
+    settle("google", googleAvailable, fetchCalendarEventsAuto, prev?.calendar, []),
+    settle("google", googleAvailable, fetchRecentEmailsAuto, prev?.emails, []),
+    settle("linear", connected.includes("linear"), fetchLinearIssues, prev?.linearIssues, []),
+    settle("github", connected.includes("github"), fetchGitHubPRs, prev?.githubPRs, []),
+    settle("github", connected.includes("github"), fetchGitHubNotifications, prev?.githubNotifications, []),
+    settle("notion", isNotionConnected(), fetchNotionPages, prev?.notionPages, []),
+    settle("slack", connected.includes("slack"), fetchSlackMessages, prev?.slackMessages, []),
+    settle("posthog", isPostHogConfigured(), fetchPostHogMetrics, prev?.posthogMetrics, {}),
+    Promise.allSettled(mcpServers.map((s) => fetchMcpResources(s))),
   ]);
 
-  const posthogMetrics = isPostHogConfigured() ? await fetchPostHogMetrics() : {};
-
-  // Fetch MCP resources from all enabled servers
-  const mcpServers = getMcpServers().filter((s) => s.enabled);
-  const mcpResults = await Promise.allSettled(
-    mcpServers.map((s) => fetchMcpResources(s)),
-  );
-  const mcpResources = mcpResults
+  const mcpResources = mcpSettled
     .filter(
       (r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof fetchMcpResources>>> =>
         r.status === "fulfilled",
@@ -260,6 +293,7 @@ async function doFetchAllData(): Promise<DatasourceData> {
     granolaMeetings: [],
     posthogMetrics,
     mcpResources: mcpResources.length > 0 ? mcpResources : undefined,
+    _errors: Object.keys(_errors).length > 0 ? { ..._errors } : undefined,
   };
 
   _cachedData = result;

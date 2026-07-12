@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
 import { ChatMessage } from "../ui/ChatMessage";
 import { usePersistedState } from "@/lib/use-persisted-state";
 import { SKILLS, expandSlashCommand } from "@/lib/skills-defs";
+import { streamChat, chatFailureMessage } from "@/lib/chat-client";
 import { track } from "@/lib/analytics";
 import type { SubagentSuggestion } from "@/lib/parser";
 import type { ContextFocus } from "../views/ContextualChatView";
@@ -47,26 +48,6 @@ function stripImagesForPersist(byAgent: Record<string, Message[]>): Record<strin
     out[id] = msgs.map((m) => (m.images ? { role: m.role, content: m.content } : m));
   }
   return out;
-}
-
-async function readErrorBody(res: Response): Promise<string> {
-  try {
-    return (await res.text()).trim();
-  } catch {
-    return "";
-  }
-}
-
-function chatFailureMessage(res: Response, body: string): string {
-  if (res.headers.get("X-Cockpit-Login-Needed") === "1" && body) return body;
-  if (res.status === 401 && body) return body;
-  if (res.status === 503 && body) return body;
-  if (res.status === 503) {
-    return "I'm having trouble connecting right now. Please check your AI backend and try again.";
-  }
-  if (res.status === 401) return "Your session may have expired. Try reloading the app.";
-  if (res.status >= 500) return "Something went wrong on my end. Please try again in a moment.";
-  return body || "Sorry, I couldn't process that request. Please try again.";
 }
 
 export const ChatColumn = memo(function ChatColumn({
@@ -113,11 +94,18 @@ export const ChatColumn = memo(function ChatColumn({
   }, [inputValue]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const activeAgentIdRef = useRef(activeAgentId);
+  // In-flight streaming request, aborted on unmount / when a new stream starts.
+  const abortRef = useRef<AbortController | null>(null);
 
   // Keep ref in sync for use in callbacks
   useEffect(() => {
     activeAgentIdRef.current = activeAgentId;
   }, [activeAgentId]);
+
+  // Abort any in-flight stream when the component unmounts.
+  useEffect(() => {
+    return () => abortRef.current?.abort();
+  }, []);
 
   // Clear notification when switching to an agent
   useEffect(() => {
@@ -246,24 +234,65 @@ export const ChatColumn = memo(function ChatColumn({
     setStreamingAgents((prev) => new Set(prev).add(targetAgentId));
     setMessagesFor(targetAgentId, (prev) => [...prev, { role: "assistant", content: "" }]);
 
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     let responseAgentId = targetAgentId;
     try {
-      const res = await fetch(`/api/agents/${targetAgentId}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const result = await streamChat({
+        url: `/api/agents/${targetAgentId}/chat`,
+        body: {
           message: messageToSend,
           ...(images.length > 0 ? { images } : {}),
-        }),
+        },
+        signal: controller.signal,
+        onResponse: ({ ok, headers }) => {
+          if (!ok) return;
+          const fallbackAgentId = headers.get("X-Cockpit-Fallback-Agent");
+          const fallbackReason = headers.get("X-Cockpit-Fallback-Reason");
+          if (fallbackAgentId && fallbackAgentId !== targetAgentId) {
+            const fallbackAgent = agents.find((agent) => agent.id === fallbackAgentId);
+            const fallbackName = fallbackAgent?.name || "another agent";
+            setMessagesFor(targetAgentId, (prev) => {
+              const next = [...prev];
+              next[next.length - 1] = {
+                role: "assistant",
+                content: `The selected backend failed${fallbackReason ? `: ${fallbackReason}` : ""}. Continuing with ${fallbackName}.`,
+              };
+              return next;
+            });
+            setMessagesFor(fallbackAgentId, (prev) => [
+              ...prev,
+              { role: "user", content: text, ...(images.length > 0 ? { images } : {}) },
+              { role: "assistant", content: "" },
+            ]);
+            setActiveAgentId(fallbackAgentId);
+            setStreamingAgents((prev) => {
+              const next = new Set(prev);
+              next.delete(targetAgentId);
+              next.add(fallbackAgentId);
+              return next;
+            });
+            responseAgentId = fallbackAgentId;
+          }
+        },
+        onChunk: (_full, delta) => {
+          setMessagesFor(responseAgentId, (prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            next[next.length - 1] = { ...last, content: last.content + delta };
+            return next;
+          });
+        },
       });
 
-      if (!res.ok || !res.body) {
-        const body = await readErrorBody(res);
+      if (!result.ok) {
         setMessagesFor(targetAgentId, (prev) => {
           const next = [...prev];
           next[next.length - 1] = {
             role: "assistant",
-            content: chatFailureMessage(res, body),
+            content: chatFailureMessage(result, result.text),
           };
           return next;
         });
@@ -274,50 +303,8 @@ export const ChatColumn = memo(function ChatColumn({
         });
         return;
       }
-
-      const fallbackAgentId = res.headers.get("X-Cockpit-Fallback-Agent");
-      const fallbackReason = res.headers.get("X-Cockpit-Fallback-Reason");
-      if (fallbackAgentId && fallbackAgentId !== targetAgentId) {
-        const fallbackAgent = agents.find((agent) => agent.id === fallbackAgentId);
-        const fallbackName = fallbackAgent?.name || "another agent";
-        setMessagesFor(targetAgentId, (prev) => {
-          const next = [...prev];
-          next[next.length - 1] = {
-            role: "assistant",
-            content: `The selected backend failed${fallbackReason ? `: ${fallbackReason}` : ""}. Continuing with ${fallbackName}.`,
-          };
-          return next;
-        });
-        setMessagesFor(fallbackAgentId, (prev) => [
-          ...prev,
-          { role: "user", content: text, ...(images.length > 0 ? { images } : {}) },
-          { role: "assistant", content: "" },
-        ]);
-        setActiveAgentId(fallbackAgentId);
-        setStreamingAgents((prev) => {
-          const next = new Set(prev);
-          next.delete(targetAgentId);
-          next.add(fallbackAgentId);
-          return next;
-        });
-        responseAgentId = fallbackAgentId;
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        setMessagesFor(responseAgentId, (prev) => {
-          const next = [...prev];
-          const last = next[next.length - 1];
-          next[next.length - 1] = { ...last, content: last.content + chunk };
-          return next;
-        });
-      }
     } catch (err) {
+      if (controller.signal.aborted) return;
       setMessagesFor(targetAgentId, (prev) => {
         const next = [...prev];
         next[next.length - 1] = {
@@ -492,6 +479,7 @@ export const ChatColumn = memo(function ChatColumn({
 
   const handleApproveSubagent = useCallback(
     async (suggestion: SubagentSuggestion) => {
+      let controller: AbortController | null = null;
       try {
         const res = await fetch("/api/agents", {
           method: "POST",
@@ -508,35 +496,32 @@ export const ChatColumn = memo(function ChatColumn({
         ]);
         setStreamingAgents((prev) => new Set(prev).add(agent.id));
 
-        const chatRes = await fetch(`/api/agents/${agent.id}/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: suggestion.task }),
+        abortRef.current?.abort();
+        controller = new AbortController();
+        abortRef.current = controller;
+
+        const result = await streamChat({
+          url: `/api/agents/${agent.id}/chat`,
+          body: { message: suggestion.task },
+          signal: controller.signal,
+          onChunk: (_full, delta) => {
+            setMessagesFor(agent.id, (prev) => {
+              const next = [...prev];
+              const last = next[next.length - 1];
+              next[next.length - 1] = { ...last, content: last.content + delta };
+              return next;
+            });
+          },
         });
 
-        if (!chatRes.ok || !chatRes.body) {
-          const body = await readErrorBody(chatRes);
+        if (!result.ok) {
           setMessagesFor(agent.id, (prev) => {
             const next = [...prev];
-            next[next.length - 1] = { role: "assistant", content: chatFailureMessage(chatRes, body) };
+            next[next.length - 1] = { role: "assistant", content: chatFailureMessage(result, result.text) };
             return next;
           });
           setStreamingAgents((prev) => { const next = new Set(prev); next.delete(agent.id); return next; });
           return;
-        }
-
-        const reader = chatRes.body.getReader();
-        const decoder = new TextDecoder();
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          setMessagesFor(agent.id, (prev) => {
-            const next = [...prev];
-            const last = next[next.length - 1];
-            next[next.length - 1] = { ...last, content: last.content + chunk };
-            return next;
-          });
         }
 
         setStreamingAgents((prev) => { const next = new Set(prev); next.delete(agent.id); return next; });
@@ -544,6 +529,7 @@ export const ChatColumn = memo(function ChatColumn({
           setNotifiedAgents((prev) => new Set(prev).add(agent.id));
         }
       } catch (err) {
+        if (controller?.signal.aborted) return;
         console.error("[subagent] failed:", err);
       }
     },

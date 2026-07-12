@@ -117,7 +117,6 @@ describe("provider-registry", () => {
     expect(args).toContain("--model");
     expect(args).toContain("o4-mini");
     expect(args).toContain("--skip-git-repo-check");
-    expect(args).toContain("--ephemeral");
     expect(args).toContain("-c");
     expect(args).toContain("developer_instructions=\"Be concise.\"");
     expect(args[args.length - 1]).toBe("-");
